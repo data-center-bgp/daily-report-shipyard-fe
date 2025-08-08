@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { supabase } from "../lib/supabase";
 
 interface RegisterProps {
   onRegister?: (userData: {
@@ -23,6 +24,7 @@ export default function Register({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const roles = ["PPIC", "Kapro", "OH", "Finance", "Master"];
 
@@ -69,9 +71,48 @@ export default function Register({
     }
 
     setIsLoading(true);
+    setAuthError(null);
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // Sign up the user with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+            company,
+            role,
+          },
+        },
+      });
+
+      if (authError) throw authError;
+
+      // If user is created, also create a profile record
+      if (authData.user) {
+        const { error: profileError } = await supabase
+          .from("daily_report_shipyard.profiles")
+          .upsert(
+            {
+              id: authData.user.id,
+              name,
+              email,
+              company,
+              role,
+            },
+            {
+              onConflict: "id",
+            }
+          );
+
+        if (profileError) {
+          console.error("Error creating/updating profile:", profileError);
+          // Continue anyway as the user is created in auth
+        }
+      }
+
+      // Call the onRegister callback if provided
       if (onRegister) {
         onRegister({
           name,
@@ -81,8 +122,15 @@ export default function Register({
           password,
         });
       }
+    } catch (err) {
+      setAuthError(
+        err instanceof Error
+          ? err.message
+          : "An error occurred during registration"
+      );
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -96,6 +144,12 @@ export default function Register({
 
         {/* Register Form */}
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 shadow-2xl border border-white/20">
+          {authError && (
+            <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
+              <p className="text-red-200 text-sm">{authError}</p>
+            </div>
+          )}
+
           <form className="space-y-6" onSubmit={handleSubmit}>
             {/* Name Field */}
             <div>

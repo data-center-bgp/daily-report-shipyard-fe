@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { supabase } from "../lib/supabase";
 
 interface LoginProps {
   onLogin?: (email: string, password: string) => void;
@@ -9,18 +10,32 @@ export default function Login({ onLogin, onSwitchToRegister }: LoginProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError(null);
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      // Call the onLogin callback if provided
       if (onLogin) {
         onLogin(email, password);
       }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "An error occurred during login"
+      );
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -34,6 +49,12 @@ export default function Login({ onLogin, onSwitchToRegister }: LoginProps) {
 
         {/* Login Form */}
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 shadow-2xl border border-white/20">
+          {error && (
+            <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
+              <p className="text-red-200 text-sm">{error}</p>
+            </div>
+          )}
+
           <form className="space-y-6" onSubmit={handleSubmit}>
             {/* Email Field */}
             <div>

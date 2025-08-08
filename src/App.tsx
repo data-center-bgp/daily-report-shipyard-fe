@@ -1,32 +1,47 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "./lib/supabase";
 import Login from "./components/Login";
 import Register from "./components/Register";
+import Dashboard from "./components/Dashboard";
 import "./App.css";
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const handleLogin = (email: string, password: string) => {
-    // Here you would typically make an API call to authenticate
-    console.log("Login attempt:", { email, password });
+  useEffect(() => {
+    // Check if user is already logged in
+    const checkAuth = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      setIsLoggedIn(!!session);
+      setLoading(false);
+    };
 
-    // For demo purposes, just set logged in to true
+    checkAuth();
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsLoggedIn(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogin = () => {
     setIsLoggedIn(true);
   };
 
-  const handleRegister = (userData: {
-    name: string;
-    email: string;
-    company: string;
-    role: string;
-    password: string;
-  }) => {
-    // Here you would typically make an API call to register
-    console.log("Register attempt:", userData);
-
-    // For demo purposes, just set logged in to true after registration
+  const handleRegister = () => {
     setIsLoggedIn(true);
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
   };
 
   const switchToRegister = () => {
@@ -36,6 +51,14 @@ function App() {
   const switchToLogin = () => {
     setIsRegistering(false);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+      </div>
+    );
+  }
 
   if (!isLoggedIn) {
     if (isRegistering) {
@@ -49,24 +72,7 @@ function App() {
     }
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h1 className="text-2xl font-bold text-gray-800 mb-4">
-            Welcome to Daily Report Shipyard
-          </h1>
-          <p className="text-gray-600 mb-4">You have successfully logged in!</p>
-          <button
-            onClick={() => setIsLoggedIn(false)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
-          >
-            Logout
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  return <Dashboard onLogout={handleLogout} />;
 }
 
 export default App;
