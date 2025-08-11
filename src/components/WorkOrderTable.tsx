@@ -254,6 +254,22 @@ export default function WorkOrderTable() {
                   </div>
                 </th>
                 <th
+                  onClick={() => handleSort("customer_wo_number")}
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                >
+                  <div className="flex items-center gap-1">
+                    Shipyard WO Number <SortIcon field="shipyard_wo_number" />
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("customer_wo_date")}
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                >
+                  <div className="flex items-center gap-1">
+                    Shipyard WO Date <SortIcon field="shipyard_wo_date" />
+                  </div>
+                </th>
+                <th
                   onClick={() => handleSort("wo_location")}
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                 >
@@ -313,6 +329,12 @@ export default function WorkOrderTable() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatDate(wo.customer_wo_date)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {wo.shipyard_wo_number}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(wo.shipyard_wo_date)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {wo.wo_location}
