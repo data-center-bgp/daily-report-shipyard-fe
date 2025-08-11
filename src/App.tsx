@@ -1,8 +1,15 @@
 import { useState, useEffect } from "react";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 import { supabase } from "./lib/supabase";
 import Login from "./components/Login";
 import Register from "./components/Register";
 import Dashboard from "./components/Dashboard";
+import AddWorkOrder from "./components/AddWorkOrder";
 import "./App.css";
 
 function App() {
@@ -72,7 +79,17 @@ function App() {
     }
   }
 
-  return <Dashboard onLogout={handleLogout} />;
+  // Protected routes - only accessible when logged in
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<Dashboard onLogout={handleLogout} />} />
+        <Route path="/add-work-order" element={<AddWorkOrder />} />
+        {/* Redirect any unknown routes to dashboard */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Router>
+  );
 }
 
 export default App;
