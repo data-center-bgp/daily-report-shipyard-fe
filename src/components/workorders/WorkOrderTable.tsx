@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { supabase, type WorkOrder } from "../lib/supabase";
+import { supabase, type WorkOrder } from "../../lib/supabase";
 
 export default function WorkOrderTable() {
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);

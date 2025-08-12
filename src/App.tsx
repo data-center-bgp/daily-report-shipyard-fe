@@ -6,10 +6,11 @@ import {
   Navigate,
 } from "react-router-dom";
 import { supabase } from "./lib/supabase";
-import Login from "./components/Login";
-import Register from "./components/Register";
-import Dashboard from "./components/Dashboard";
-import AddWorkOrder from "./components/AddWorkOrder";
+import { Login, Register } from "./components/auth";
+import { Layout } from "./components/common";
+import Dashboard from "./components/dashboard/Dashboard";
+import { WorkOrders, AddWorkOrder } from "./components/workorders";
+import { PermitsList, UploadPermit } from "./components/permits";
 import "./App.css";
 
 function App() {
@@ -47,7 +48,8 @@ function App() {
     setIsLoggedIn(true);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setIsLoggedIn(false);
   };
 
@@ -82,12 +84,17 @@ function App() {
   // Protected routes - only accessible when logged in
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<Dashboard onLogout={handleLogout} />} />
-        <Route path="/add-work-order" element={<AddWorkOrder />} />
-        {/* Redirect any unknown routes to dashboard */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Layout onLogout={handleLogout}>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/work-orders" element={<WorkOrders />} />
+          <Route path="/add-work-order" element={<AddWorkOrder />} />
+          <Route path="/permits" element={<PermitsList />} />
+          <Route path="/upload-permit" element={<UploadPermit />} />
+          {/* Redirect any unknown routes to dashboard */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Layout>
     </Router>
   );
 }

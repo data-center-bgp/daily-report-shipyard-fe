@@ -13,7 +13,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-// Types for our database
+// Export types for use in components
 export interface Vessel {
   id: number;
   created_at: string;
@@ -30,7 +30,7 @@ export interface WorkOrder {
   customer_wo_date: string;
   shipyard_wo_number: string;
   shipyard_wo_date: string;
-  vessel_id: number; // Foreign key to vessel table
+  vessel_id: number;
   wo_location: string;
   wo_description: string;
   quantity: number;
@@ -43,8 +43,21 @@ export interface WorkOrder {
   pic: string;
   created_at?: string;
   updated_at?: string;
-  // Include vessel data when fetching with joins
   vessel?: Vessel;
+  permits?: PermitToWork[];
+}
+
+export interface PermitToWork {
+  id?: number;
+  work_order_id: number;
+  user_id: string;
+  document_url: string | null;
+  is_uploaded: boolean;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  work_order?: WorkOrder;
+  user?: Profile;
 }
 
 export interface Profile {

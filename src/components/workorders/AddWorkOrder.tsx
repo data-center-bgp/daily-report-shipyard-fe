@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase, type Vessel } from "../lib/supabase";
+import { supabase, type Vessel } from "../../lib/supabase";
 
 export default function AddWorkOrder() {
   const navigate = useNavigate();
