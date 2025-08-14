@@ -5,6 +5,11 @@ import {
   type PermitToWork,
   type WorkOrder,
 } from "../../lib/supabase";
+import {
+  getPermitFileUrl,
+  downloadPermitFile,
+  openPermitFile,
+} from "../../utils/urlHandler";
 
 export default function PermitsList() {
   const [permits, setPermits] = useState<
@@ -13,6 +18,10 @@ export default function PermitsList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [viewingPermit, setViewingPermit] = useState<number | null>(null);
+  const [downloadingPermit, setDownloadingPermit] = useState<number | null>(
+    null
+  );
 
   const navigate = useNavigate();
 
@@ -66,6 +75,82 @@ export default function PermitsList() {
     });
   };
 
+  const handleViewPermit = async (
+    permit: PermitToWork & { work_order?: WorkOrder }
+  ) => {
+    if (!permit.storage_path) {
+      setError("No file path found for this permit");
+      return;
+    }
+
+    try {
+      setViewingPermit(permit.id ?? null);
+      setError(null);
+
+      console.log("Opening permit file:", permit.storage_path);
+      await openPermitFile(permit.storage_path);
+    } catch (err) {
+      console.error("Error viewing permit:", err);
+      setError("Failed to view permit file. Please try again.");
+    } finally {
+      setViewingPermit(null);
+    }
+  };
+
+  const handleDownloadPermit = async (
+    permit: PermitToWork & { work_order?: WorkOrder }
+  ) => {
+    if (!permit.storage_path) {
+      setError("No file path found for this permit");
+      return;
+    }
+
+    try {
+      setDownloadingPermit(permit.id ?? null);
+      setError(null);
+
+      const fileName = `permit_${
+        permit.work_order?.customer_wo_number || permit.work_order_id
+      }.pdf`;
+      console.log(
+        "Downloading permit file:",
+        permit.storage_path,
+        "as",
+        fileName
+      );
+
+      await downloadPermitFile(permit.storage_path, fileName);
+    } catch (err) {
+      console.error("Error downloading permit:", err);
+      setError("Failed to download permit file. Please try again.");
+    } finally {
+      setDownloadingPermit(null);
+    }
+  };
+
+  const handleCopyFileUrl = async (
+    permit: PermitToWork & { work_order?: WorkOrder }
+  ) => {
+    if (!permit.storage_path) {
+      setError("No file path found for this permit");
+      return;
+    }
+
+    try {
+      const signedUrl = await getPermitFileUrl(permit.storage_path, 3600); // 1 hour
+      if (signedUrl) {
+        await navigator.clipboard.writeText(signedUrl);
+        // You could add a toast notification here
+        console.log("Signed URL copied to clipboard");
+      } else {
+        throw new Error("Failed to generate signed URL");
+      }
+    } catch (err) {
+      console.error("Error copying URL:", err);
+      setError("Failed to copy file URL. Please try again.");
+    }
+  };
+
   const filteredPermits = permits.filter(
     (permit) =>
       permit.work_order?.customer_wo_number
@@ -100,13 +185,20 @@ export default function PermitsList() {
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-          <p className="text-red-600">{error}</p>
-          <button
-            onClick={fetchPermits}
-            className="mt-2 text-red-600 hover:text-red-800 underline"
-          >
-            Retry
-          </button>
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <span className="text-red-400 text-xl">⚠️</span>
+            </div>
+            <div className="ml-3">
+              <p className="text-red-600">{error}</p>
+              <button
+                onClick={() => setError(null)}
+                className="mt-2 text-red-600 hover:text-red-800 underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -206,15 +298,18 @@ export default function PermitsList() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {permit.document_url ? (
-                        <a
-                          href={permit.document_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 underline"
-                        >
-                          📄 View Document
-                        </a>
+                      {permit.is_uploaded && permit.storage_path ? (
+                        <div className="flex items-center space-x-2">
+                          <span className="text-green-600">📄 Available</span>
+                          <span className="text-xs text-gray-400">
+                            (
+                            {permit.storage_path
+                              .split("_")
+                              .pop()
+                              ?.split(".")[0] || "file"}
+                            )
+                          </span>
+                        </div>
                       ) : (
                         <span className="text-gray-400">No document</span>
                       )}
@@ -222,27 +317,75 @@ export default function PermitsList() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatDate(permit.created_at)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex space-x-2">
-                        {!permit.is_uploaded && (
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <div className="flex items-center space-x-2">
+                        {permit.is_uploaded && permit.storage_path ? (
+                          <>
+                            {/* View Button */}
+                            <button
+                              onClick={() => handleViewPermit(permit)}
+                              disabled={viewingPermit === permit.id}
+                              className="inline-flex items-center px-3 py-1 border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              title="View Document"
+                            >
+                              {viewingPermit === permit.id ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-1"></div>
+                                  Opening...
+                                </>
+                              ) : (
+                                <>👁️ View</>
+                              )}
+                            </button>
+
+                            {/* Download Button */}
+                            <button
+                              onClick={() => handleDownloadPermit(permit)}
+                              disabled={downloadingPermit === permit.id}
+                              className="inline-flex items-center px-3 py-1 border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              title="Download Document"
+                            >
+                              {downloadingPermit === permit.id ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-1"></div>
+                                  Downloading...
+                                </>
+                              ) : (
+                                <>⬇️ Download</>
+                              )}
+                            </button>
+
+                            {/* Copy URL Button */}
+                            <button
+                              onClick={() => handleCopyFileUrl(permit)}
+                              className="inline-flex items-center px-3 py-1 border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50 rounded-md transition-colors"
+                              title="Copy Secure Link"
+                            >
+                              🔗 Copy Link
+                            </button>
+                          </>
+                        ) : (
+                          /* Upload Button */
                           <button
                             onClick={() =>
                               navigate(
                                 `/upload-permit?work_order_id=${permit.work_order_id}`
                               )
                             }
-                            className="text-blue-600 hover:text-blue-900 transition-colors"
+                            className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
                             title="Upload Document"
                           >
-                            📤
+                            📤 Upload
                           </button>
                         )}
+
+                        {/* View Work Order Button */}
                         <button
                           onClick={() => navigate(`/work-orders`)}
-                          className="text-green-600 hover:text-green-900 transition-colors"
+                          className="inline-flex items-center px-3 py-1 border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50 rounded-md transition-colors"
                           title="View Work Order"
                         >
-                          👁️
+                          📋 Work Order
                         </button>
                       </div>
                     </td>
@@ -279,6 +422,28 @@ export default function PermitsList() {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Info Section */}
+      <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="flex items-start">
+          <div className="flex-shrink-0">
+            <span className="text-blue-400 text-xl">ℹ️</span>
+          </div>
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-blue-900">
+              Secure File Access
+            </h3>
+            <div className="mt-1 text-sm text-blue-800">
+              <ul className="list-disc list-inside space-y-1">
+                <li>All files are stored in private, secure storage</li>
+                <li>View links are temporary and expire automatically</li>
+                <li>Only authorized users can access permit documents</li>
+                <li>Downloaded files maintain original names and formatting</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     </div>

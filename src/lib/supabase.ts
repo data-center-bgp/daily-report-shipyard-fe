@@ -53,6 +53,7 @@ export interface PermitToWork {
   user_id: string;
   document_url: string | null;
   is_uploaded: boolean;
+  storage_path: string;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

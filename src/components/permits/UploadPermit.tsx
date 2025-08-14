@@ -112,7 +112,7 @@ export default function UploadPermit() {
       console.log("User ID (UUID):", user.id);
       console.log("User email:", user.email);
 
-      // Fetch user data from the profiles table using auth_user_id (same as AddWorkOrder)
+      // Fetch user data from the profiles table using auth_user_id
       console.log("=== FETCHING USER FROM PROFILES TABLE ===");
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
@@ -127,12 +127,12 @@ export default function UploadPermit() {
 
       console.log("Profile data from profiles table:", profileData);
 
-      // If profile doesn't exist in profiles table, create one (same logic as AddWorkOrder)
+      // If profile doesn't exist in profiles table, create one
       let userId;
       if (!profileData) {
         console.log("=== CREATING NEW PROFILE RECORD ===");
 
-        // Generate user_id from email hash (same logic as AddWorkOrder)
+        // Generate user_id from email hash
         const userEmail = user.email || "unknown";
         let generatedUserId = 1;
 
@@ -222,8 +222,8 @@ export default function UploadPermit() {
         }
       }
 
-      // Upload new file to the permit_to_work bucket (no folder)
-      console.log("=== UPLOADING FILE ===");
+      // Upload new file to the permit_to_work bucket (PRIVATE BUCKET)
+      console.log("=== UPLOADING FILE TO PRIVATE BUCKET ===");
       const { error: uploadError } = await supabase.storage
         .from("permit_to_work")
         .upload(storagePath, file, {
@@ -231,7 +231,7 @@ export default function UploadPermit() {
           upsert: false,
           metadata: {
             uploaded_by: user.email || "unknown",
-            auth_user_id: user.id, // Store the actual auth UUID
+            auth_user_id: user.id,
             original_name: file.name,
             upload_date: new Date().toISOString(),
             work_order_id: workOrderId.toString(),
@@ -244,25 +244,18 @@ export default function UploadPermit() {
         throw uploadError;
       }
 
-      console.log("File uploaded successfully to:", storagePath);
+      console.log("File uploaded successfully to private bucket:", storagePath);
 
-      // Get public URL for the uploaded file
-      const { data: urlData } = supabase.storage
-        .from("permit_to_work")
-        .getPublicUrl(storagePath);
-
-      console.log("Public URL:", urlData.publicUrl);
-
-      // Prepare permit data with correct data types
+      // Store permit data WITHOUT URL (we'll generate signed URLs on-demand)
       const permitData = {
         work_order_id: workOrderId, // bigint
-        user_id: userId, // bigint from profiles table (same as AddWorkOrder)
-        document_url: urlData.publicUrl,
-        storage_path: storagePath, // Just the file name, no folder
+        user_id: userId, // bigint from profiles table
+        document_url: null, // No stored URL - we'll generate signed URLs on-demand
+        storage_path: storagePath, // Store the storage path for generating URLs later
         is_uploaded: true,
       };
 
-      console.log("=== SUBMITTING PERMIT DATA ===");
+      console.log("=== SUBMITTING PERMIT DATA (NO URL STORED) ===");
       console.log("Permit data to insert/update:", permitData);
 
       if (existingPermit) {
@@ -270,8 +263,8 @@ export default function UploadPermit() {
         const { error: updateError } = await supabase
           .from("permit_to_work")
           .update({
-            user_id: userId, // Update user_id as well
-            document_url: urlData.publicUrl,
+            user_id: userId,
+            document_url: null, // Don't store URL
             storage_path: storagePath,
             is_uploaded: true,
             updated_at: new Date().toISOString(),
@@ -298,7 +291,7 @@ export default function UploadPermit() {
         console.log("New permit record created successfully");
       }
 
-      setSuccess("Permit uploaded successfully!");
+      setSuccess("Permit uploaded successfully to secure storage!");
 
       // Reset form
       setSelectedWorkOrder(null);
@@ -336,7 +329,8 @@ export default function UploadPermit() {
             Upload Permit to Work
           </h1>
           <p className="text-gray-600">
-            Select a work order and upload permit document (PDF only)
+            Select a work order and upload permit document (PDF only) to secure
+            storage
           </p>
         </div>
 
@@ -511,7 +505,8 @@ export default function UploadPermit() {
                         📏 Maximum file size: 10MB
                       </p>
                       <p className="text-sm text-gray-500">
-                        🔒 Files are stored securely in your permit bucket
+                        🔒 Files are stored securely in private bucket with
+                        signed URL access
                       </p>
                     </div>
                   </div>
@@ -542,7 +537,7 @@ export default function UploadPermit() {
                           Uploading...
                         </>
                       ) : (
-                        <>📤 Upload PDF</>
+                        <>🔒 Upload to Secure Storage</>
                       )}
                     </button>
                   </div>
@@ -555,7 +550,7 @@ export default function UploadPermit() {
                   </h3>
                   <p className="text-gray-500">
                     Please select a work order from the list to upload a permit
-                    document (PDF only).
+                    document (PDF only) to secure storage.
                   </p>
                 </div>
               )}
