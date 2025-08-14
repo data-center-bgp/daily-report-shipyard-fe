@@ -6,6 +6,8 @@ export default function AddWorkOrder() {
   const navigate = useNavigate();
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [loadingVessels, setLoadingVessels] = useState(true);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [formData, setFormData] = useState({
     customer_wo_number: "",
     customer_wo_date: "",
@@ -23,6 +25,27 @@ export default function AddWorkOrder() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Get current user on component mount
+  useEffect(() => {
+    const getCurrentUser = async () => {
+      try {
+        const {
+          data: { user },
+          error,
+        } = await supabase.auth.getUser();
+        if (error) throw error;
+
+        console.log("Current user:", user);
+        setCurrentUser(user);
+      } catch (err) {
+        console.error("Error getting current user:", err);
+        setError("Failed to get user information. Please login again.");
+      }
+    };
+
+    getCurrentUser();
+  }, []);
 
   // Fetch vessels on component mount
   useEffect(() => {
@@ -88,6 +111,12 @@ export default function AddWorkOrder() {
       }
     }
 
+    // Check if user is available
+    if (!currentUser) {
+      setError("User information not available. Please refresh and try again.");
+      return false;
+    }
+
     // Validate dates
     const customerDate = new Date(formData.customer_wo_date);
     const shipyardDate = new Date(formData.shipyard_wo_date);
@@ -130,18 +159,99 @@ export default function AddWorkOrder() {
     setError(null);
 
     try {
-      // Convert vessel_id to number before submitting
+      // Debug: Log current user data
+      console.log("=== DEBUGGING USER DATA ===");
+      console.log("Current user object:", currentUser);
+      console.log("User ID (UUID):", currentUser.id);
+      console.log("User email:", currentUser.email);
+
+      // Fetch user data from the profiles table using auth_user_id
+      console.log("=== FETCHING USER FROM PROFILES TABLE ===");
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("auth_user_id", currentUser.id)
+        .maybeSingle();
+
+      if (profileError && profileError.code !== "PGRST116") {
+        console.error("Error fetching profile data:", profileError);
+        throw new Error("Failed to fetch user profile from profiles table");
+      }
+
+      console.log("Profile data from profiles table:", profileData);
+
+      // If profile doesn't exist in profiles table, create one
+      let userId;
+      if (!profileData) {
+        console.log("=== CREATING NEW PROFILE RECORD ===");
+
+        // Generate user_id from email hash (same logic as before)
+        const userEmail = currentUser.email || "unknown";
+        let generatedUserId = 1;
+
+        if (userEmail !== "unknown") {
+          let hash = 0;
+          for (let i = 0; i < userEmail.length; i++) {
+            const char = userEmail.charCodeAt(i);
+            hash = (hash << 5) - hash + char;
+            hash = hash & hash;
+          }
+          generatedUserId = Math.abs(hash);
+        }
+
+        const newProfileData = {
+          id: generatedUserId,
+          auth_user_id: currentUser.id,
+          email: currentUser.email,
+          name: currentUser.email?.split("@")[0] || "Unknown User",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        console.log("Creating profile with data:", newProfileData);
+
+        const { data: createdProfile, error: createError } = await supabase
+          .from("profiles")
+          .insert([newProfileData])
+          .select()
+          .single();
+
+        if (createError) {
+          console.error("Error creating profile:", createError);
+          throw new Error(
+            `Failed to create profile record: ${createError.message}`
+          );
+        }
+
+        console.log("Created new profile:", createdProfile);
+        userId = createdProfile.id;
+      } else {
+        console.log("Using existing profile:", profileData);
+        userId = profileData.id;
+      }
+
+      console.log("=== FINAL USER ID ===");
+      console.log("Using user_id:", userId);
+
+      // Convert vessel_id to number and add user_id before submitting
       const submitData = {
         ...formData,
         vessel_id: parseInt(formData.vessel_id.toString()),
+        user_id: userId, // Use the actual user ID from profiles table
       };
+
+      console.log("=== SUBMITTING WORK ORDER ===");
+      console.log("Submit data:", submitData);
 
       const { data, error } = await supabase
         .from("work_order")
         .insert([submitData])
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Database error:", error);
+        throw error;
+      }
 
       console.log("Work order created successfully:", data);
 
@@ -159,12 +269,16 @@ export default function AddWorkOrder() {
     navigate("/");
   };
 
-  if (loadingVessels) {
+  if (loadingVessels || !currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading vessels...</p>
+          <p className="text-gray-600">
+            {loadingVessels
+              ? "Loading vessels..."
+              : "Loading user information..."}
+          </p>
         </div>
       </div>
     );
@@ -186,6 +300,9 @@ export default function AddWorkOrder() {
               <h1 className="text-2xl font-bold text-gray-900">
                 Add New Work Order
               </h1>
+            </div>
+            <div className="text-sm text-gray-600">
+              Creating as: {currentUser?.email}
             </div>
           </div>
         </div>
@@ -227,7 +344,7 @@ export default function AddWorkOrder() {
                     <option value="">Select Vessel</option>
                     {vessels.map((vessel) => (
                       <option key={vessel.id} value={vessel.id}>
-                        {vessel.name}
+                        {vessel.name} - {vessel.type} ({vessel.company})
                       </option>
                     ))}
                   </select>
@@ -475,7 +592,7 @@ export default function AddWorkOrder() {
               </button>
               <button
                 type="submit"
-                disabled={loading || vessels.length === 0}
+                disabled={loading || vessels.length === 0 || !currentUser}
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {loading ? (

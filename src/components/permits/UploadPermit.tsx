@@ -82,6 +82,21 @@ export default function UploadPermit() {
     const file = event.target.files?.[0];
     if (!file || !selectedWorkOrder?.id) return;
 
+    // Validate file type - PDF only
+    if (file.type !== "application/pdf") {
+      setError("Please upload a PDF file only");
+      event.target.value = ""; // Reset file input
+      return;
+    }
+
+    // Validate file size (10MB limit)
+    const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+    if (file.size > maxSize) {
+      setError("File size must be less than 10MB");
+      event.target.value = ""; // Reset file input
+      return;
+    }
+
     setUploading(true);
     setError(null);
     setSuccess(null);
@@ -92,71 +107,195 @@ export default function UploadPermit() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
 
-      // Upload file to storage
-      const fileName = `permit-${selectedWorkOrder.id}-${Date.now()}-${
-        file.name
-      }`;
-      const folderPath = `wo-${selectedWorkOrder.id}`;
-      const filePath = `${folderPath}/${fileName}`;
+      console.log("=== DEBUGGING USER DATA ===");
+      console.log("Current user object:", user);
+      console.log("User ID (UUID):", user.id);
+      console.log("User email:", user.email);
 
+      // Fetch user data from the profiles table using auth_user_id (same as AddWorkOrder)
+      console.log("=== FETCHING USER FROM PROFILES TABLE ===");
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("auth_user_id", user.id)
+        .maybeSingle();
+
+      if (profileError && profileError.code !== "PGRST116") {
+        console.error("Error fetching profile data:", profileError);
+        throw new Error("Failed to fetch user profile from profiles table");
+      }
+
+      console.log("Profile data from profiles table:", profileData);
+
+      // If profile doesn't exist in profiles table, create one (same logic as AddWorkOrder)
+      let userId;
+      if (!profileData) {
+        console.log("=== CREATING NEW PROFILE RECORD ===");
+
+        // Generate user_id from email hash (same logic as AddWorkOrder)
+        const userEmail = user.email || "unknown";
+        let generatedUserId = 1;
+
+        if (userEmail !== "unknown") {
+          let hash = 0;
+          for (let i = 0; i < userEmail.length; i++) {
+            const char = userEmail.charCodeAt(i);
+            hash = (hash << 5) - hash + char;
+            hash = hash & hash;
+          }
+          generatedUserId = Math.abs(hash);
+        }
+
+        const newProfileData = {
+          id: generatedUserId,
+          auth_user_id: user.id,
+          email: user.email,
+          name: user.email?.split("@")[0] || "Unknown User",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        console.log("Creating profile with data:", newProfileData);
+
+        const { data: createdProfile, error: createError } = await supabase
+          .from("profiles")
+          .insert([newProfileData])
+          .select()
+          .single();
+
+        if (createError) {
+          console.error("Error creating profile:", createError);
+          throw new Error(
+            `Failed to create profile record: ${createError.message}`
+          );
+        }
+
+        console.log("Created new profile:", createdProfile);
+        userId = createdProfile.id;
+      } else {
+        console.log("Using existing profile:", profileData);
+        userId = profileData.id;
+      }
+
+      console.log("=== FINAL USER ID ===");
+      console.log("Using user_id:", userId);
+
+      // Ensure work_order_id is a number (bigint)
+      const workOrderId = Number(selectedWorkOrder.id);
+      if (isNaN(workOrderId)) {
+        throw new Error("Invalid work order ID");
+      }
+
+      // Create a unique file name WITHOUT folder structure
+      const timestamp = Date.now();
+      const fileName = `permit_wo_${workOrderId}_${timestamp}.pdf`;
+      const storagePath = fileName; // No folder, just the file name
+
+      console.log("=== FILE STORAGE INFO ===");
+      console.log("File name:", fileName);
+      console.log("Storage path:", storagePath);
+
+      // Check if permit already exists for this work order
+      const { data: existingPermit, error: checkError } = await supabase
+        .from("permit_to_work")
+        .select("id, storage_path")
+        .eq("work_order_id", workOrderId)
+        .maybeSingle();
+
+      if (checkError) {
+        console.error("Check error:", checkError);
+        throw checkError;
+      }
+
+      // Delete old file from storage if it exists
+      if (existingPermit?.storage_path) {
+        console.log("Deleting old file:", existingPermit.storage_path);
+        const { error: deleteError } = await supabase.storage
+          .from("permit_to_work")
+          .remove([existingPermit.storage_path]);
+
+        if (deleteError) {
+          console.warn("Failed to delete old file:", deleteError);
+          // Don't throw error here, continue with upload
+        } else {
+          console.log("Old file deleted successfully");
+        }
+      }
+
+      // Upload new file to the permit_to_work bucket (no folder)
+      console.log("=== UPLOADING FILE ===");
       const { error: uploadError } = await supabase.storage
-        .from("work-order-files")
-        .upload(filePath, file, {
+        .from("permit_to_work")
+        .upload(storagePath, file, {
           cacheControl: "3600",
           upsert: false,
           metadata: {
             uploaded_by: user.email || "unknown",
+            auth_user_id: user.id, // Store the actual auth UUID
             original_name: file.name,
             upload_date: new Date().toISOString(),
-            file_type: "permit",
+            work_order_id: workOrderId.toString(),
+            file_type: "permit_document",
           },
         });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error("Upload error:", uploadError);
+        throw uploadError;
+      }
 
-      // Get public URL
+      console.log("File uploaded successfully to:", storagePath);
+
+      // Get public URL for the uploaded file
       const { data: urlData } = supabase.storage
-        .from("work-order-files")
-        .getPublicUrl(filePath);
+        .from("permit_to_work")
+        .getPublicUrl(storagePath);
 
-      // Create or update permit record
+      console.log("Public URL:", urlData.publicUrl);
+
+      // Prepare permit data with correct data types
       const permitData = {
-        work_order_id: selectedWorkOrder.id,
-        user_id: user.id,
+        work_order_id: workOrderId, // bigint
+        user_id: userId, // bigint from profiles table (same as AddWorkOrder)
         document_url: urlData.publicUrl,
+        storage_path: storagePath, // Just the file name, no folder
         is_uploaded: true,
       };
 
-      // Check if permit already exists
-      const { data: existingPermit, error: checkError } = await supabase
-        .from("permit_to_work")
-        .select("id")
-        .eq("work_order_id", selectedWorkOrder.id)
-        .single();
-
-      if (checkError && checkError.code !== "PGRST116") {
-        throw checkError;
-      }
+      console.log("=== SUBMITTING PERMIT DATA ===");
+      console.log("Permit data to insert/update:", permitData);
 
       if (existingPermit) {
-        // Update existing permit
+        // Update existing permit record
         const { error: updateError } = await supabase
           .from("permit_to_work")
           .update({
+            user_id: userId, // Update user_id as well
             document_url: urlData.publicUrl,
+            storage_path: storagePath,
             is_uploaded: true,
             updated_at: new Date().toISOString(),
           })
           .eq("id", existingPermit.id);
 
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error("Update error:", updateError);
+          throw updateError;
+        }
+
+        console.log("Permit record updated successfully");
       } else {
-        // Create new permit
+        // Create new permit record
         const { error: insertError } = await supabase
           .from("permit_to_work")
           .insert([permitData]);
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error("Insert error:", insertError);
+          throw insertError;
+        }
+
+        console.log("New permit record created successfully");
       }
 
       setSuccess("Permit uploaded successfully!");
@@ -197,19 +336,35 @@ export default function UploadPermit() {
             Upload Permit to Work
           </h1>
           <p className="text-gray-600">
-            Select a work order and upload permit documents
+            Select a work order and upload permit document (PDF only)
           </p>
         </div>
 
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <p className="text-red-600">{error}</p>
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <span className="text-red-400 text-xl">⚠️</span>
+              </div>
+              <div className="ml-3">
+                <p className="text-red-600 font-medium">Upload Error</p>
+                <p className="text-red-600 text-sm">{error}</p>
+              </div>
+            </div>
           </div>
         )}
 
         {success && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-            <p className="text-green-600">{success}</p>
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <span className="text-green-400 text-xl">✅</span>
+              </div>
+              <div className="ml-3">
+                <p className="text-green-600 font-medium">Success!</p>
+                <p className="text-green-600 text-sm">{success}</p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -337,20 +492,28 @@ export default function UploadPermit() {
                   {/* File Upload */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Permit Document *
+                      Permit Document (PDF) *
                     </label>
                     <div className="relative">
                       <input
                         type="file"
                         onChange={handleFileUpload}
                         disabled={uploading}
-                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                        accept="application/pdf"
                         className="block w-full text-sm text-gray-500 file:mr-4 file:py-3 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
                       />
                     </div>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Supported formats: PDF, DOC, DOCX, JPG, PNG (Max 10MB)
-                    </p>
+                    <div className="mt-2 space-y-1">
+                      <p className="text-sm text-gray-500">
+                        📄 Only PDF files are accepted
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        📏 Maximum file size: 10MB
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        🔒 Files are stored securely in your permit bucket
+                      </p>
+                    </div>
                   </div>
 
                   {/* Actions */}
@@ -379,7 +542,7 @@ export default function UploadPermit() {
                           Uploading...
                         </>
                       ) : (
-                        <>📤 Upload Permit</>
+                        <>📤 Upload PDF</>
                       )}
                     </button>
                   </div>
@@ -392,7 +555,7 @@ export default function UploadPermit() {
                   </h3>
                   <p className="text-gray-500">
                     Please select a work order from the list to upload a permit
-                    document.
+                    document (PDF only).
                   </p>
                 </div>
               )}
