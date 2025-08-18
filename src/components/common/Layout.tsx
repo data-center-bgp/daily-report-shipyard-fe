@@ -62,6 +62,12 @@ export default function Layout({ children, onLogout }: LayoutProps) {
         location.pathname === "/permits" ||
         location.pathname === "/upload-permit",
     },
+    {
+      name: "Project Progress",
+      href: "/progress",
+      icon: "📈",
+      current: location.pathname === "/progress",
+    },
   ];
 
   return (

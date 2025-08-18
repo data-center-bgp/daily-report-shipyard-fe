@@ -1,98 +1,92 @@
-import { useState, useEffect } from "react";
 import {
   BrowserRouter as Router,
   Routes,
   Route,
   Navigate,
 } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
+import type { User } from "@supabase/supabase-js";
+
+// Components
+import Layout from "./components/common/Layout";
 import { Login, Register } from "./components/auth";
-import { Layout } from "./components/common";
-import Dashboard from "./components/dashboard/Dashboard";
+import { Dashboard } from "./components/dashboard";
 import { WorkOrders, AddWorkOrder } from "./components/workorders";
 import { PermitsList, UploadPermit } from "./components/permits";
-import "./App.css";
+import {
+  ProgressOverview,
+  ProgressTracker,
+  ProgressDetails,
+} from "./components/progress";
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is already logged in
-    const checkAuth = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      setIsLoggedIn(!!session);
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
       setLoading(false);
-    };
-
-    checkAuth();
+    });
 
     // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsLoggedIn(!!session);
+      setUser(session?.user ?? null);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleLogin = () => {
-    setIsLoggedIn(true);
-  };
-
-  const handleRegister = () => {
-    setIsLoggedIn(true);
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setIsLoggedIn(false);
-  };
-
-  const switchToRegister = () => {
-    setIsRegistering(true);
-  };
-
-  const switchToLogin = () => {
-    setIsRegistering(false);
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
-  if (!isLoggedIn) {
-    if (isRegistering) {
-      return (
-        <Register onRegister={handleRegister} onSwitchToLogin={switchToLogin} />
-      );
-    } else {
-      return (
-        <Login onLogin={handleLogin} onSwitchToRegister={switchToRegister} />
-      );
-    }
+  if (!user) {
+    return (
+      <Router>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="*" element={<Navigate to="/login" />} />
+        </Routes>
+      </Router>
+    );
   }
 
-  // Protected routes - only accessible when logged in
   return (
     <Router>
-      <Layout onLogout={handleLogout}>
+      <Layout user={user}>
         <Routes>
+          {/* Dashboard */}
           <Route path="/" element={<Dashboard />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+
+          {/* Work Orders */}
           <Route path="/work-orders" element={<WorkOrders />} />
           <Route path="/add-work-order" element={<AddWorkOrder />} />
+
+          {/* Permits */}
           <Route path="/permits" element={<PermitsList />} />
           <Route path="/upload-permit" element={<UploadPermit />} />
-          {/* Redirect any unknown routes to dashboard */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+
+          {/* Progress Routes */}
+          <Route path="/progress" element={<ProgressOverview />} />
+          <Route path="/progress/tracker" element={<ProgressTracker />} />
+          <Route
+            path="/progress/details/:workOrderId"
+            element={<ProgressDetails />}
+          />
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Layout>
     </Router>
