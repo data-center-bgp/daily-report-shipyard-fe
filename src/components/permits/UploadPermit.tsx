@@ -1,3 +1,5 @@
+// src/components/permits/UploadPermit.tsx
+
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase, type WorkOrder } from "../../lib/supabase";
@@ -19,7 +21,7 @@ export default function UploadPermit() {
   const preselectedWorkOrderId = searchParams.get("work_order_id");
 
   useEffect(() => {
-    fetchWorkOrders();
+    fetchWorkOrdersWithoutPermits();
   }, []);
 
   useEffect(() => {
@@ -43,30 +45,66 @@ export default function UploadPermit() {
         wo.vessel?.name?.toLowerCase().includes(searchLower) ||
         wo.vessel?.type?.toLowerCase().includes(searchLower) ||
         wo.vessel?.company?.toLowerCase().includes(searchLower) ||
-        wo.wo_location.toLowerCase().includes(searchLower)
+        wo.wo_location.toLowerCase().includes(searchLower) ||
+        wo.wo_description?.toLowerCase().includes(searchLower)
       );
     });
     setFilteredWorkOrders(filtered);
   }, [searchTerm, workOrders]);
 
-  const fetchWorkOrders = async () => {
+  const fetchWorkOrdersWithoutPermits = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      setError(null);
+
+      // First, get all work order IDs that already have uploaded permits
+      const { data: uploadedPermits, error: permitsError } = await supabase
+        .from("permit_to_work")
+        .select("work_order_id")
+        .eq("is_uploaded", true);
+
+      if (permitsError) throw permitsError;
+
+      // Extract the work order IDs that already have permits
+      const workOrderIdsWithPermits =
+        uploadedPermits?.map((p) => p.work_order_id) || [];
+
+      console.log(
+        "Work order IDs with uploaded permits:",
+        workOrderIdsWithPermits
+      );
+
+      // Now fetch all work orders and exclude those with uploaded permits
+      let query = supabase
         .from("work_order")
         .select(
           `
-          *,
-          vessel:vessel_id (
-            name,
-            type,
-            company
-          )
-        `
+        *,
+        vessel:vessel_id (
+          name,
+          type,
+          company
+        ),
+        permit_to_work (
+          id,
+          is_uploaded
+        )
+      `
         )
         .order("created_at", { ascending: false });
 
+      // Exclude work orders that already have uploaded permits
+      if (workOrderIdsWithPermits.length > 0) {
+        query = query.not("id", "in", `(${workOrderIdsWithPermits.join(",")})`);
+      }
+
+      const { data, error } = await query;
+
       if (error) throw error;
+
+      console.log("Total work orders from query:", data?.length || 0);
+      console.log("Work orders without permits:", data?.length || 0);
+
       setWorkOrders(data || []);
     } catch (err) {
       console.error("Error fetching work orders:", err);
@@ -298,6 +336,9 @@ export default function UploadPermit() {
       setSearchTerm("");
       event.target.value = "";
 
+      // Refresh the work orders list to remove the uploaded work order
+      await fetchWorkOrdersWithoutPermits();
+
       // Navigate back after a delay
       setTimeout(() => {
         navigate("/permits");
@@ -329,9 +370,28 @@ export default function UploadPermit() {
             Upload Permit to Work
           </h1>
           <p className="text-gray-600">
-            Select a work order and upload permit document (PDF only) to secure
-            storage
+            Select a work order without a permit and upload the document (PDF
+            only) to secure storage
           </p>
+        </div>
+
+        {/* Info Banner */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <span className="text-blue-400 text-xl">ℹ️</span>
+            </div>
+            <div className="ml-3">
+              <p className="text-blue-800 font-medium">
+                Only Work Orders Without Permits
+              </p>
+              <p className="text-blue-700 text-sm">
+                This page shows only work orders that don't have permit
+                documents uploaded yet. Work orders with existing permits are
+                not shown here.
+              </p>
+            </div>
+          </div>
         </div>
 
         {error && (
@@ -366,15 +426,20 @@ export default function UploadPermit() {
           {/* Work Order Selection */}
           <div className="bg-white rounded-lg shadow">
             <div className="p-6 border-b border-gray-200">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">
-                Select Work Order
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-medium text-gray-900">
+                  Work Orders Needing Permits
+                </h2>
+                <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full">
+                  {filteredWorkOrders.length} available
+                </span>
+              </div>
 
               {/* Search Bar */}
               <div className="relative mb-4">
                 <input
                   type="text"
-                  placeholder="Search work orders..."
+                  placeholder="Search work orders, vessels, descriptions..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -387,9 +452,37 @@ export default function UploadPermit() {
             <div className="max-h-96 overflow-y-auto">
               {filteredWorkOrders.length === 0 ? (
                 <div className="p-6 text-center text-gray-500">
-                  {searchTerm
-                    ? "No work orders match your search."
-                    : "No work orders available."}
+                  {searchTerm ? (
+                    <div>
+                      <div className="text-4xl mb-2">🔍</div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        No Results
+                      </h3>
+                      <p>No work orders match your search.</p>
+                      <button
+                        onClick={() => setSearchTerm("")}
+                        className="mt-2 text-blue-600 hover:text-blue-800 underline"
+                      >
+                        Clear search
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="text-4xl mb-2">✅</div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        All Permits Uploaded!
+                      </h3>
+                      <p>
+                        All work orders have their permit documents uploaded.
+                      </p>
+                      <button
+                        onClick={() => navigate("/permits")}
+                        className="mt-2 text-blue-600 hover:text-blue-800 underline"
+                      >
+                        View existing permits
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="divide-y divide-gray-200">
@@ -413,6 +506,9 @@ export default function UploadPermit() {
                             <span className="text-sm text-gray-600">
                               {wo.shipyard_wo_number}
                             </span>
+                            <span className="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">
+                              No Permit
+                            </span>
                           </div>
                           <p className="text-sm font-medium text-gray-900 truncate">
                             {wo.vessel?.name}
@@ -428,6 +524,11 @@ export default function UploadPermit() {
                           <p className="text-xs text-gray-500 mt-1">
                             📍 {wo.wo_location}
                           </p>
+                          {wo.wo_description && (
+                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                              📝 {wo.wo_description.substring(0, 100)}...
+                            </p>
+                          )}
                         </div>
                         {selectedWorkOrder?.id === wo.id && (
                           <div className="flex-shrink-0 ml-2">
@@ -480,6 +581,14 @@ export default function UploadPermit() {
                         <strong>Location:</strong>{" "}
                         {selectedWorkOrder.wo_location}
                       </div>
+                      {selectedWorkOrder.wo_description && (
+                        <div>
+                          <strong>Description:</strong>
+                          <p className="mt-1 text-xs bg-blue-100 p-2 rounded border max-h-20 overflow-y-auto">
+                            {selectedWorkOrder.wo_description}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
 
