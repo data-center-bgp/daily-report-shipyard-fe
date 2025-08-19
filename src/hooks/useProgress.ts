@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import type {
-  ProjectProgress,
   ProgressWithDetails,
   ProgressSummary,
   ProgressFormData,
@@ -37,7 +36,7 @@ export const useProgress = () => {
             customer_wo_number,
             shipyard_wo_number,
             wo_location,
-            wo_description
+            wo_description,
             vessel:vessel_id (
               name,
               type,
@@ -259,7 +258,7 @@ export const useProgress = () => {
         return (data || []).map((item) => ({
           date: item.report_date,
           progress: item.progress,
-          reporter: item.user?.name || "Unknown",
+          reporter: item.user?.[0]?.name || "Unknown",
           formatted_date: new Date(item.report_date).toLocaleDateString(),
         }));
       } catch (err) {

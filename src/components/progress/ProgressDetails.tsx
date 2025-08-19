@@ -23,6 +23,7 @@ export default function ProgressDetails() {
       fetchWorkOrderDetails();
       fetchProgressData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workOrderId]);
 
   useEffect(() => {
@@ -80,7 +81,7 @@ export default function ProgressDetails() {
     setDeletingId(progressId);
     try {
       await deleteProgress(progressId);
-    } catch (err) {
+    } catch {
       setError("Failed to delete progress entry");
     } finally {
       setDeletingId(null);
