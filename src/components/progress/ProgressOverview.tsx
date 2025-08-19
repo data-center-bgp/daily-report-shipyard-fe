@@ -54,7 +54,7 @@ export default function ProgressOverview() {
   // Helper function to truncate work description
   const truncateDescription = (
     description: string | null | undefined,
-    maxLength: number = 120
+    maxLength: number = 100
   ) => {
     if (!description) return "No description provided";
     if (description.length <= maxLength) return description;
@@ -72,9 +72,12 @@ export default function ProgressOverview() {
       summary.work_order?.vessel?.name
         ?.toLowerCase()
         .includes(searchTerm.toLowerCase()) ||
+      summary.work_order?.vessel?.company
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
       summary.work_order?.wo_description
         ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()); // Added description to search
+        .includes(searchTerm.toLowerCase());
 
     const daysSinceLastReport = Math.floor(
       (new Date().getTime() - new Date(summary.latest_report_date).getTime()) /
@@ -101,6 +104,54 @@ export default function ProgressOverview() {
     }
   });
 
+  // Group work orders by vessel
+  const groupedByVessel = filteredSummaries.reduce((acc, summary) => {
+    const vesselKey = summary.work_order?.vessel?.name || "Unknown Vessel";
+    const vesselInfo = summary.work_order?.vessel || {
+      name: "Unknown Vessel",
+      type: "Unknown",
+      company: "Unknown",
+    };
+
+    if (!acc[vesselKey]) {
+      acc[vesselKey] = {
+        vessel: vesselInfo,
+        workOrders: [],
+      };
+    }
+    acc[vesselKey].workOrders.push(summary);
+    return acc;
+  }, {} as Record<string, { vessel: { name: string; type: string; company: string }; workOrders: ProgressSummary[] }>);
+
+  const getVesselProgress = (workOrders: ProgressSummary[]) => {
+    const totalProgress = workOrders.reduce(
+      (sum, wo) => sum + wo.current_progress,
+      0
+    );
+    return Math.round(totalProgress / workOrders.length);
+  };
+
+  const getVesselStatus = (workOrders: ProgressSummary[]) => {
+    const completed = workOrders.filter(
+      (wo) => wo.current_progress >= 100
+    ).length;
+    const total = workOrders.length;
+
+    if (completed === total) return "All Completed";
+    if (completed > 0) return `${completed}/${total} Completed`;
+
+    const behind = workOrders.filter((wo) => {
+      const daysSinceLastReport = Math.floor(
+        (new Date().getTime() - new Date(wo.latest_report_date).getTime()) /
+          (1000 * 60 * 60 * 24)
+      );
+      return wo.current_progress < 100 && daysSinceLastReport > 3;
+    }).length;
+
+    if (behind > 0) return `${behind} Behind Schedule`;
+    return "Active";
+  };
+
   if (loading) {
     return (
       <div className="p-8">
@@ -120,7 +171,7 @@ export default function ProgressOverview() {
           Project Progress Overview
         </h1>
         <p className="text-gray-600">
-          Track daily progress for all active work orders
+          Track daily progress for all active work orders grouped by vessel
         </p>
       </div>
 
@@ -154,6 +205,22 @@ export default function ProgressOverview() {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
+                <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <span className="text-purple-600 text-lg">🚢</span>
+                </div>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Vessels</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {Object.keys(groupedByVessel).length}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
                 <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
                   <span className="text-green-600 text-lg">✅</span>
                 </div>
@@ -171,23 +238,7 @@ export default function ProgressOverview() {
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <span className="text-yellow-600 text-lg">🚧</span>
-                </div>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Active</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats.active_projects}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <span className="text-purple-600 text-lg">📈</span>
+                  <span className="text-yellow-600 text-lg">📈</span>
                 </div>
               </div>
               <div className="ml-4">
@@ -210,7 +261,7 @@ export default function ProgressOverview() {
           <div className="relative flex-1 max-w-md">
             <input
               type="text"
-              placeholder="Search projects, vessels, or descriptions..."
+              placeholder="Search vessels, work orders, or descriptions..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -252,140 +303,196 @@ export default function ProgressOverview() {
 
       {/* Results Count */}
       <div className="text-sm text-gray-600 mb-4">
-        Showing {filteredSummaries.length} of {progressSummaries.length}{" "}
-        projects
+        Showing {Object.keys(groupedByVessel).length} vessels with{" "}
+        {filteredSummaries.length} work orders
       </div>
 
-      {/* Progress Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredSummaries.length > 0 ? (
-          filteredSummaries.map((summary) => (
-            <div
-              key={summary.work_order_id}
-              className="bg-white rounded-lg shadow hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() =>
-                navigate(`/progress/details/${summary.work_order_id}`)
-              }
-            >
-              <div className="p-6">
-                {/* Header */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-semibold text-gray-900 truncate">
-                      {summary.work_order?.customer_wo_number}
-                    </h3>
-                    <p className="text-sm text-gray-500 truncate">
-                      {summary.work_order?.shipyard_wo_number}
-                    </p>
-                  </div>
-                  {getStatusBadge(summary)}
-                </div>
+      {/* Vessels with Work Orders */}
+      <div className="space-y-6">
+        {Object.keys(groupedByVessel).length > 0 ? (
+          Object.entries(groupedByVessel).map(
+            ([vesselName, { vessel, workOrders }]) => {
+              const vesselProgress = getVesselProgress(workOrders);
+              const vesselStatus = getVesselStatus(workOrders);
 
-                {/* Vessel Info */}
-                <div className="mb-4">
-                  <p className="text-sm font-medium text-gray-900">
-                    {summary.work_order?.vessel?.name}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {summary.work_order?.vessel?.type} •{" "}
-                    {summary.work_order?.vessel?.company}
-                  </p>
-                </div>
+              return (
+                <div
+                  key={vesselName}
+                  className="bg-white rounded-lg shadow overflow-hidden"
+                >
+                  {/* Vessel Header */}
+                  <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+                          <span className="text-2xl">🚢</span>
+                        </div>
+                        <div>
+                          <h2 className="text-xl font-bold">{vessel.name}</h2>
+                          <p className="text-blue-100">
+                            {vessel.type} • {vessel.company}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold">
+                          {vesselProgress}%
+                        </div>
+                        <div className="text-sm text-blue-100">
+                          {vesselStatus}
+                        </div>
+                        <div className="text-xs text-blue-200 mt-1">
+                          {workOrders.length} work order
+                          {workOrders.length !== 1 ? "s" : ""}
+                        </div>
+                      </div>
+                    </div>
 
-                {/* Work Description */}
-                <div className="mb-4">
-                  <p className="text-xs font-medium text-gray-500 mb-1">
-                    Work Description:
-                  </p>
-                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                    <p className="text-xs text-gray-700 leading-relaxed">
-                      {truncateDescription(summary.work_order?.wo_description)}
-                    </p>
-                    {summary.work_order?.wo_description &&
-                      summary.work_order.wo_description.length > 120 && (
-                        <p className="text-xs text-blue-600 mt-1 font-medium">
-                          Click to view full description →
-                        </p>
-                      )}
+                    {/* Vessel Progress Bar */}
+                    <div className="mt-4">
+                      <div className="w-full bg-white bg-opacity-20 rounded-full h-2">
+                        <div
+                          className="bg-white h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${Math.min(vesselProgress, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Work Orders List */}
+                  <div className="divide-y divide-gray-200">
+                    {workOrders.map((summary) => (
+                      <div
+                        key={summary.work_order_id}
+                        className="p-6 hover:bg-gray-50 cursor-pointer transition-colors"
+                        onClick={() =>
+                          navigate(`/progress/details/${summary.work_order_id}`)
+                        }
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            {/* Work Order Header */}
+                            <div className="flex items-center space-x-3 mb-3">
+                              <div>
+                                <h3 className="text-lg font-semibold text-gray-900">
+                                  {summary.work_order?.customer_wo_number}
+                                </h3>
+                                <p className="text-sm text-gray-500">
+                                  Shipyard:{" "}
+                                  {summary.work_order?.shipyard_wo_number}
+                                </p>
+                              </div>
+                              {getStatusBadge(summary)}
+                            </div>
+
+                            {/* Work Description */}
+                            <div className="mb-4">
+                              <p className="text-xs font-medium text-gray-500 mb-1">
+                                Work Description:
+                              </p>
+                              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                <p className="text-sm text-gray-700 leading-relaxed">
+                                  {truncateDescription(
+                                    summary.work_order?.wo_description
+                                  )}
+                                </p>
+                                {summary.work_order?.wo_description &&
+                                  summary.work_order.wo_description.length >
+                                    100 && (
+                                    <p className="text-xs text-blue-600 mt-1 font-medium">
+                                      Click to view full description →
+                                    </p>
+                                  )}
+                              </div>
+                            </div>
+
+                            {/* Progress Info */}
+                            <div className="flex items-center text-xs text-gray-500 space-x-4">
+                              <span>
+                                Last updated:{" "}
+                                {new Date(
+                                  summary.latest_report_date
+                                ).toLocaleDateString()}
+                              </span>
+                              <span>{summary.total_reports} reports</span>
+                              <span>
+                                Location: {summary.work_order?.wo_location}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Progress Section */}
+                          <div className="ml-6 text-right">
+                            <div className="flex items-center justify-end mb-2">
+                              <span
+                                className={`text-lg font-bold px-3 py-1 rounded-full ${getProgressColor(
+                                  summary.current_progress
+                                )}`}
+                              >
+                                {summary.current_progress}%
+                              </span>
+                            </div>
+                            <div className="w-32">
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div
+                                  className={`h-2 rounded-full transition-all duration-300 ${
+                                    summary.current_progress >= 100
+                                      ? "bg-green-600"
+                                      : summary.current_progress >= 75
+                                      ? "bg-blue-600"
+                                      : summary.current_progress >= 50
+                                      ? "bg-yellow-600"
+                                      : summary.current_progress >= 25
+                                      ? "bg-orange-600"
+                                      : "bg-red-600"
+                                  }`}
+                                  style={{
+                                    width: `${Math.min(
+                                      summary.current_progress,
+                                      100
+                                    )}%`,
+                                  }}
+                                ></div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-
-                {/* Progress Bar */}
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">
-                      Progress
-                    </span>
-                    <span
-                      className={`text-sm font-bold px-2 py-1 rounded ${getProgressColor(
-                        summary.current_progress
-                      )}`}
-                    >
-                      {summary.current_progress}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full transition-all duration-300 ${
-                        summary.current_progress >= 100
-                          ? "bg-green-600"
-                          : summary.current_progress >= 75
-                          ? "bg-blue-600"
-                          : summary.current_progress >= 50
-                          ? "bg-yellow-600"
-                          : summary.current_progress >= 25
-                          ? "bg-orange-600"
-                          : "bg-red-600"
-                      }`}
-                      style={{
-                        width: `${Math.min(summary.current_progress, 100)}%`,
-                      }}
-                    ></div>
-                  </div>
-                </div>
-
-                {/* Footer Info */}
-                <div className="flex items-center justify-between text-xs text-gray-500">
-                  <span>
-                    Last updated:{" "}
-                    {new Date(summary.latest_report_date).toLocaleDateString()}
-                  </span>
-                  <span>{summary.total_reports} reports</span>
-                </div>
-              </div>
-            </div>
-          ))
+              );
+            }
+          )
         ) : (
-          <div className="col-span-full">
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">📊</div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                No Projects Found
-              </h3>
-              <p className="text-gray-500 mb-4">
-                {searchTerm || statusFilter !== "all"
-                  ? "No projects match your current filters."
-                  : "No projects with progress data yet."}
-              </p>
-              {searchTerm || statusFilter !== "all" ? (
-                <button
-                  onClick={() => {
-                    setSearchTerm("");
-                    setStatusFilter("all");
-                  }}
-                  className="text-blue-600 hover:text-blue-800 transition-colors"
-                >
-                  Clear filters
-                </button>
-              ) : (
-                <button
-                  onClick={() => navigate("/progress/tracker")}
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"
-                >
-                  📝 Add First Progress
-                </button>
-              )}
-            </div>
+          <div className="text-center py-12">
+            <div className="text-6xl mb-4">🚢</div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              No Vessels Found
+            </h3>
+            <p className="text-gray-500 mb-4">
+              {searchTerm || statusFilter !== "all"
+                ? "No vessels match your current filters."
+                : "No vessels with progress data yet."}
+            </p>
+            {searchTerm || statusFilter !== "all" ? (
+              <button
+                onClick={() => {
+                  setSearchTerm("");
+                  setStatusFilter("all");
+                }}
+                className="text-blue-600 hover:text-blue-800 transition-colors"
+              >
+                Clear filters
+              </button>
+            ) : (
+              <button
+                onClick={() => navigate("/progress/tracker")}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"
+              >
+                📝 Add First Progress
+              </button>
+            )}
           </div>
         )}
       </div>
