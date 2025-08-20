@@ -39,14 +39,20 @@ export default function UploadPermit() {
     // Filter work orders based on search term
     const filtered = workOrders.filter((wo) => {
       const searchLower = searchTerm.toLowerCase();
+
+      // Safe string check function
+      const safeIncludes = (value: string | null | undefined) => {
+        return value?.toLowerCase().includes(searchLower) || false;
+      };
+
       return (
-        wo.customer_wo_number.toLowerCase().includes(searchLower) ||
-        wo.shipyard_wo_number.toLowerCase().includes(searchLower) ||
-        wo.vessel?.name?.toLowerCase().includes(searchLower) ||
-        wo.vessel?.type?.toLowerCase().includes(searchLower) ||
-        wo.vessel?.company?.toLowerCase().includes(searchLower) ||
-        wo.wo_location.toLowerCase().includes(searchLower) ||
-        wo.wo_description?.toLowerCase().includes(searchLower)
+        safeIncludes(wo.customer_wo_number) ||
+        safeIncludes(wo.shipyard_wo_number) ||
+        safeIncludes(wo.vessel?.name) ||
+        safeIncludes(wo.vessel?.type) ||
+        safeIncludes(wo.vessel?.company) ||
+        safeIncludes(wo.wo_location) ||
+        safeIncludes(wo.wo_description)
       );
     });
     setFilteredWorkOrders(filtered);
