@@ -1,9 +1,17 @@
+// src/components/workorders/WorkOrderTable.tsx
+
 import { useState, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase, type WorkOrder } from "../../lib/supabase";
 
+// Add interface for progress data
+interface WorkOrderWithProgress extends WorkOrder {
+  current_progress?: number;
+  has_progress_data?: boolean;
+}
+
 export default function WorkOrderTable() {
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
+  const [workOrders, setWorkOrders] = useState<WorkOrderWithProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -20,19 +28,54 @@ export default function WorkOrderTable() {
       setLoading(true);
       setError(null);
 
-      console.log("Fetching work orders from 'work_order' table...");
+      console.log("Fetching work orders with progress data...");
 
+      // Fetch work orders with their latest progress
       const { data, error } = await supabase
         .from("work_order")
-        .select("*")
+        .select(
+          `
+          *,
+          project_progress (
+            progress,
+            report_date
+          )
+        `
+        )
         .order(sortField, { ascending: sortDirection === "asc" });
-
-      console.log("Work order query result:", { data, error });
 
       if (error) throw error;
 
-      console.log("Successfully fetched work orders:", data);
-      setWorkOrders(data || []);
+      // Process the data to get latest progress for each work order
+      const workOrdersWithProgress = (data || []).map((wo) => {
+        const progressRecords = wo.project_progress || [];
+
+        if (progressRecords.length === 0) {
+          return {
+            ...wo,
+            current_progress: 0,
+            has_progress_data: false,
+          };
+        }
+
+        // Sort progress records by date (newest first) and get the latest progress
+        const sortedProgress = progressRecords.sort(
+          (a, b) =>
+            new Date(b.report_date).getTime() -
+            new Date(a.report_date).getTime()
+        );
+
+        const latestProgress = sortedProgress[0]?.progress || 0;
+
+        return {
+          ...wo,
+          current_progress: latestProgress,
+          has_progress_data: true,
+        };
+      });
+
+      console.log("Work orders with progress:", workOrdersWithProgress);
+      setWorkOrders(workOrdersWithProgress);
     } catch (err) {
       console.error("Error fetching work orders:", err);
       setError(err instanceof Error ? err.message : "An error occurred");
@@ -113,13 +156,22 @@ export default function WorkOrderTable() {
     }
   };
 
-  const filteredWorkOrders = workOrders.filter(
-    (wo) =>
-      wo.customer_wo_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      wo.wo_description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      wo.wo_location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      wo.pic.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredWorkOrders = workOrders.filter((wo) => {
+    const searchLower = searchTerm.toLowerCase();
+
+    // Safe string check function
+    const safeIncludes = (value: string | null | undefined) => {
+      return value?.toLowerCase().includes(searchLower) || false;
+    };
+
+    return (
+      safeIncludes(wo.customer_wo_number) ||
+      safeIncludes(wo.wo_description) ||
+      safeIncludes(wo.wo_location) ||
+      safeIncludes(wo.pic) ||
+      safeIncludes(wo.shipyard_wo_number)
+    );
+  });
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "-";
@@ -130,15 +182,37 @@ export default function WorkOrderTable() {
     });
   };
 
-  const getStatusColor = (wo: WorkOrder) => {
-    if (wo.actual_close_date) return "bg-green-100 text-green-800";
-    if (wo.actual_start_date) return "bg-blue-100 text-blue-800";
-    if (new Date(wo.planned_start_date) <= new Date())
-      return "bg-yellow-100 text-yellow-800";
-    return "bg-gray-100 text-gray-800";
+  // Updated status logic based on progress data
+  const getStatusColor = (wo: WorkOrderWithProgress) => {
+    // Check progress first
+    if (wo.has_progress_data) {
+      if (wo.current_progress === 100) {
+        return "bg-green-100 text-green-800"; // Completed
+      } else if (wo.current_progress > 0) {
+        return "bg-blue-100 text-blue-800"; // In Progress
+      }
+    }
+
+    // If no progress data, check dates
+    if (wo.actual_close_date) return "bg-green-100 text-green-800"; // Completed
+    if (wo.actual_start_date) return "bg-blue-100 text-blue-800"; // In Progress
+    if (new Date(wo.planned_start_date) <= new Date()) {
+      return "bg-yellow-100 text-yellow-800"; // Ready to Start
+    }
+    return "bg-gray-100 text-gray-800"; // Planned
   };
 
-  const getStatus = (wo: WorkOrder) => {
+  const getStatus = (wo: WorkOrderWithProgress) => {
+    // Check progress first
+    if (wo.has_progress_data) {
+      if (wo.current_progress === 100) {
+        return "Completed";
+      } else if (wo.current_progress > 0) {
+        return "In Progress";
+      }
+    }
+
+    // If no progress data, check dates
     if (wo.actual_close_date) return "Completed";
     if (wo.actual_start_date) return "In Progress";
     if (new Date(wo.planned_start_date) <= new Date()) return "Ready to Start";
@@ -254,7 +328,7 @@ export default function WorkOrderTable() {
                   </div>
                 </th>
                 <th
-                  onClick={() => handleSort("customer_wo_number")}
+                  onClick={() => handleSort("shipyard_wo_number")}
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                 >
                   <div className="flex items-center gap-1">
@@ -262,7 +336,7 @@ export default function WorkOrderTable() {
                   </div>
                 </th>
                 <th
-                  onClick={() => handleSort("customer_wo_date")}
+                  onClick={() => handleSort("shipyard_wo_date")}
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                 >
                   <div className="flex items-center gap-1">
@@ -313,7 +387,29 @@ export default function WorkOrderTable() {
                   </div>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Progress
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  WO Doc Status
+                </th>
+                <th
+                  onClick={() => handleSort("actual_start_date")}
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                >
+                  <div className="flex items-center gap-1">
+                    Actual Start <SortIcon field="actual_start_date" />
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("actual_close_date")}
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                >
+                  <div className="flex items-center gap-1">
+                    Actual Close <SortIcon field="actual_close_date" />
+                  </div>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
@@ -357,6 +453,35 @@ export default function WorkOrderTable() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {wo.pic}
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {wo.has_progress_data ? (
+                        <div className="flex items-center">
+                          <div className="w-12 bg-gray-200 rounded-full h-2 mr-2">
+                            <div
+                              className={`h-2 rounded-full ${
+                                wo.current_progress === 100
+                                  ? "bg-green-500"
+                                  : wo.current_progress >= 75
+                                  ? "bg-blue-500"
+                                  : wo.current_progress >= 50
+                                  ? "bg-yellow-500"
+                                  : wo.current_progress >= 25
+                                  ? "bg-orange-500"
+                                  : "bg-red-500"
+                              }`}
+                              style={{ width: `${wo.current_progress}%` }}
+                            ></div>
+                          </div>
+                          <span className="text-xs font-medium">
+                            {wo.current_progress}%
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs">
+                          No progress
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
@@ -365,6 +490,23 @@ export default function WorkOrderTable() {
                       >
                         {getStatus(wo)}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          wo.wo_document_status
+                            ? "bg-green-100 text-green-800"
+                            : "bg-yellow-100 text-yellow-800"
+                        }`}
+                      >
+                        {wo.wo_document_status ? "✅ Complete" : "📄 Pending"}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(wo.actual_start_date)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(wo.actual_close_date)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <div className="flex space-x-2">
@@ -395,7 +537,7 @@ export default function WorkOrderTable() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={10} className="px-6 py-12 text-center">
+                  <td colSpan={16} className="px-6 py-12 text-center">
                     <div className="text-gray-500">
                       <p className="text-lg mb-2">No work orders found</p>
                       <p className="text-sm mb-4">
