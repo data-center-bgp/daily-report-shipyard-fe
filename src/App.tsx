@@ -12,7 +12,11 @@ import type { User } from "@supabase/supabase-js";
 import Layout from "./components/common/Layout";
 import { Login, Register } from "./components/auth";
 import { Dashboard } from "./components/dashboard";
-import { WorkOrders, AddWorkOrder } from "./components/workorders";
+import {
+  WorkOrders,
+  AddWorkOrder,
+  VesselWorkOrders,
+} from "./components/workorders";
 import { PermitsList, UploadPermit } from "./components/permits";
 import {
   ProgressOverview,
@@ -72,6 +76,10 @@ function App() {
           {/* Work Orders */}
           <Route path="/work-orders" element={<WorkOrders />} />
           <Route path="/add-work-order" element={<AddWorkOrder />} />
+          <Route
+            path="/vessel/:vesselId/work-orders"
+            element={<VesselWorkOrders />}
+          />
 
           {/* Permits */}
           <Route path="/permits" element={<PermitsList />} />

@@ -1,4 +1,4 @@
-import WorkOrderTable from "./WorkOrderTable";
+import WorkOrderTable from "./WorkOrderDashboard";
 
 export default function WorkOrders() {
   return (
