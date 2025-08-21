@@ -141,11 +141,19 @@ export default function ProgressTracker() {
 
   const filteredWorkOrders = workOrders.filter((wo) => {
     const searchLower = searchTerm.toLowerCase();
+
+    // Helper function to safely check if a value includes the search term
+    const safeIncludes = (value: string | null | undefined) => {
+      return value?.toLowerCase().includes(searchLower) || false;
+    };
+
     return (
-      wo.customer_wo_number.toLowerCase().includes(searchLower) ||
-      wo.shipyard_wo_number.toLowerCase().includes(searchLower) ||
-      wo.vessel?.name?.toLowerCase().includes(searchLower) ||
-      wo.vessel?.company?.toLowerCase().includes(searchLower)
+      safeIncludes(wo.customer_wo_number) ||
+      safeIncludes(wo.shipyard_wo_number) ||
+      safeIncludes(wo.vessel?.name) ||
+      safeIncludes(wo.vessel?.company) ||
+      safeIncludes(wo.wo_location) ||
+      safeIncludes(wo.wo_description)
     );
   });
 
