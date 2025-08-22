@@ -23,7 +23,10 @@ import {
   ProgressTracker,
   ProgressDetails,
 } from "./components/progress";
-import { OperationVerification } from "./components/verification";
+import {
+  OperationVerification,
+  VerifyOperation,
+} from "./components/verification";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -98,6 +101,10 @@ function App() {
           <Route
             path="/operation-verification"
             element={<OperationVerification />}
+          />
+          <Route
+            path="/operation-verification/verify/:workOrderId"
+            element={<VerifyOperation />}
           />
 
           {/* Fallback */}

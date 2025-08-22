@@ -45,18 +45,12 @@ export default function OperationVerification() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"pending" | "verified">("pending");
 
-  // Modal states for verification
-  const [showVerificationModal, setShowVerificationModal] = useState(false);
-  const [selectedWorkOrder, setSelectedWorkOrder] =
-    useState<WorkOrderWithProgress | null>(null);
-  const [verificationDate, setVerificationDate] = useState("");
-
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch completed work orders with progress data
+      // Fetch completed work orders with progress data - using only existing vessel columns
       const { data: workOrderData, error: woError } = await supabase
         .from("work_order")
         .select(
@@ -66,7 +60,7 @@ export default function OperationVerification() {
             progress,
             report_date
           ),
-          vessel (
+          vessel:vessel_id (
             id,
             name,
             type,
@@ -114,15 +108,16 @@ export default function OperationVerification() {
 
       setCompletedWorkOrders(completed);
 
-      // Fetch existing verifications from operation_verification table
+      // Fetch existing verifications from operation_verification table - using only existing vessel columns
       const { data: verificationData, error: verError } = await supabase
         .from("operation_verification")
         .select(
           `
           *,
-          work_order (
+          work_order:work_order_id (
             *,
-            vessel (
+            vessel:vessel_id (
+              id,
               name,
               type,
               company
@@ -147,77 +142,6 @@ export default function OperationVerification() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
-
-  const openVerificationModal = (workOrder: WorkOrderWithProgress) => {
-    setSelectedWorkOrder(workOrder);
-    // Set default verification date to today
-    setVerificationDate(new Date().toISOString().split("T")[0]);
-    setShowVerificationModal(true);
-  };
-
-  const closeVerificationModal = () => {
-    setShowVerificationModal(false);
-    setSelectedWorkOrder(null);
-    setVerificationDate("");
-    setError(null);
-  };
-
-  const handleVerifyOperation = async () => {
-    if (!selectedWorkOrder || !verificationDate) {
-      setError("Please select a verification date");
-      return;
-    }
-
-    try {
-      setSubmittingId(selectedWorkOrder.id);
-      setError(null);
-      setSuccess(null);
-
-      // Get current user
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-      if (userError || !user) {
-        throw new Error("User not authenticated");
-      }
-
-      // Insert verification record into operation_verification table
-      const { data, error } = await supabase
-        .from("operation_verification")
-        .insert({
-          progress_verification: true,
-          verification_date: verificationDate,
-          work_order_id: selectedWorkOrder.id,
-          user_id: user.id,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setSuccess(
-        `Operation verified successfully for work order ${
-          selectedWorkOrder.customer_wo_number ||
-          selectedWorkOrder.shipyard_wo_number
-        } on ${new Date(verificationDate).toLocaleDateString()}`
-      );
-
-      // Close modal and refresh data
-      closeVerificationModal();
-      await fetchData();
-
-      // Hide success message after 5 seconds
-      setTimeout(() => setSuccess(null), 5000);
-    } catch (err) {
-      console.error("Error verifying operation:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to verify operation"
-      );
-    } finally {
-      setSubmittingId(null);
-    }
-  };
 
   const handleRemoveVerification = async (
     verification: VerificationWithDetails
@@ -282,7 +206,8 @@ export default function OperationVerification() {
       safeIncludes(wo.shipyard_wo_number) ||
       safeIncludes(wo.vessel?.name) ||
       safeIncludes(wo.vessel?.company) ||
-      safeIncludes(wo.wo_location)
+      safeIncludes(wo.wo_location) ||
+      safeIncludes(wo.wo_description)
     );
   });
 
@@ -297,7 +222,8 @@ export default function OperationVerification() {
       safeIncludes(verification.work_order.shipyard_wo_number) ||
       safeIncludes(verification.work_order.vessel?.name) ||
       safeIncludes(verification.work_order.vessel?.company) ||
-      safeIncludes(verification.work_order.wo_location)
+      safeIncludes(verification.work_order.wo_location) ||
+      safeIncludes(verification.work_order.wo_description)
     );
   });
 
@@ -450,10 +376,10 @@ export default function OperationVerification() {
                         Work Order
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Vessel
+                        Vessel Details
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Location
+                        Work Details
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Completion Date
@@ -470,27 +396,43 @@ export default function OperationVerification() {
                     {filteredPending.map((wo) => (
                       <tr key={wo.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div>
+                          <div className="space-y-1">
                             <div className="text-sm font-medium text-gray-900">
-                              {wo.customer_wo_number || "-"}
+                              Customer: {wo.customer_wo_number || "-"}
                             </div>
                             <div className="text-sm text-gray-500">
-                              {wo.shipyard_wo_number || "-"}
+                              Shipyard: {wo.shipyard_wo_number || "-"}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              PIC: {wo.pic || "-"}
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div>
+                        <td className="px-6 py-4">
+                          <div className="space-y-1">
                             <div className="text-sm font-medium text-gray-900">
-                              {wo.vessel?.name}
+                              {wo.vessel?.name || "-"}
                             </div>
                             <div className="text-sm text-gray-500">
-                              {wo.vessel?.type} • {wo.vessel?.company}
+                              {wo.vessel?.type || "-"} •{" "}
+                              {wo.vessel?.company || "-"}
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {wo.wo_location}
+                        <td className="px-6 py-4">
+                          <div className="space-y-1">
+                            <div className="text-sm font-medium text-gray-900">
+                              📍 {wo.wo_location || "-"}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              Qty: {wo.quantity || "-"}
+                            </div>
+                            {wo.wo_description && (
+                              <div className="text-xs text-gray-400 max-w-xs truncate">
+                                {wo.wo_description}
+                              </div>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {wo.latest_progress_date
@@ -509,10 +451,14 @@ export default function OperationVerification() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <button
-                            onClick={() => openVerificationModal(wo)}
+                            onClick={() =>
+                              navigate(
+                                `/operation-verification/verify/${wo.id}`
+                              )
+                            }
                             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
                           >
-                            🔍 Verify Operation
+                            🔍 Verify
                           </button>
                         </td>
                       </tr>
@@ -557,10 +503,10 @@ export default function OperationVerification() {
                       Work Order
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Vessel
+                      Vessel Details
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Location
+                      Work Details
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Verification Date
@@ -577,28 +523,45 @@ export default function OperationVerification() {
                   {filteredVerified.map((verification) => (
                     <tr key={verification.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
+                        <div className="space-y-1">
                           <div className="text-sm font-medium text-gray-900">
+                            Customer:{" "}
                             {verification.work_order.customer_wo_number || "-"}
                           </div>
                           <div className="text-sm text-gray-500">
+                            Shipyard:{" "}
                             {verification.work_order.shipyard_wo_number || "-"}
                           </div>
+                          <div className="text-xs text-gray-400">
+                            PIC: {verification.work_order.pic || "-"}
+                          </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
                           <div className="text-sm font-medium text-gray-900">
-                            {verification.work_order.vessel?.name}
+                            {verification.work_order.vessel?.name || "-"}
                           </div>
                           <div className="text-sm text-gray-500">
-                            {verification.work_order.vessel?.type} •{" "}
-                            {verification.work_order.vessel?.company}
+                            {verification.work_order.vessel?.type || "-"} •{" "}
+                            {verification.work_order.vessel?.company || "-"}
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {verification.work_order.wo_location}
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium text-gray-900">
+                            📍 {verification.work_order.wo_location || "-"}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            Qty: {verification.work_order.quantity || "-"}
+                          </div>
+                          {verification.work_order.wo_description && (
+                            <div className="text-xs text-gray-400 max-w-xs truncate">
+                              {verification.work_order.wo_description}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatDate(verification.verification_date)}
@@ -656,117 +619,6 @@ export default function OperationVerification() {
           )}
         </div>
       </div>
-
-      {/* Verification Modal */}
-      {showVerificationModal && selectedWorkOrder && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">
-                  Verify Operation
-                </h3>
-                <button
-                  onClick={closeVerificationModal}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <span className="text-xl">✕</span>
-                </button>
-              </div>
-
-              {/* Work Order Info */}
-              <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                <h4 className="font-medium text-gray-900 mb-2">
-                  Work Order Details
-                </h4>
-                <div className="space-y-1 text-sm">
-                  <p>
-                    <span className="font-medium">Customer WO:</span>{" "}
-                    {selectedWorkOrder.customer_wo_number || "-"}
-                  </p>
-                  <p>
-                    <span className="font-medium">Shipyard WO:</span>{" "}
-                    {selectedWorkOrder.shipyard_wo_number || "-"}
-                  </p>
-                  <p>
-                    <span className="font-medium">Vessel:</span>{" "}
-                    {selectedWorkOrder.vessel?.name}
-                  </p>
-                  <p>
-                    <span className="font-medium">Location:</span>{" "}
-                    {selectedWorkOrder.wo_location}
-                  </p>
-                  <p>
-                    <span className="font-medium">Progress:</span>{" "}
-                    <span className="text-green-600 font-medium">100%</span>
-                  </p>
-                </div>
-              </div>
-
-              {/* Date Input */}
-              <div className="mb-4">
-                <label
-                  htmlFor="verification-date"
-                  className="block text-sm font-medium text-gray-700 mb-2"
-                >
-                  Verification Date <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  id="verification-date"
-                  value={verificationDate}
-                  onChange={(e) => setVerificationDate(e.target.value)}
-                  max={new Date().toISOString().split("T")[0]} // Don't allow future dates
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Select the actual date when the operation was verified (cannot
-                  be in the future)
-                </p>
-              </div>
-
-              {/* Error Message */}
-              {error && (
-                <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
-                  <div className="flex items-center">
-                    <span className="text-red-600 mr-2">⚠️</span>
-                    <p className="text-red-700 text-sm">{error}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Modal Actions */}
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={handleVerifyOperation}
-                  disabled={
-                    submittingId === selectedWorkOrder.id || !verificationDate
-                  }
-                  className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {submittingId === selectedWorkOrder.id ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Verifying...
-                    </>
-                  ) : (
-                    <>✅ Confirm Verification</>
-                  )}
-                </button>
-                <button
-                  onClick={closeVerificationModal}
-                  disabled={submittingId === selectedWorkOrder.id}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
