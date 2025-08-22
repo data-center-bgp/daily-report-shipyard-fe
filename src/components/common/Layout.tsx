@@ -52,7 +52,9 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       name: "Work Orders",
       href: "/work-orders",
       icon: "📋",
-      current: location.pathname === "/work-orders",
+      current:
+        location.pathname === "/work-orders" ||
+        location.pathname.startsWith("/vessel/"),
     },
     {
       name: "Permits to Work",
@@ -67,6 +69,12 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       href: "/progress",
       icon: "📈",
       current: location.pathname === "/progress",
+    },
+    {
+      name: "Operation Verification",
+      href: "/operation-verification",
+      icon: "🔍",
+      current: location.pathname === "/operation-verification",
     },
   ];
 
