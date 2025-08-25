@@ -94,10 +94,13 @@ export default function VerifyOperation() {
         .from("operation_verification")
         .select("id")
         .eq("work_order_id", parseInt(workOrderId))
-        .is("deleted_at", null)
-        .single();
+        .is("deleted_at", null);
 
-      if (existingVerification) {
+      if (verError) {
+        console.error("Error checking existing verification:", verError);
+      }
+
+      if (existingVerification && existingVerification.length > 0) {
         throw new Error("Work order has already been verified");
       }
 
@@ -138,6 +141,18 @@ export default function VerifyOperation() {
         throw new Error("User not authenticated");
       }
 
+      // Get the user profile to get the user_id
+      const { data: userProfile, error: profileError } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("auth_user_id", user.id)
+        .single();
+
+      if (profileError || !userProfile) {
+        console.error("Error fetching user profile:", profileError);
+        throw new Error("Failed to fetch user profile");
+      }
+
       // Insert verification record into operation_verification table
       const { data, error } = await supabase
         .from("operation_verification")
@@ -145,7 +160,7 @@ export default function VerifyOperation() {
           progress_verification: true,
           verification_date: verificationDate,
           work_order_id: workOrder.id,
-          user_id: user.id,
+          user_id: userProfile.id,
         })
         .select()
         .single();
