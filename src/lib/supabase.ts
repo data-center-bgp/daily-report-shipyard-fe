@@ -25,40 +25,68 @@ export interface Vessel {
 }
 
 export interface WorkOrder {
-  id?: number;
-  customer_wo_number: string;
-  customer_wo_date: string;
+  id: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+  vessel_id: number;
   shipyard_wo_number: string;
   shipyard_wo_date: string;
-  vessel_id: number;
-  wo_location: string;
-  wo_description: string;
-  quantity: number;
+  customer_wo_number?: string;
+  customer_wo_date?: string;
+  wo_document_delivery_date?: string;
+  user_id: number;
+}
+
+export interface WorkDetails {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+  work_order_id: number;
+  description: string;
+  location: string;
   planned_start_date: string;
   target_close_date: string;
   period_close_target: string;
-  invoice_delivery_date: string;
-  actual_start_date: string | null;
-  actual_close_date: string | null;
+  actual_start_date?: string;
+  actual_close_date?: string;
   pic: string;
-  created_at?: string;
-  updated_at?: string;
-  vessel?: Vessel;
-  permits?: PermitToWork[];
+  work_permit_url?: string;
+  storage_path?: string;
+  user_id: number;
 }
 
-export interface PermitToWork {
-  id?: number;
-  work_order_id: number;
-  user_id: string;
-  document_url: string | null;
-  is_uploaded: boolean;
-  storage_path: string;
+export interface WorkProgress {
+  id: number;
   created_at: string;
   updated_at: string;
-  deleted_at: string | null;
-  work_order?: WorkOrder;
-  user?: Profile;
+  deleted_at?: string;
+  work_details_id: number;
+  progress: number;
+  report_date: string;
+  photo_evidence?: string;
+  storage_path?: string;
+  user_id: number;
+}
+
+// Extended interfaces for UI
+export interface WorkDetailsWithProgress extends WorkDetails {
+  work_progress: WorkProgress[];
+  current_progress?: number;
+  latest_progress_date?: string;
+}
+
+export interface WorkOrderWithDetails extends WorkOrder {
+  work_details: WorkDetailsWithProgress[];
+  vessel?: {
+    id: number;
+    name: string;
+    type: string;
+    company: string;
+  };
+  overall_progress?: number;
+  has_progress_data?: boolean;
 }
 
 export interface Profile {

@@ -54,21 +54,30 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       icon: "📋",
       current:
         location.pathname === "/work-orders" ||
-        location.pathname.startsWith("/vessel/"),
+        location.pathname.startsWith("/vessel/") ||
+        location.pathname.startsWith("/work-order/") ||
+        location.pathname.startsWith("/add-work-order") ||
+        location.pathname.startsWith("/edit-work-order"),
     },
     {
-      name: "Permits to Work",
-      href: "/permits",
-      icon: "📄",
+      name: "Work Details",
+      href: "/work-details",
+      icon: "🔧",
       current:
-        location.pathname === "/permits" ||
-        location.pathname === "/upload-permit",
+        location.pathname === "/work-details" ||
+        location.pathname.startsWith("/work-details/") ||
+        location.pathname.includes("/add-work-details") ||
+        location.pathname.includes("/edit-work-details"),
     },
     {
-      name: "Project Progress",
-      href: "/progress",
+      name: "Work Progress",
+      href: "/work-progress",
       icon: "📈",
-      current: location.pathname === "/progress",
+      current:
+        location.pathname === "/work-progress" ||
+        location.pathname.startsWith("/work-progress/") ||
+        location.pathname.includes("/add-progress") ||
+        location.pathname.includes("/edit-progress"),
     },
     {
       name: "Operation Verification",

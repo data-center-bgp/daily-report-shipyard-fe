@@ -1,11 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase, type WorkOrder } from "../../lib/supabase";
-
-interface WorkOrderWithProgress extends WorkOrder {
-  current_progress?: number;
-  has_progress_data?: boolean;
-}
+import { supabase, type WorkOrderWithDetails } from "../../lib/supabase";
 
 interface VesselData {
   id: number;
@@ -19,15 +14,16 @@ export default function VesselWorkOrders() {
   const navigate = useNavigate();
 
   const [vessel, setVessel] = useState<VesselData | null>(null);
-  const [workOrders, setWorkOrders] = useState<WorkOrderWithProgress[]>([]);
+  const [workOrders, setWorkOrders] = useState<WorkOrderWithDetails[]>([]);
   const [filteredWorkOrders, setFilteredWorkOrders] = useState<
-    WorkOrderWithProgress[]
+    WorkOrderWithDetails[]
   >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortField, setSortField] =
-    useState<keyof WorkOrder>("customer_wo_date");
+  const [sortField, setSortField] = useState<
+    "shipyard_wo_date" | "shipyard_wo_number"
+  >("shipyard_wo_date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   const fetchVesselWorkOrders = useCallback(async () => {
@@ -49,9 +45,14 @@ export default function VesselWorkOrders() {
           .select(
             `
             *,
-            project_progress (
-              progress,
-              report_date
+            work_details (
+              *,
+              work_progress (
+                progress,
+                report_date,
+                photo_evidence,
+                storage_path
+              )
             ),
             vessel (
               id,
@@ -62,6 +63,7 @@ export default function VesselWorkOrders() {
           `
           )
           .eq("vessel_id", vesselId)
+          .is("deleted_at", null)
           .order(sortField, { ascending: sortDirection === "asc" }),
       ]);
 
@@ -73,28 +75,60 @@ export default function VesselWorkOrders() {
       // Process work orders with progress data
       const workOrdersWithProgress = (workOrderResponse.data || []).map(
         (wo) => {
-          const progressRecords = wo.project_progress || [];
+          const workDetails = wo.work_details || [];
 
-          if (progressRecords.length === 0) {
+          // Process each work detail to get its latest progress
+          const workDetailsWithProgress = workDetails.map((detail) => {
+            const progressRecords = detail.work_progress || [];
+
+            if (progressRecords.length === 0) {
+              return {
+                ...detail,
+                current_progress: 0,
+                latest_progress_date: undefined,
+              };
+            }
+
+            // Sort progress records by date (newest first)
+            const sortedProgress = progressRecords.sort(
+              (a, b) =>
+                new Date(b.report_date).getTime() -
+                new Date(a.report_date).getTime()
+            );
+
+            const latestProgress = sortedProgress[0]?.progress || 0;
+            const latestProgressDate = sortedProgress[0]?.report_date;
+
             return {
-              ...wo,
-              current_progress: 0,
-              has_progress_data: false,
+              ...detail,
+              current_progress: latestProgress,
+              latest_progress_date: latestProgressDate,
             };
+          });
+
+          // Calculate overall work order progress
+          let overallProgress = 0;
+          let hasProgressData = false;
+
+          if (workDetailsWithProgress.length > 0) {
+            // Average progress across all work details
+            const totalProgress = workDetailsWithProgress.reduce(
+              (sum, detail) => sum + (detail.current_progress || 0),
+              0
+            );
+            overallProgress = Math.round(
+              totalProgress / workDetailsWithProgress.length
+            );
+            hasProgressData = workDetailsWithProgress.some(
+              (detail) => detail.current_progress > 0
+            );
           }
-
-          const sortedProgress = progressRecords.sort(
-            (a, b) =>
-              new Date(b.report_date).getTime() -
-              new Date(a.report_date).getTime()
-          );
-
-          const latestProgress = sortedProgress[0]?.progress || 0;
 
           return {
             ...wo,
-            current_progress: latestProgress,
-            has_progress_data: true,
+            work_details: workDetailsWithProgress,
+            overall_progress: overallProgress,
+            has_progress_data: hasProgressData,
           };
         }
       );
@@ -123,9 +157,12 @@ export default function VesselWorkOrders() {
         return (
           safeIncludes(wo.customer_wo_number) ||
           safeIncludes(wo.shipyard_wo_number) ||
-          safeIncludes(wo.wo_description) ||
-          safeIncludes(wo.wo_location) ||
-          safeIncludes(wo.pic)
+          wo.work_details.some(
+            (detail) =>
+              safeIncludes(detail.description) ||
+              safeIncludes(detail.location) ||
+              safeIncludes(detail.pic)
+          )
         );
       });
     }
@@ -139,7 +176,7 @@ export default function VesselWorkOrders() {
     }
   }, [fetchVesselWorkOrders]);
 
-  const handleSort = (field: keyof WorkOrder) => {
+  const handleSort = (field: "shipyard_wo_date" | "shipyard_wo_number") => {
     const newDirection =
       sortField === field && sortDirection === "asc" ? "desc" : "asc";
     setSortField(field);
@@ -152,22 +189,20 @@ export default function VesselWorkOrders() {
     });
   };
 
-  const handleViewWorkOrder = (workOrder: WorkOrder) => {
-    // Navigate to work order details page
+  const handleViewWorkOrder = (workOrder: WorkOrderWithDetails) => {
     navigate(`/work-order/${workOrder.id}`);
   };
 
-  const handleEditWorkOrder = (workOrder: WorkOrder) => {
-    // Navigate to edit work order page
+  const handleEditWorkOrder = (workOrder: WorkOrderWithDetails) => {
     navigate(`/edit-work-order/${workOrder.id}`);
   };
 
-  const handleDeleteWorkOrder = async (workOrder: WorkOrder) => {
+  const handleDeleteWorkOrder = async (workOrder: WorkOrderWithDetails) => {
     if (
       !window.confirm(
         `Are you sure you want to delete work order ${
-          workOrder.customer_wo_number ||
           workOrder.shipyard_wo_number ||
+          workOrder.customer_wo_number ||
           "this work order"
         }?`
       )
@@ -184,7 +219,7 @@ export default function VesselWorkOrders() {
       if (error) throw error;
 
       console.log("Work order deleted successfully");
-      fetchVesselWorkOrders(); // Refresh the list
+      fetchVesselWorkOrders();
     } catch (err) {
       console.error("Error deleting work order:", err);
       setError(
@@ -202,53 +237,33 @@ export default function VesselWorkOrders() {
     });
   };
 
-  const getStatusColor = (wo: WorkOrderWithProgress) => {
-    const today = new Date();
-    const targetDate = new Date(wo.target_close_date);
-
+  const getStatusColor = (wo: WorkOrderWithDetails) => {
     if (wo.has_progress_data) {
-      if (wo.current_progress === 100) {
+      if (wo.overall_progress === 100) {
         return "bg-green-100 text-green-800"; // Completed
-      } else if (wo.current_progress > 0) {
-        return targetDate < today
-          ? "bg-red-100 text-red-800"
-          : "bg-blue-100 text-blue-800"; // Overdue or In Progress
+      } else if (wo.overall_progress > 0) {
+        return "bg-blue-100 text-blue-800"; // In Progress
       }
     }
-
-    if (wo.actual_close_date) return "bg-green-100 text-green-800"; // Completed
-    if (wo.actual_start_date) {
-      return targetDate < today
-        ? "bg-red-100 text-red-800"
-        : "bg-blue-100 text-blue-800"; // Overdue or In Progress
-    }
-    if (new Date(wo.planned_start_date) <= today) {
-      return "bg-yellow-100 text-yellow-800"; // Ready to Start
-    }
-    return "bg-gray-100 text-gray-800"; // Planned
+    return "bg-gray-100 text-gray-800"; // No Progress
   };
 
-  const getStatus = (wo: WorkOrderWithProgress) => {
-    const today = new Date();
-    const targetDate = new Date(wo.target_close_date);
-
+  const getStatus = (wo: WorkOrderWithDetails) => {
     if (wo.has_progress_data) {
-      if (wo.current_progress === 100) {
+      if (wo.overall_progress === 100) {
         return "Completed";
-      } else if (wo.current_progress > 0) {
-        return targetDate < today ? "Overdue" : "In Progress";
+      } else if (wo.overall_progress > 0) {
+        return "In Progress";
       }
     }
-
-    if (wo.actual_close_date) return "Completed";
-    if (wo.actual_start_date) {
-      return targetDate < today ? "Overdue" : "In Progress";
-    }
-    if (new Date(wo.planned_start_date) <= today) return "Ready to Start";
-    return "Planned";
+    return "Not Started";
   };
 
-  const SortIcon = ({ field }: { field: keyof WorkOrder }) => {
+  const SortIcon = ({
+    field,
+  }: {
+    field: "shipyard_wo_date" | "shipyard_wo_number";
+  }) => {
     if (sortField !== field) return <span className="text-gray-400">↕️</span>;
     return sortDirection === "asc" ? (
       <span className="text-blue-600">↑</span>
@@ -297,8 +312,6 @@ export default function VesselWorkOrders() {
     );
   }
 
-  // ...existing code...
-
   return (
     <div className="p-8 space-y-6">
       {/* Header */}
@@ -344,7 +357,7 @@ export default function VesselWorkOrders() {
           <div className="relative flex-1 max-w-md">
             <input
               type="text"
-              placeholder="Search work orders..."
+              placeholder="Search work orders, details, or PIC..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -362,7 +375,7 @@ export default function VesselWorkOrders() {
         </div>
       </div>
 
-      {/* Work Orders Table */}
+      {/* Work Orders Table - Updated */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {filteredWorkOrders.length > 0 ? (
           <div className="overflow-x-auto">
@@ -370,27 +383,11 @@ export default function VesselWorkOrders() {
               <thead className="bg-gray-50">
                 <tr>
                   <th
-                    onClick={() => handleSort("customer_wo_number")}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  >
-                    <div className="flex items-center gap-1">
-                      Customer WO Number <SortIcon field="customer_wo_number" />
-                    </div>
-                  </th>
-                  <th
-                    onClick={() => handleSort("customer_wo_date")}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  >
-                    <div className="flex items-center gap-1">
-                      Customer WO Date <SortIcon field="customer_wo_date" />
-                    </div>
-                  </th>
-                  <th
                     onClick={() => handleSort("shipyard_wo_number")}
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                   >
                     <div className="flex items-center gap-1">
-                      Shipyard WO Number <SortIcon field="shipyard_wo_number" />
+                      Work Order <SortIcon field="shipyard_wo_number" />
                     </div>
                   </th>
                   <th
@@ -398,85 +395,17 @@ export default function VesselWorkOrders() {
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                   >
                     <div className="flex items-center gap-1">
-                      Shipyard WO Date <SortIcon field="shipyard_wo_date" />
+                      Dates <SortIcon field="shipyard_wo_date" />
                     </div>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Description
-                  </th>
-                  <th
-                    onClick={() => handleSort("wo_location")}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  >
-                    <div className="flex items-center gap-1">
-                      Location <SortIcon field="wo_location" />
-                    </div>
-                  </th>
-                  <th
-                    onClick={() => handleSort("quantity")}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  >
-                    <div className="flex items-center gap-1">
-                      Quantity <SortIcon field="quantity" />
-                    </div>
-                  </th>
-                  <th
-                    onClick={() => handleSort("planned_start_date")}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  >
-                    <div className="flex items-center gap-1">
-                      Planned Start <SortIcon field="planned_start_date" />
-                    </div>
-                  </th>
-                  <th
-                    onClick={() => handleSort("actual_start_date")}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  >
-                    <div className="flex items-center gap-1">
-                      Actual Start <SortIcon field="actual_start_date" />
-                    </div>
-                  </th>
-                  <th
-                    onClick={() => handleSort("target_close_date")}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  >
-                    <div className="flex items-center gap-1">
-                      Target Close <SortIcon field="target_close_date" />
-                    </div>
-                  </th>
-                  <th
-                    onClick={() => handleSort("actual_close_date")}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  >
-                    <div className="flex items-center gap-1">
-                      Actual Close <SortIcon field="actual_close_date" />
-                    </div>
-                  </th>
-                  <th
-                    onClick={() => handleSort("invoice_delivery_date")}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  >
-                    <div className="flex items-center gap-1">
-                      Invoice Delivery{" "}
-                      <SortIcon field="invoice_delivery_date" />
-                    </div>
-                  </th>
-                  <th
-                    onClick={() => handleSort("pic")}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  >
-                    <div className="flex items-center gap-1">
-                      PIC <SortIcon field="pic" />
-                    </div>
+                    Work Details
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Progress
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    WO Doc Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
@@ -486,69 +415,86 @@ export default function VesselWorkOrders() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredWorkOrders.map((wo) => (
                   <tr key={wo.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {wo.customer_wo_number || "-"}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium text-gray-900">
+                          SY: {wo.shipyard_wo_number}
+                        </div>
+                        {wo.customer_wo_number && (
+                          <div className="text-sm text-gray-500">
+                            Customer: {wo.customer_wo_number}
+                          </div>
+                        )}
+                      </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(wo.customer_wo_date)}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="space-y-1">
+                        <div className="text-sm text-gray-900">
+                          SY: {formatDate(wo.shipyard_wo_date)}
+                        </div>
+                        {wo.customer_wo_date && (
+                          <div className="text-sm text-gray-500">
+                            Customer: {formatDate(wo.customer_wo_date)}
+                          </div>
+                        )}
+                        {wo.wo_document_delivery_date && (
+                          <div className="text-xs text-blue-600">
+                            Doc: {formatDate(wo.wo_document_delivery_date)}
+                          </div>
+                        )}
+                      </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {wo.shipyard_wo_number || "-"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(wo.shipyard_wo_date)}
-                    </td>
-                    <td
-                      className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate"
-                      title={wo.wo_description}
-                    >
-                      {wo.wo_description}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {wo.wo_location}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {wo.quantity}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(wo.planned_start_date)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(wo.actual_start_date)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(wo.target_close_date)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(wo.actual_close_date)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(wo.invoice_delivery_date)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {wo.pic}
+                    <td className="px-6 py-4">
+                      <div className="space-y-1">
+                        {wo.work_details.length > 0 ? (
+                          <>
+                            <div className="text-sm font-medium text-gray-900">
+                              {wo.work_details.length} work detail
+                              {wo.work_details.length !== 1 ? "s" : ""}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {wo.work_details
+                                .slice(0, 2)
+                                .map((detail, idx) => (
+                                  <div key={detail.id}>
+                                    • {detail.description} ({detail.location})
+                                  </div>
+                                ))}
+                              {wo.work_details.length > 2 && (
+                                <div className="text-blue-600">
+                                  +{wo.work_details.length - 2} more...
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-sm text-gray-400">
+                            No work details added
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {wo.has_progress_data ? (
                         <div className="flex items-center">
-                          <div className="w-12 bg-gray-200 rounded-full h-2 mr-2">
+                          <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
                             <div
                               className={`h-2 rounded-full ${
-                                wo.current_progress === 100
+                                wo.overall_progress === 100
                                   ? "bg-green-500"
-                                  : wo.current_progress >= 75
+                                  : wo.overall_progress >= 75
                                   ? "bg-blue-500"
-                                  : wo.current_progress >= 50
+                                  : wo.overall_progress >= 50
                                   ? "bg-yellow-500"
-                                  : wo.current_progress >= 25
+                                  : wo.overall_progress >= 25
                                   ? "bg-orange-500"
                                   : "bg-red-500"
                               }`}
-                              style={{ width: `${wo.current_progress}%` }}
+                              style={{ width: `${wo.overall_progress}%` }}
                             ></div>
                           </div>
                           <span className="text-xs font-medium">
-                            {wo.current_progress}%
+                            {wo.overall_progress}%
                           </span>
                         </div>
                       ) : (
@@ -564,17 +510,6 @@ export default function VesselWorkOrders() {
                         )}`}
                       >
                         {getStatus(wo)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          wo.wo_document_status
-                            ? "bg-green-100 text-green-800"
-                            : "bg-yellow-100 text-yellow-800"
-                        }`}
-                      >
-                        {wo.wo_document_status ? "✅ Complete" : "📄 Pending"}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -608,7 +543,6 @@ export default function VesselWorkOrders() {
             </table>
           </div>
         ) : (
-          // ...existing empty state code...
           <div className="text-center py-12">
             <span className="text-gray-400 text-4xl mb-4 block">📋</span>
             {searchTerm ? (
@@ -644,6 +578,4 @@ export default function VesselWorkOrders() {
       </div>
     </div>
   );
-
-  // ...existing code...
 }

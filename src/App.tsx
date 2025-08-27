@@ -16,8 +16,8 @@ import {
   WorkOrders,
   AddWorkOrder,
   VesselWorkOrders,
-} from "./components/workorders";
-import { PermitsList, UploadPermit } from "./components/permits";
+} from "./components/workOrders";
+import { WorkDetailsTable, AddWorkDetails } from "./components/workDetails";
 import {
   ProgressOverview,
   ProgressTracker,
@@ -85,9 +85,9 @@ function App() {
             element={<VesselWorkOrders />}
           />
 
-          {/* Permits */}
-          <Route path="/permits" element={<PermitsList />} />
-          <Route path="/upload-permit" element={<UploadPermit />} />
+          {/* Work Details
+          <Route path="/work-details" element={<WorkDetailsTable />} />
+          <Route path="/add-work-details" element={<AddWorkDetails />} /> */}
 
           {/* Progress Routes */}
           <Route path="/progress" element={<ProgressOverview />} />

@@ -1,23 +1,9 @@
-// src/components/workorders/WorkOrderTable.tsx
-
 import { useState, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase, type WorkOrder } from "../../lib/supabase";
 
-// Add interface for progress data
-interface WorkOrderWithProgress extends WorkOrder {
-  current_progress?: number;
-  has_progress_data?: boolean;
-}
-
 interface WorkOrderStats {
   totalWorkOrders: number;
-  inProgress: number;
-  completed: number;
-  pendingDocuments: number;
-  overdueWorkOrders: number;
-  readyToStart: number;
-  planned: number;
 }
 
 interface VesselSummary {
@@ -26,24 +12,23 @@ interface VesselSummary {
   type: string;
   company: string;
   totalWorkOrders: number;
-  activeWorkOrders: number;
-  completedWorkOrders: number;
-  pendingDocuments: number;
-  overdueWorkOrders: number;
 }
 
-export default function WorkOrderTable() {
-  const [workOrders, setWorkOrders] = useState<WorkOrderWithProgress[]>([]);
+interface WorkOrderWithVessel extends WorkOrder {
+  vessel?: {
+    id: number;
+    name: string;
+    type: string;
+    company: string;
+  };
+}
+
+export default function WorkOrderDashboard() {
+  const [workOrders, setWorkOrders] = useState<WorkOrderWithVessel[]>([]);
   const [vessels, setVessels] = useState<VesselSummary[]>([]);
   const [filteredVessels, setFilteredVessels] = useState<VesselSummary[]>([]);
   const [stats, setStats] = useState<WorkOrderStats>({
     totalWorkOrders: 0,
-    inProgress: 0,
-    completed: 0,
-    pendingDocuments: 0,
-    overdueWorkOrders: 0,
-    readyToStart: 0,
-    planned: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,10 +37,8 @@ export default function WorkOrderTable() {
   // Vessel search and pagination
   const [vesselSearchTerm, setVesselSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [vesselsPerPage] = useState(12); // Show 12 vessels per page
-  const [sortBy, setSortBy] = useState<
-    "name" | "totalWorkOrders" | "activeWorkOrders" | "overdueWorkOrders"
-  >("name");
+  const [vesselsPerPage] = useState(12);
+  const [sortBy, setSortBy] = useState<"name" | "totalWorkOrders">("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   const navigate = useNavigate();
@@ -66,61 +49,34 @@ export default function WorkOrderTable() {
       setLoading(true);
       setError(null);
 
-      console.log("Fetching work orders with progress and vessel data...");
+      console.log("Fetching work orders with vessel data...");
 
-      // Fetch work orders with their latest progress AND vessel data
-      const { data, error } = await supabase.from("work_order").select(`
+      // Simple query - only work_order table with vessel join
+      const { data, error } = await supabase
+        .from("work_order")
+        .select(
+          `
           *,
-          project_progress (
-            progress,
-            report_date
-          ),
           vessel (
             id,
             name,
             type,
             company
           )
-        `);
+        `
+        )
+        .is("deleted_at", null);
 
       if (error) throw error;
 
-      // Process the data to get latest progress for each work order
-      const workOrdersWithProgress = (data || []).map((wo) => {
-        const progressRecords = wo.project_progress || [];
+      console.log("Work orders fetched:", data);
+      setWorkOrders(data || []);
 
-        if (progressRecords.length === 0) {
-          return {
-            ...wo,
-            current_progress: 0,
-            has_progress_data: false,
-          };
-        }
-
-        // Sort progress records by date (newest first) and get the latest progress
-        const sortedProgress = progressRecords.sort(
-          (a, b) =>
-            new Date(b.report_date).getTime() -
-            new Date(a.report_date).getTime()
-        );
-
-        const latestProgress = sortedProgress[0]?.progress || 0;
-
-        return {
-          ...wo,
-          current_progress: latestProgress,
-          has_progress_data: true,
-        };
-      });
-
-      console.log("Work orders with progress:", workOrdersWithProgress);
-      setWorkOrders(workOrdersWithProgress);
-
-      // Calculate statistics
-      calculateStats(workOrdersWithProgress);
+      // Calculate simple statistics
+      calculateStats(data || []);
 
       // Group by vessels
-      groupWorkOrdersByVessel(workOrdersWithProgress);
+      groupWorkOrdersByVessel(data || []);
     } catch (err) {
       console.error("Error fetching work orders:", err);
       setError(err instanceof Error ? err.message : "An error occurred");
@@ -129,67 +85,15 @@ export default function WorkOrderTable() {
     }
   }, []);
 
-  const calculateStats = (workOrders: WorkOrderWithProgress[]) => {
+  const calculateStats = (workOrders: WorkOrderWithVessel[]) => {
     const totalWorkOrders = workOrders.length;
-
-    let inProgress = 0;
-    let completed = 0;
-    let readyToStart = 0;
-    let planned = 0;
-    let overdueWorkOrders = 0;
-
-    const pendingDocuments = workOrders.filter(
-      (wo) => !wo.wo_document_status
-    ).length;
-    const today = new Date();
-
-    workOrders.forEach((wo) => {
-      // Check if overdue
-      const targetDate = new Date(wo.target_close_date);
-      if (targetDate < today && wo.current_progress < 100) {
-        overdueWorkOrders++;
-      }
-
-      // Determine status
-      if (wo.has_progress_data) {
-        if (wo.current_progress === 100) {
-          completed++;
-        } else if (wo.current_progress > 0) {
-          inProgress++;
-        } else {
-          // No progress yet, check dates
-          if (new Date(wo.planned_start_date) <= today) {
-            readyToStart++;
-          } else {
-            planned++;
-          }
-        }
-      } else {
-        // No progress data, check actual dates
-        if (wo.actual_close_date) {
-          completed++;
-        } else if (wo.actual_start_date) {
-          inProgress++;
-        } else if (new Date(wo.planned_start_date) <= today) {
-          readyToStart++;
-        } else {
-          planned++;
-        }
-      }
-    });
 
     setStats({
       totalWorkOrders,
-      inProgress,
-      completed,
-      pendingDocuments,
-      overdueWorkOrders,
-      readyToStart,
-      planned,
     });
   };
 
-  const groupWorkOrdersByVessel = (workOrders: WorkOrderWithProgress[]) => {
+  const groupWorkOrdersByVessel = (workOrders: WorkOrderWithVessel[]) => {
     // Group work orders by vessel
     const vesselMap = new Map();
 
@@ -209,10 +113,9 @@ export default function WorkOrderTable() {
       vesselMap.get(vesselId).workOrders.push(wo);
     });
 
-    // Calculate vessel summaries
+    // Calculate vessel summaries (simplified)
     const vesselSummaries = Array.from(vesselMap.values()).map((vessel) => {
       const workOrders = vessel.workOrders;
-      const today = new Date();
 
       return {
         id: vessel.id,
@@ -220,26 +123,6 @@ export default function WorkOrderTable() {
         type: vessel.type,
         company: vessel.company,
         totalWorkOrders: workOrders.length,
-        activeWorkOrders: workOrders.filter(
-          (wo) =>
-            (wo.has_progress_data &&
-              wo.current_progress > 0 &&
-              wo.current_progress < 100) ||
-            (!wo.has_progress_data &&
-              wo.actual_start_date &&
-              !wo.actual_close_date)
-        ).length,
-        completedWorkOrders: workOrders.filter(
-          (wo) =>
-            (wo.has_progress_data && wo.current_progress === 100) ||
-            (!wo.has_progress_data && wo.actual_close_date)
-        ).length,
-        pendingDocuments: workOrders.filter((wo) => !wo.wo_document_status)
-          .length,
-        overdueWorkOrders: workOrders.filter((wo) => {
-          const targetDate = new Date(wo.target_close_date);
-          return targetDate < today && wo.current_progress < 100;
-        }).length,
       };
     });
 
@@ -275,14 +158,6 @@ export default function WorkOrderTable() {
           aValue = a.totalWorkOrders;
           bValue = b.totalWorkOrders;
           break;
-        case "activeWorkOrders":
-          aValue = a.activeWorkOrders;
-          bValue = b.activeWorkOrders;
-          break;
-        case "overdueWorkOrders":
-          aValue = a.overdueWorkOrders;
-          bValue = b.overdueWorkOrders;
-          break;
         default:
           aValue = a.name;
           bValue = b.name;
@@ -300,7 +175,7 @@ export default function WorkOrderTable() {
     });
 
     setFilteredVessels(filtered);
-    setCurrentPage(1); // Reset to first page when search/sort changes
+    setCurrentPage(1);
   }, [vessels, vesselSearchTerm, sortBy, sortDirection]);
 
   // Pagination logic
@@ -412,91 +287,48 @@ export default function WorkOrderTable() {
         </div>
       )}
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500">
+      {/* Summary Cards - Simplified */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total</p>
+              <p className="text-sm font-medium text-gray-600">
+                Total Work Orders
+              </p>
               <p className="text-2xl font-bold text-gray-900">
                 {stats.totalWorkOrders}
               </p>
             </div>
-            <span className="text-blue-500 text-xl">📋</span>
+            <span className="text-blue-500 text-2xl">📋</span>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-yellow-500">
+        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-purple-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">In Progress</p>
+              <p className="text-sm font-medium text-gray-600">Total Vessels</p>
               <p className="text-2xl font-bold text-gray-900">
-                {stats.inProgress}
+                {vessels.length}
               </p>
             </div>
-            <span className="text-yellow-500 text-xl">🔧</span>
+            <span className="text-purple-500 text-2xl">🚢</span>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Completed</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {stats.completed}
-              </p>
-            </div>
-            <span className="text-green-500 text-xl">✅</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-purple-500">
+        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">
-                Ready to Start
+                Avg WO per Vessel
               </p>
               <p className="text-2xl font-bold text-gray-900">
-                {stats.readyToStart}
+                {vessels.length > 0
+                  ? Math.round((stats.totalWorkOrders / vessels.length) * 10) /
+                    10
+                  : 0}
               </p>
             </div>
-            <span className="text-purple-500 text-xl">🚀</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-gray-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Planned</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {stats.planned}
-              </p>
-            </div>
-            <span className="text-gray-500 text-xl">📅</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-orange-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Pending Docs</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {stats.pendingDocuments}
-              </p>
-            </div>
-            <span className="text-orange-500 text-xl">📄</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-red-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Overdue</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {stats.overdueWorkOrders}
-              </p>
-            </div>
-            <span className="text-red-500 text-xl">⚠️</span>
+            <span className="text-green-500 text-2xl">📊</span>
           </div>
         </div>
       </div>
@@ -541,8 +373,6 @@ export default function WorkOrderTable() {
                 <option value="name-desc">Name (Z-A)</option>
                 <option value="totalWorkOrders-desc">Most Work Orders</option>
                 <option value="totalWorkOrders-asc">Least Work Orders</option>
-                <option value="activeWorkOrders-desc">Most Active</option>
-                <option value="overdueWorkOrders-desc">Most Overdue</option>
               </select>
             </div>
           </div>
@@ -576,41 +406,12 @@ export default function WorkOrderTable() {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-gray-900">
-                          {vessel.totalWorkOrders}
-                        </p>
-                        <p className="text-xs text-gray-600">Total WOs</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-yellow-600">
-                          {vessel.activeWorkOrders}
-                        </p>
-                        <p className="text-xs text-gray-600">Active</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-green-600">
-                          {vessel.completedWorkOrders}
-                        </p>
-                        <p className="text-xs text-gray-600">Completed</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-orange-600">
-                          {vessel.pendingDocuments}
-                        </p>
-                        <p className="text-xs text-gray-600">Pending Docs</p>
-                      </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-blue-600">
+                        {vessel.totalWorkOrders}
+                      </p>
+                      <p className="text-sm text-gray-600">Work Orders</p>
                     </div>
-
-                    {vessel.overdueWorkOrders > 0 && (
-                      <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-2">
-                        <p className="text-red-700 text-sm font-medium flex items-center gap-1">
-                          ⚠️ {vessel.overdueWorkOrders} overdue work order
-                          {vessel.overdueWorkOrders !== 1 ? "s" : ""}
-                        </p>
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
