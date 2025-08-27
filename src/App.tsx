@@ -17,7 +17,6 @@ import {
   AddWorkOrder,
   VesselWorkOrders,
 } from "./components/workOrders";
-import { WorkDetailsTable, AddWorkDetails } from "./components/workDetails";
 import {
   ProgressOverview,
   ProgressTracker,
@@ -27,6 +26,8 @@ import {
   OperationVerification,
   VerifyOperation,
 } from "./components/verification";
+import { AddWorkDetails } from "./components/workDetails";
+import WorkOrderDetails from "./components/workDetails/WODetails";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -85,9 +86,9 @@ function App() {
             element={<VesselWorkOrders />}
           />
 
-          {/* Work Details
-          <Route path="/work-details" element={<WorkDetailsTable />} />
-          <Route path="/add-work-details" element={<AddWorkDetails />} /> */}
+          {/* Work Details */}
+          <Route path="/work-details" element={<WorkOrderDetails />} />
+          <Route path="/add-work-details" element={<AddWorkDetails />} />
 
           {/* Progress Routes */}
           <Route path="/progress" element={<ProgressOverview />} />

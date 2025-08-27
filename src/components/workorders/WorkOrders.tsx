@@ -1,4 +1,4 @@
-import WorkOrderTable from "./WorkOrderDashboard";
+import WorkOrderDashboard from "./WorkOrderDashboard";
 
 export default function WorkOrders() {
   return (
@@ -7,7 +7,7 @@ export default function WorkOrders() {
         <h1 className="text-3xl font-bold text-gray-900">Work Orders</h1>
         <p className="text-gray-600">Manage all work orders</p>
       </div>
-      <WorkOrderTable />
+      <WorkOrderDashboard />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { supabase } from "../lib/supabase";
+
 /**
- * Generates a signed URL for accessing a file in the permit_to_work bucket
+ * Generates a signed URL for accessing a file in the work_permit bucket
  * @param storagePath - The path to the file in storage
  * @param expiresIn - Expiration time in seconds (default: 1 hour)
  * @returns Promise<string | null> - The signed URL or null if error
@@ -11,7 +12,7 @@ export const getPermitFileUrl = async (
 ): Promise<string | null> => {
   try {
     const { data, error } = await supabase.storage
-      .from("permit_to_work")
+      .from("work_permit") // Updated bucket name
       .createSignedUrl(storagePath, expiresIn);
 
     if (error) {
@@ -75,7 +76,7 @@ export const openPermitFile = async (storagePath: string): Promise<void> => {
 };
 
 /**
- * Checks if a file exists in the permit_to_work bucket
+ * Checks if a file exists in the work_permit bucket
  * @param storagePath - The path to check
  * @returns Promise<boolean> - True if file exists
  */
@@ -83,10 +84,14 @@ export const checkPermitFileExists = async (
   storagePath: string
 ): Promise<boolean> => {
   try {
+    const pathParts = storagePath.split("/");
+    const fileName = pathParts.pop();
+    const folderPath = pathParts.join("/");
+
     const { data, error } = await supabase.storage
-      .from("permit_to_work")
-      .list("", {
-        search: storagePath,
+      .from("work_permit") // Updated bucket name
+      .list(folderPath || undefined, {
+        search: fileName,
       });
 
     if (error) {
@@ -94,7 +99,7 @@ export const checkPermitFileExists = async (
       return false;
     }
 
-    return data.some((file) => file.name === storagePath);
+    return data.some((file) => file.name === fileName);
   } catch (error) {
     console.error("Error in checkPermitFileExists:", error);
     return false;
