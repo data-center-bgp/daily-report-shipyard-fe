@@ -89,6 +89,19 @@ export interface WorkOrderWithDetails extends WorkOrder {
   has_progress_data?: boolean;
 }
 
+export interface WorkProgress {
+  id: number;
+  work_details_id: number;
+  progress_percentage: number;
+  report_date: string;
+  evidence_url?: string;
+  storage_path?: string;
+  user_id?: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+}
+
 export interface Profile {
   id: string;
   name: string;

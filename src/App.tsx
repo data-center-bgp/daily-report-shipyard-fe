@@ -18,16 +18,12 @@ import {
   VesselWorkOrders,
 } from "./components/workOrders";
 import {
-  ProgressOverview,
-  ProgressTracker,
-  ProgressDetails,
-} from "./components/progress";
-import {
   OperationVerification,
   VerifyOperation,
 } from "./components/verification";
 import { AddWorkDetails } from "./components/workDetails";
 import WorkOrderDetails from "./components/workDetails/WODetails";
+import { WorkProgressPage, AddWorkProgress } from "./components/workProgress";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -90,13 +86,13 @@ function App() {
           <Route path="/work-details" element={<WorkOrderDetails />} />
           <Route path="/add-work-details" element={<AddWorkDetails />} />
 
-          {/* Progress Routes */}
-          <Route path="/progress" element={<ProgressOverview />} />
-          <Route path="/progress/tracker" element={<ProgressTracker />} />
+          {/* Work Progress Routes */}
+          <Route path="/work-progress" element={<WorkProgressPage />} />
           <Route
-            path="/progress/details/:workOrderId"
-            element={<ProgressDetails />}
+            path="/work-details/:workDetailsId/progress"
+            element={<WorkProgressPage />}
           />
+          <Route path="/add-work-progress" element={<AddWorkProgress />} />
 
           {/* Verification Routes */}
           <Route
