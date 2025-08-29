@@ -17,6 +17,15 @@ interface WorkDetailsWithWorkOrder extends WorkDetails {
     name: string;
     email: string;
   };
+  work_progress?: Array<{
+    id: number;
+    progress_percentage: number;
+    report_date: string;
+    created_at: string;
+  }>;
+  current_progress?: number;
+  latest_progress_date?: string;
+  progress_count?: number;
 }
 
 interface WorkDetailsTableProps {
@@ -153,6 +162,12 @@ export default function WODetailsTable({
             id,
             name,
             email
+          ),
+          work_progress (
+            id,
+            progress_percentage,
+            report_date,
+            created_at
           )
         `,
           { count: "exact" }
@@ -197,12 +212,43 @@ export default function WODetailsTable({
         throw queryError;
       }
 
+      // Process work details with progress data
+      const workDetailsWithProgress = (data || []).map((detail) => {
+        const progressRecords = detail.work_progress || [];
+
+        if (progressRecords.length === 0) {
+          return {
+            ...detail,
+            current_progress: 0,
+            latest_progress_date: undefined,
+            progress_count: 0,
+          };
+        }
+
+        // Sort progress records by date (newest first)
+        const sortedProgress = progressRecords.sort(
+          (a, b) =>
+            new Date(b.report_date).getTime() -
+            new Date(a.report_date).getTime()
+        );
+
+        const latestProgress = sortedProgress[0]?.progress_percentage || 0;
+        const latestProgressDate = sortedProgress[0]?.report_date;
+
+        return {
+          ...detail,
+          current_progress: latestProgress,
+          latest_progress_date: latestProgressDate,
+          progress_count: progressRecords.length,
+        };
+      });
+
       console.log(
         `Found ${count || 0} total work details, showing ${
-          data?.length || 0
+          workDetailsWithProgress.length || 0
         } on page ${currentPage}`
       );
-      setWorkDetails(data || []);
+      setWorkDetails(workDetailsWithProgress);
       setTotalItems(count || 0);
     } catch (err) {
       console.error("Error in fetchWorkDetails:", err);
@@ -368,6 +414,14 @@ export default function WODetailsTable({
     }
   };
 
+  const handleViewProgress = (workDetailsId: number) => {
+    navigate(`/work-details/${workDetailsId}/progress`);
+  };
+
+  const handleAddProgress = (workDetailsId: number) => {
+    navigate(`/add-work-progress/${workDetailsId}`);
+  };
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "-";
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -424,6 +478,22 @@ export default function WODetailsTable({
         canComplete: false,
       };
     }
+  };
+
+  const getProgressColor = (progress: number) => {
+    if (progress >= 100) return "bg-green-500";
+    if (progress >= 75) return "bg-blue-500";
+    if (progress >= 50) return "bg-yellow-500";
+    if (progress >= 25) return "bg-orange-500";
+    return "bg-red-500";
+  };
+
+  const getProgressIcon = (progress: number) => {
+    if (progress >= 100) return "✅";
+    if (progress >= 75) return "🔵";
+    if (progress >= 50) return "🟡";
+    if (progress >= 25) return "🟠";
+    return "🔴";
   };
 
   const getSortIcon = (field: string) => {
@@ -788,6 +858,9 @@ export default function WODetailsTable({
                       Progress
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Info
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -898,7 +971,49 @@ export default function WODetailsTable({
                             )}
                           </div>
                         </td>
-                        {/* Progress */}
+
+                        {/* Progress Column */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-sm font-medium text-gray-900">
+                                  {getProgressIcon(
+                                    detail.current_progress || 0
+                                  )}
+                                </span>
+                                <span className="text-xs font-medium text-gray-700">
+                                  {detail.current_progress || 0}%
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div
+                                  className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(
+                                    detail.current_progress || 0
+                                  )}`}
+                                  style={{
+                                    width: `${detail.current_progress || 0}%`,
+                                  }}
+                                ></div>
+                              </div>
+                              <div className="flex items-center justify-between mt-1">
+                                <span className="text-xs text-gray-500">
+                                  {detail.progress_count || 0} report
+                                  {(detail.progress_count || 0) !== 1
+                                    ? "s"
+                                    : ""}
+                                </span>
+                                {detail.latest_progress_date && (
+                                  <span className="text-xs text-blue-600">
+                                    {formatDate(detail.latest_progress_date)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Info */}
                         <td className="px-4 py-4 whitespace-nowrap">
                           <div className="text-xs space-y-1">
                             <div className="text-gray-500">
@@ -962,6 +1077,22 @@ export default function WODetailsTable({
                                   {detail.storage_path ? "⏸️" : "🚫"}
                                 </span>
                               )}
+
+                            {/* Progress Actions */}
+                            <button
+                              onClick={() => handleViewProgress(detail.id)}
+                              className="p-1 text-purple-600 hover:text-purple-900 hover:bg-purple-50 rounded transition-all duration-200"
+                              title="View Progress"
+                            >
+                              📊
+                            </button>
+                            <button
+                              onClick={() => handleAddProgress(detail.id)}
+                              className="p-1 text-orange-600 hover:text-orange-900 hover:bg-orange-50 rounded transition-all duration-200"
+                              title="Add Progress"
+                            >
+                              ➕
+                            </button>
 
                             {/* View/Edit/Delete */}
                             <button
