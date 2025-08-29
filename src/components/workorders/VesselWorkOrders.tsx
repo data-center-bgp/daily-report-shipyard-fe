@@ -18,6 +18,9 @@ export default function VesselWorkOrders() {
   const [filteredWorkOrders, setFilteredWorkOrders] = useState<
     WorkOrderWithDetails[]
   >([]);
+  const [expandedWorkOrders, setExpandedWorkOrders] = useState<Set<number>>(
+    new Set()
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -48,10 +51,11 @@ export default function VesselWorkOrders() {
             work_details (
               *,
               work_progress (
-                progress,
+                progress_percentage,
                 report_date,
-                photo_evidence,
-                storage_path
+                evidence_url,
+                storage_path,
+                created_at
               )
             ),
             vessel (
@@ -86,6 +90,7 @@ export default function VesselWorkOrders() {
                 ...detail,
                 current_progress: 0,
                 latest_progress_date: undefined,
+                progress_count: 0,
               };
             }
 
@@ -96,13 +101,14 @@ export default function VesselWorkOrders() {
                 new Date(a.report_date).getTime()
             );
 
-            const latestProgress = sortedProgress[0]?.progress || 0;
+            const latestProgress = sortedProgress[0]?.progress_percentage || 0;
             const latestProgressDate = sortedProgress[0]?.report_date;
 
             return {
               ...detail,
               current_progress: latestProgress,
               latest_progress_date: latestProgressDate,
+              progress_count: progressRecords.length,
             };
           });
 
@@ -176,6 +182,18 @@ export default function VesselWorkOrders() {
     }
   }, [fetchVesselWorkOrders]);
 
+  const toggleWorkOrderExpansion = (workOrderId: number) => {
+    setExpandedWorkOrders((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(workOrderId)) {
+        newSet.delete(workOrderId);
+      } else {
+        newSet.add(workOrderId);
+      }
+      return newSet;
+    });
+  };
+
   const handleSort = (field: "shipyard_wo_date" | "shipyard_wo_number") => {
     const newDirection =
       sortField === field && sortDirection === "asc" ? "desc" : "asc";
@@ -237,15 +255,41 @@ export default function VesselWorkOrders() {
     });
   };
 
+  const formatDateTime = (dateString: string | null) => {
+    if (!dateString) return "-";
+    return new Date(dateString).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   const getStatusColor = (wo: WorkOrderWithDetails) => {
     if (wo.has_progress_data) {
       if (wo.overall_progress === 100) {
-        return "bg-green-100 text-green-800"; // Completed
+        return "bg-green-100 text-green-800 border-green-200";
       } else if (wo.overall_progress > 0) {
-        return "bg-blue-100 text-blue-800"; // In Progress
+        return "bg-blue-100 text-blue-800 border-blue-200";
       }
     }
-    return "bg-gray-100 text-gray-800"; // No Progress
+    return "bg-gray-100 text-gray-800 border-gray-200";
+  };
+
+  const getProgressColor = (progress: number) => {
+    if (progress >= 100) return "bg-green-500";
+    if (progress >= 75) return "bg-blue-500";
+    if (progress >= 50) return "bg-yellow-500";
+    if (progress >= 25) return "bg-orange-500";
+    return "bg-red-500";
+  };
+
+  const getProgressIcon = (progress: number) => {
+    if (progress >= 100) return "✅";
+    if (progress >= 75) return "🔵";
+    if (progress >= 50) return "🟡";
+    if (progress >= 25) return "🟠";
+    return "🔴";
   };
 
   const getStatus = (wo: WorkOrderWithDetails) => {
@@ -375,13 +419,16 @@ export default function VesselWorkOrders() {
         </div>
       </div>
 
-      {/* Work Orders Table - Updated */}
+      {/* Enhanced Work Orders Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {filteredWorkOrders.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <div className="flex items-center gap-1">Details</div>
+                  </th>
                   <th
                     onClick={() => handleSort("shipyard_wo_number")}
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
@@ -399,10 +446,7 @@ export default function VesselWorkOrders() {
                     </div>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Work Details
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Progress
+                    Overall Progress
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
@@ -414,130 +458,255 @@ export default function VesselWorkOrders() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredWorkOrders.map((wo) => (
-                  <tr key={wo.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="space-y-1">
-                        <div className="text-sm font-medium text-gray-900">
-                          SY: {wo.shipyard_wo_number}
-                        </div>
-                        {wo.customer_wo_number && (
-                          <div className="text-sm text-gray-500">
-                            Customer: {wo.customer_wo_number}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="space-y-1">
-                        <div className="text-sm text-gray-900">
-                          SY: {formatDate(wo.shipyard_wo_date)}
-                        </div>
-                        {wo.customer_wo_date && (
-                          <div className="text-sm text-gray-500">
-                            Customer: {formatDate(wo.customer_wo_date)}
-                          </div>
-                        )}
-                        {wo.wo_document_delivery_date && (
-                          <div className="text-xs text-blue-600">
-                            Doc: {formatDate(wo.wo_document_delivery_date)}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="space-y-1">
-                        {wo.work_details.length > 0 ? (
-                          <>
-                            <div className="text-sm font-medium text-gray-900">
-                              {wo.work_details.length} work detail
-                              {wo.work_details.length !== 1 ? "s" : ""}
+                  <>
+                    {/* Main Work Order Row */}
+                    <tr key={wo.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => toggleWorkOrderExpansion(wo.id)}
+                            className="flex items-center gap-2 text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                          >
+                            <span
+                              className={`transform transition-transform duration-200 ${
+                                expandedWorkOrders.has(wo.id) ? "rotate-90" : ""
+                              }`}
+                            >
+                              ▶️
+                            </span>
+                            <span className="text-lg">📋</span>
+                            <div>
+                              <div className="font-medium">
+                                {wo.work_details.length} Work Detail
+                                {wo.work_details.length !== 1 ? "s" : ""}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Click to expand
+                              </div>
                             </div>
-                            <div className="text-xs text-gray-500">
-                              {wo.work_details
-                                .slice(0, 2)
-                                .map((detail, idx) => (
-                                  <div key={detail.id}>
-                                    • {detail.description} ({detail.location})
-                                  </div>
-                                ))}
-                              {wo.work_details.length > 2 && (
-                                <div className="text-blue-600">
-                                  +{wo.work_details.length - 2} more...
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium text-gray-900">
+                            SY: {wo.shipyard_wo_number}
+                          </div>
+                          {wo.customer_wo_number && (
+                            <div className="text-sm text-gray-500">
+                              Customer: {wo.customer_wo_number}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="space-y-1">
+                          <div className="text-sm text-gray-900">
+                            SY: {formatDate(wo.shipyard_wo_date)}
+                          </div>
+                          {wo.customer_wo_date && (
+                            <div className="text-sm text-gray-500">
+                              Customer: {formatDate(wo.customer_wo_date)}
+                            </div>
+                          )}
+                          {wo.wo_document_delivery_date && (
+                            <div className="text-xs text-blue-600">
+                              Doc: {formatDate(wo.wo_document_delivery_date)}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {wo.has_progress_data ? (
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-medium text-gray-700">
+                                  {wo.overall_progress}%
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div
+                                  className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(
+                                    wo.overall_progress
+                                  )}`}
+                                  style={{ width: `${wo.overall_progress}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-sm">
+                            No progress
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(
+                            wo
+                          )}`}
+                        >
+                          {getStatus(wo)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleViewWorkOrder(wo)}
+                            className="text-blue-600 hover:text-blue-900 transition-colors p-1 rounded hover:bg-blue-50"
+                            title="View Details"
+                          >
+                            👁️
+                          </button>
+                          <button
+                            onClick={() => handleEditWorkOrder(wo)}
+                            className="text-green-600 hover:text-green-900 transition-colors p-1 rounded hover:bg-green-50"
+                            title="Edit Work Order"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => handleDeleteWorkOrder(wo)}
+                            className="text-red-600 hover:text-red-900 transition-colors p-1 rounded hover:bg-red-50"
+                            title="Delete Work Order"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* Expandable Work Details Rows */}
+                    {expandedWorkOrders.has(wo.id) && (
+                      <tr>
+                        <td colSpan={6} className="px-0 py-0">
+                          <div className="bg-gray-50 border-l-4 border-blue-400">
+                            <div className="px-6 py-4">
+                              <h4 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                🔧 Work Details for {wo.shipyard_wo_number}
+                              </h4>
+
+                              {wo.work_details.length > 0 ? (
+                                <div className="space-y-3">
+                                  {wo.work_details.map((detail) => (
+                                    <div
+                                      key={detail.id}
+                                      className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow"
+                                    >
+                                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                                        {/* Work Detail Info */}
+                                        <div className="lg:col-span-2">
+                                          <div className="flex items-start gap-3">
+                                            <span className="text-lg">
+                                              {getProgressIcon(
+                                                detail.current_progress
+                                              )}
+                                            </span>
+                                            <div className="flex-1">
+                                              <h5 className="font-medium text-gray-900 mb-2">
+                                                {detail.description}
+                                              </h5>
+                                              <div className="space-y-1 text-sm text-gray-600">
+                                                {detail.location && (
+                                                  <div className="flex items-center gap-1">
+                                                    <span>📍</span>
+                                                    <span>
+                                                      {detail.location}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                                {detail.pic && (
+                                                  <div className="flex items-center gap-1">
+                                                    <span>👤</span>
+                                                    <span>
+                                                      PIC: {detail.pic}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                                {detail.planned_start_date && (
+                                                  <div className="flex items-center gap-1">
+                                                    <span>📅</span>
+                                                    <span>
+                                                      Start:{" "}
+                                                      {formatDate(
+                                                        detail.planned_start_date
+                                                      )}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                                {detail.target_close_date && (
+                                                  <div className="flex items-center gap-1">
+                                                    <span>🎯</span>
+                                                    <span>
+                                                      Target:{" "}
+                                                      {formatDate(
+                                                        detail.target_close_date
+                                                      )}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {/* Progress Info */}
+                                        <div className="lg:col-span-1">
+                                          <div className="text-center">
+                                            <div className="text-lg font-bold text-gray-900 mb-2">
+                                              {detail.current_progress}%
+                                            </div>
+                                            <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
+                                              <div
+                                                className={`h-3 rounded-full transition-all duration-300 ${getProgressColor(
+                                                  detail.current_progress
+                                                )}`}
+                                                style={{
+                                                  width: `${detail.current_progress}%`,
+                                                }}
+                                              ></div>
+                                            </div>
+                                            <div className="text-xs text-gray-500">
+                                              {detail.progress_count} report
+                                              {detail.progress_count !== 1
+                                                ? "s"
+                                                : ""}
+                                            </div>
+                                            {detail.latest_progress_date && (
+                                              <div className="text-xs text-blue-600 mt-1">
+                                                Last update:{" "}
+                                                {formatDateTime(
+                                                  detail.latest_progress_date
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-center py-8 text-gray-500">
+                                  <div className="text-4xl mb-2">📝</div>
+                                  <p>No work details added yet</p>
+                                  <button
+                                    onClick={() =>
+                                      navigate(`/work-order/${wo.id}`)
+                                    }
+                                    className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
+                                  >
+                                    Add work details →
+                                  </button>
                                 </div>
                               )}
                             </div>
-                          </>
-                        ) : (
-                          <div className="text-sm text-gray-400">
-                            No work details added
                           </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {wo.has_progress_data ? (
-                        <div className="flex items-center">
-                          <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                            <div
-                              className={`h-2 rounded-full ${
-                                wo.overall_progress === 100
-                                  ? "bg-green-500"
-                                  : wo.overall_progress >= 75
-                                  ? "bg-blue-500"
-                                  : wo.overall_progress >= 50
-                                  ? "bg-yellow-500"
-                                  : wo.overall_progress >= 25
-                                  ? "bg-orange-500"
-                                  : "bg-red-500"
-                              }`}
-                              style={{ width: `${wo.overall_progress}%` }}
-                            ></div>
-                          </div>
-                          <span className="text-xs font-medium">
-                            {wo.overall_progress}%
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-gray-400 text-xs">
-                          No progress
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                          wo
-                        )}`}
-                      >
-                        {getStatus(wo)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleViewWorkOrder(wo)}
-                          className="text-blue-600 hover:text-blue-900 transition-colors"
-                          title="View Details"
-                        >
-                          👁️
-                        </button>
-                        <button
-                          onClick={() => handleEditWorkOrder(wo)}
-                          className="text-green-600 hover:text-green-900 transition-colors"
-                          title="Edit Work Order"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleDeleteWorkOrder(wo)}
-                          className="text-red-600 hover:text-red-900 transition-colors"
-                          title="Delete Work Order"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))}
               </tbody>
             </table>
