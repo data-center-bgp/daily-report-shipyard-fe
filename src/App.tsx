@@ -21,7 +21,7 @@ import {
   OperationVerification,
   VerifyOperation,
 } from "./components/verification";
-import { AddWorkDetails } from "./components/workDetails";
+import { AddWorkDetails, EditWorkDetails } from "./components/workDetails";
 import WorkOrderDetails from "./components/workDetails/WODetails";
 import { AddWorkProgress, WorkProgressTable } from "./components/workProgress";
 
@@ -85,6 +85,10 @@ function App() {
           {/* Work Details */}
           <Route path="/work-details" element={<WorkOrderDetails />} />
           <Route path="/add-work-details" element={<AddWorkDetails />} />
+          <Route
+            path="/edit-work-details/:workDetailsId"
+            element={<EditWorkDetails />}
+          />
 
           {/* Work Progress Routes */}
           <Route path="/work-progress" element={<WorkProgressTable />} />

@@ -308,12 +308,8 @@ export default function WODetailsTable({
     }
   };
 
-  const handleViewWorkDetails = (workDetailsId: number) => {
-    navigate(`/work-details/${workDetailsId}`);
-  };
-
   const handleEditWorkDetails = (workDetailsId: number) => {
-    navigate(`/work-details/${workDetailsId}/edit`);
+    navigate(`/edit-work-details/${workDetailsId}`);
   };
 
   const handleDeleteWorkDetails = async (detail: WorkDetailsWithWorkOrder) => {
@@ -352,54 +348,6 @@ export default function WODetailsTable({
       setError(
         err instanceof Error ? err.message : "An error occurred while deleting"
       );
-    }
-  };
-
-  const handleQuickStart = async (detail: WorkDetailsWithWorkOrder) => {
-    // Check if work permit is required but not uploaded
-    if (!detail.storage_path) {
-      alert(
-        "Work permit is required before starting this work. Please upload a work permit first."
-      );
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from("work_details")
-        .update({
-          actual_start_date: new Date().toISOString().split("T")[0],
-        })
-        .eq("id", detail.id);
-
-      if (error) throw error;
-
-      console.log("Work started successfully");
-      fetchWorkDetails();
-      onRefresh?.();
-    } catch (err) {
-      console.error("Error starting work:", err);
-      alert("Failed to start work. Please try again.");
-    }
-  };
-
-  const handleQuickComplete = async (detail: WorkDetailsWithWorkOrder) => {
-    try {
-      const { error } = await supabase
-        .from("work_details")
-        .update({
-          actual_close_date: new Date().toISOString().split("T")[0],
-        })
-        .eq("id", detail.id);
-
-      if (error) throw error;
-
-      console.log("Work completed successfully");
-      fetchWorkDetails();
-      onRefresh?.();
-    } catch (err) {
-      console.error("Error completing work:", err);
-      alert("Failed to complete work. Please try again.");
     }
   };
 
@@ -448,16 +396,12 @@ export default function WODetailsTable({
         text: "Completed",
         color: "bg-green-100 text-green-800 border-green-200",
         icon: "✅",
-        canStart: false,
-        canComplete: false,
       };
     } else if (detail.actual_start_date) {
       return {
         text: "In Progress",
         color: "bg-blue-100 text-blue-800 border-blue-200",
         icon: "⏳",
-        canStart: false,
-        canComplete: true,
       };
     } else if (detail.storage_path) {
       // Has work permit, ready to start
@@ -465,8 +409,6 @@ export default function WODetailsTable({
         text: "Ready",
         color: "bg-yellow-100 text-yellow-800 border-yellow-200",
         icon: "🟡",
-        canStart: true,
-        canComplete: false,
       };
     } else {
       // No work permit, not ready
@@ -474,8 +416,6 @@ export default function WODetailsTable({
         text: "Not Ready",
         color: "bg-red-100 text-red-600 border-red-200",
         icon: "🔴",
-        canStart: false,
-        canComplete: false,
       };
     }
   };
@@ -858,9 +798,6 @@ export default function WODetailsTable({
                       Progress
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Info
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -1009,112 +946,43 @@ export default function WODetailsTable({
                                   </span>
                                 )}
                               </div>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Info */}
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="text-xs space-y-1">
-                            <div className="text-gray-500">
-                              Created: {formatDateTime(detail.created_at)}
-                            </div>
-                            {detail.updated_at &&
-                              detail.updated_at !== detail.created_at && (
-                                <div className="text-gray-500">
-                                  Updated: {formatDateTime(detail.updated_at)}
-                                </div>
-                              )}
-                            {detail.profiles ? (
-                              <div className="text-gray-600">
-                                👤 {detail.profiles.name}
-                              </div>
-                            ) : detail.user_id ? (
-                              <div className="text-gray-400">
-                                User ID: {detail.user_id}
-                              </div>
-                            ) : (
-                              <div className="text-gray-400">
-                                👤 Unknown User
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Actions */}
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="flex items-center space-x-1">
-                            {/* Quick Actions */}
-                            {status.canStart && (
-                              <button
-                                onClick={() => handleQuickStart(detail)}
-                                className="p-1 text-green-600 hover:text-green-900 hover:bg-green-50 rounded transition-all duration-200"
-                                title="Start Work"
-                              >
-                                ▶️
-                              </button>
-                            )}
-                            {status.canComplete && (
-                              <button
-                                onClick={() => handleQuickComplete(detail)}
-                                className="p-1 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded transition-all duration-200"
-                                title="Complete Work"
-                              >
-                                ✅
-                              </button>
-                            )}
-                            {!status.canStart &&
-                              !status.canComplete &&
-                              !detail.actual_close_date && (
-                                <span
-                                  className="p-1 text-gray-400 cursor-not-allowed"
-                                  title={
-                                    detail.storage_path
-                                      ? "Work already completed"
-                                      : "Upload work permit to start"
-                                  }
+                              {/* Quick Progress Actions */}
+                              <div className="flex gap-1 mt-2">
+                                <button
+                                  onClick={() => handleViewProgress(detail.id)}
+                                  className="text-xs px-2 py-1 bg-purple-50 text-purple-600 rounded hover:bg-purple-100 transition-colors"
+                                  title="View Progress"
                                 >
-                                  {detail.storage_path ? "⏸️" : "🚫"}
-                                </span>
-                              )}
+                                  📊 View
+                                </button>
+                                <button
+                                  onClick={() => handleAddProgress(detail.id)}
+                                  className="text-xs px-2 py-1 bg-orange-50 text-orange-600 rounded hover:bg-orange-100 transition-colors"
+                                  title="Add Progress"
+                                >
+                                  ➕ Add
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
 
-                            {/* Progress Actions */}
-                            <button
-                              onClick={() => handleViewProgress(detail.id)}
-                              className="p-1 text-purple-600 hover:text-purple-900 hover:bg-purple-50 rounded transition-all duration-200"
-                              title="View Progress"
-                            >
-                              📊
-                            </button>
-                            <button
-                              onClick={() => handleAddProgress(detail.id)}
-                              className="p-1 text-orange-600 hover:text-orange-900 hover:bg-orange-50 rounded transition-all duration-200"
-                              title="Add Progress"
-                            >
-                              ➕
-                            </button>
-
-                            {/* View/Edit/Delete */}
-                            <button
-                              onClick={() => handleViewWorkDetails(detail.id)}
-                              className="p-1 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded transition-all duration-200"
-                              title="View Details"
-                            >
-                              👁️
-                            </button>
+                        {/* Actions - Simplified to just Edit and Delete */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
                             <button
                               onClick={() => handleEditWorkDetails(detail.id)}
-                              className="p-1 text-green-600 hover:text-green-900 hover:bg-green-50 rounded transition-all duration-200"
+                              className="inline-flex items-center px-3 py-1 bg-blue-50 text-blue-700 text-sm rounded-md hover:bg-blue-100 transition-colors border border-blue-200"
                               title="Edit Work Details"
                             >
-                              ✏️
+                              ✏️ Edit
                             </button>
                             <button
                               onClick={() => handleDeleteWorkDetails(detail)}
-                              className="p-1 text-red-600 hover:text-red-900 hover:bg-red-50 rounded transition-all duration-200"
+                              className="inline-flex items-center px-3 py-1 bg-red-50 text-red-700 text-sm rounded-md hover:bg-red-100 transition-colors border border-red-200"
                               title="Delete Work Details"
                             >
-                              🗑️
+                              🗑️ Delete
                             </button>
                           </div>
                         </td>
