@@ -14,58 +14,6 @@ export interface ProgressEvidenceResponse {
 }
 
 /**
- * Check if progress_evidence bucket exists and create if needed
- */
-async function ensureBucketExists(): Promise<boolean> {
-  try {
-    // First, try to list buckets to see if progress_evidence exists
-    const { data: buckets, error: listError } =
-      await supabase.storage.listBuckets();
-
-    if (listError) {
-      console.error("Error listing buckets:", listError);
-      return false;
-    }
-
-    const bucketExists = buckets?.some(
-      (bucket) => bucket.name === "progress_evidence"
-    );
-
-    if (bucketExists) {
-      console.log("progress_evidence bucket exists");
-      return true;
-    }
-
-    console.log("progress_evidence bucket not found, attempting to create...");
-
-    // Try to create the bucket (private, not public)
-    const { data: createData, error: createError } =
-      await supabase.storage.createBucket("progress_evidence", {
-        public: false, // Changed to false for private bucket
-        allowedMimeTypes: [
-          "image/jpeg",
-          "image/jpg",
-          "image/png",
-          "image/gif",
-          "image/webp",
-        ],
-        fileSizeLimit: 10485760, // 10MB
-      });
-
-    if (createError) {
-      console.error("Error creating bucket:", createError);
-      return false;
-    }
-
-    console.log("progress_evidence bucket created successfully:", createData);
-    return true;
-  } catch (error) {
-    console.error("Error in ensureBucketExists:", error);
-    return false;
-  }
-}
-
-/**
  * Upload progress evidence file to Supabase storage
  */
 export async function uploadProgressEvidence({
@@ -79,47 +27,28 @@ export async function uploadProgressEvidence({
       return { success: false, error: "No file provided" };
     }
 
-    // Check file size (max 10MB)
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    if (file.size > maxSize) {
-      return { success: false, error: "File size must be less than 10MB" };
-    }
-
-    // Check file type (images only)
-    const allowedTypes = [
-      "image/jpeg",
-      "image/jpg",
-      "image/png",
-      "image/gif",
-      "image/webp",
-    ];
-    if (!allowedTypes.includes(file.type)) {
-      return {
-        success: false,
-        error: "Only image files are allowed (JPEG, PNG, GIF, WebP)",
-      };
-    }
-
-    // Ensure bucket exists
-    const bucketReady = await ensureBucketExists();
-    if (!bucketReady) {
-      return {
-        success: false,
-        error: "Storage bucket is not available. Please contact administrator.",
-      };
+    // Validate file using the validation function
+    const validation = validateProgressEvidenceFile(file);
+    if (!validation.isValid) {
+      return { success: false, error: validation.error };
     }
 
     // Generate unique filename
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const timestamp = Date.now();
+    const randomSuffix = Math.random().toString(36).substring(2, 8);
     const fileExtension = file.name.split(".").pop()?.toLowerCase() || "jpg";
-    const fileName = `work_${workDetailsId}_${reportDate}_${timestamp}.${fileExtension}`;
-    const storagePath = `${fileName}`; // Remove progress_evidence/ prefix since it's already the bucket name
+    const fileName = `work_${workDetailsId}_${reportDate}_${timestamp}_${randomSuffix}.${fileExtension}`;
+
+    // Create folder structure: work-details-{id}/filename
+    const storagePath = `work-details-${workDetailsId}/${fileName}`;
 
     console.log("Uploading progress evidence:", {
       fileName,
       storagePath,
       fileSize: file.size,
       fileType: file.type,
+      workDetailsId,
+      reportDate,
     });
 
     // Upload to Supabase storage
@@ -127,7 +56,7 @@ export async function uploadProgressEvidence({
       .from("progress_evidence")
       .upload(storagePath, file, {
         cacheControl: "3600",
-        upsert: false,
+        upsert: false, // Don't overwrite existing files
       });
 
     if (uploadError) {
@@ -135,7 +64,7 @@ export async function uploadProgressEvidence({
       return { success: false, error: `Upload failed: ${uploadError.message}` };
     }
 
-    // Generate a signed URL instead of public URL for initial verification
+    // Generate a signed URL for the uploaded file
     const signedUrl = await getProgressEvidenceSignedUrl(uploadData.path, 3600);
 
     console.log("Progress evidence uploaded successfully:", {
@@ -146,7 +75,7 @@ export async function uploadProgressEvidence({
     return {
       success: true,
       storagePath: uploadData.path,
-      publicUrl: signedUrl || "", // Use signed URL as "public" URL for now
+      publicUrl: signedUrl || "",
     };
   } catch (error) {
     console.error("Error uploading progress evidence:", error);
@@ -158,7 +87,7 @@ export async function uploadProgressEvidence({
 }
 
 /**
- * Get signed URL for progress evidence file (MAIN METHOD - use this instead of public URL)
+ * Get signed URL for progress evidence file
  */
 export async function getProgressEvidenceSignedUrl(
   storagePath: string,
@@ -182,21 +111,7 @@ export async function getProgressEvidenceSignedUrl(
 }
 
 /**
- * Get public URL for progress evidence file (DEPRECATED - use signed URL instead)
- */
-export function getProgressEvidenceUrl(storagePath: string): string {
-  console.warn(
-    "getProgressEvidenceUrl is deprecated for private buckets. Use getProgressEvidenceSignedUrl instead."
-  );
-  const { data } = supabase.storage
-    .from("progress_evidence")
-    .getPublicUrl(storagePath);
-  return data.publicUrl;
-}
-
-/**
  * Open progress evidence file in new tab/window
- * Uses signed URL with authentication
  */
 export async function openProgressEvidence(storagePath: string): Promise<void> {
   try {

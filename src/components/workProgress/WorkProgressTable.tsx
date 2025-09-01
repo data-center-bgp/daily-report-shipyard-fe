@@ -73,6 +73,11 @@ export default function WorkProgressTable({
   const [loadingWorkDetails, setLoadingWorkDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // New state to track maximum progress for each work detail
+  const [maxProgressByWorkDetail, setMaxProgressByWorkDetail] = useState<
+    Record<number, number>
+  >({});
+
   // Fetch initial data
   useEffect(() => {
     if (!workDetailsId) {
@@ -270,13 +275,67 @@ export default function WorkProgressTable({
 
       if (error) throw error;
 
-      setWorkProgress(data || []);
+      const progressData = data || [];
+      setWorkProgress(progressData);
       setTotalCount(count || 0);
+
+      // Calculate maximum progress for each work detail
+      await calculateMaxProgress(progressData);
     } catch (err) {
       console.error("Error fetching work progress:", err);
       setError("Failed to load work progress data");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // New function to calculate maximum progress for each work detail
+  const calculateMaxProgress = async (
+    currentProgressData: WorkProgressWithDetails[]
+  ) => {
+    try {
+      // Get all unique work detail IDs from current data
+      const workDetailIds = [
+        ...new Set(currentProgressData.map((item) => item.work_details.id)),
+      ];
+
+      if (workDetailIds.length === 0) {
+        setMaxProgressByWorkDetail({});
+        return;
+      }
+
+      // Fetch maximum progress for each work detail
+      const { data: maxProgressData, error } = await supabase
+        .from("work_progress")
+        .select("work_details_id, progress_percentage")
+        .in("work_details_id", workDetailIds)
+        .order("progress_percentage", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching max progress:", error);
+        return;
+      }
+
+      // Create a map of work_details_id to maximum progress
+      const maxProgressMap: Record<number, number> = {};
+
+      if (maxProgressData) {
+        // Group by work_details_id and get the maximum progress for each
+        workDetailIds.forEach((workDetailId) => {
+          const progressReports = maxProgressData.filter(
+            (item) => item.work_details_id === workDetailId
+          );
+          if (progressReports.length > 0) {
+            maxProgressMap[workDetailId] = Math.max(
+              ...progressReports.map((item) => item.progress_percentage)
+            );
+          }
+        });
+      }
+
+      setMaxProgressByWorkDetail(maxProgressMap);
+    } catch (err) {
+      console.error("Error calculating max progress:", err);
     }
   };
 
@@ -303,6 +362,81 @@ export default function WorkProgressTable({
     setSelectedWorkOrderId(0);
     setSelectedWorkDetailsIdFilter(workDetailsId || 0);
     setCurrentPage(1);
+  };
+
+  // Updated function to check if progress can be added
+  const canAddProgress = (workDetailsId: number): boolean => {
+    const maxProgress = maxProgressByWorkDetail[workDetailsId] || 0;
+    return maxProgress < 100;
+  };
+
+  // Updated function to handle clicking on progress to add new report
+  const handleAddProgressFromCurrent = async (
+    progressItem: WorkProgressWithDetails
+  ) => {
+    const workDetailsId = progressItem.work_details.id;
+
+    // Check if work is already completed
+    if (!canAddProgress(workDetailsId)) {
+      alert(
+        "❌ Cannot add progress report. This work detail has already reached 100% completion."
+      );
+      return;
+    }
+
+    try {
+      // Get current work details data for pre-filling
+      const { data: workDetailsData, error: workDetailsError } = await supabase
+        .from("work_details")
+        .select(
+          `
+          id,
+          description,
+          location,
+          pic,
+          work_order (
+            id,
+            shipyard_wo_number,
+            vessel (
+              id,
+              name,
+              type
+            )
+          )
+        `
+        )
+        .eq("id", workDetailsId)
+        .single();
+
+      if (workDetailsError) throw workDetailsError;
+
+      // Navigate to add progress page with pre-filled data
+      navigate(`/add-work-progress/${workDetailsId}`, {
+        state: {
+          workDetails: workDetailsData,
+          currentProgress: progressItem.progress_percentage,
+          lastReportDate: progressItem.report_date,
+          prefillData: {
+            vesselName: progressItem.work_details.work_order.vessel.name,
+            workOrderNumber:
+              progressItem.work_details.work_order.shipyard_wo_number,
+            workDescription: progressItem.work_details.description,
+            location: progressItem.work_details.location,
+            currentProgressPercentage:
+              maxProgressByWorkDetail[workDetailsId] ||
+              progressItem.progress_percentage,
+            suggestedNextProgress: Math.min(
+              (maxProgressByWorkDetail[workDetailsId] ||
+                progressItem.progress_percentage) + 10,
+              100
+            ), // Suggest 10% increment from max progress
+          },
+        },
+      });
+    } catch (err) {
+      console.error("Error fetching work details:", err);
+      alert("Failed to load work details. Please try again.");
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -671,6 +805,9 @@ export default function WorkProgressTable({
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Progress
+                      <div className="text-xs text-gray-400 font-normal mt-1">
+                        (Click to add new)
+                      </div>
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Work Details
@@ -695,91 +832,161 @@ export default function WorkProgressTable({
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {workProgress.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <span className="text-lg mr-2">
-                            {getProgressIcon(item.progress_percentage)}
-                          </span>
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getProgressColor(
-                              item.progress_percentage
-                            )}`}
-                          >
-                            {item.progress_percentage}%
-                          </span>
-                        </div>
-                        {/* Progress Bar */}
-                        <div className="mt-1 w-20">
-                          <div className="bg-gray-200 rounded-full h-1.5">
+                  {workProgress.map((item) => {
+                    const workDetailsId = item.work_details.id;
+                    const isCompleted = !canAddProgress(workDetailsId);
+                    const maxProgress =
+                      maxProgressByWorkDetail[workDetailsId] ||
+                      item.progress_percentage;
+
+                    return (
+                      <tr key={item.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {/* Updated Clickable Progress Cell */}
+                          {isCompleted ? (
+                            // Disabled state for completed work
                             <div
-                              className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
-                              style={{
-                                width: `${Math.min(
-                                  Math.max(item.progress_percentage, 0),
-                                  100
-                                )}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {item.work_details.description}
-                        </div>
-                        {item.work_details.location && (
-                          <div className="text-sm text-gray-500">
-                            📍 {item.work_details.location}
-                          </div>
-                        )}
-                      </td>
-                      {!selectedWorkDetailsIdFilter && (
-                        <td className="px-6 py-4">
-                          <div className="text-sm text-gray-900">
-                            🚢 {item.work_details.work_order.vessel.name}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            📋 {item.work_details.work_order.shipyard_wo_number}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            {item.work_details.work_order.vessel.type}
-                          </div>
+                              className="w-full text-left p-2 rounded-lg bg-gray-50 border border-gray-200 cursor-not-allowed opacity-75"
+                              title="Work detail is completed (100%). No more progress can be added."
+                            >
+                              <div className="flex items-center">
+                                <span className="text-lg mr-2">
+                                  {getProgressIcon(item.progress_percentage)}
+                                </span>
+                                <span
+                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getProgressColor(
+                                    item.progress_percentage
+                                  )}`}
+                                >
+                                  {item.progress_percentage}%
+                                </span>
+                                <span className="ml-2 text-xs text-gray-400">
+                                  ✅ Completed
+                                </span>
+                              </div>
+                              {/* Progress Bar */}
+                              <div className="mt-1 w-20">
+                                <div className="bg-gray-200 rounded-full h-1.5">
+                                  <div
+                                    className="bg-green-600 h-1.5 rounded-full"
+                                    style={{
+                                      width: `${Math.min(
+                                        Math.max(item.progress_percentage, 0),
+                                        100
+                                      )}%`,
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            // Clickable state for non-completed work
+                            <button
+                              onClick={() => handleAddProgressFromCurrent(item)}
+                              className="w-full text-left group cursor-pointer hover:bg-blue-50 rounded-lg p-2 transition-all duration-200 border border-transparent hover:border-blue-200"
+                              title={`Click to add new progress report based on this data (Current max: ${maxProgress}%)`}
+                            >
+                              <div className="flex items-center">
+                                <span className="text-lg mr-2">
+                                  {getProgressIcon(item.progress_percentage)}
+                                </span>
+                                <span
+                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getProgressColor(
+                                    item.progress_percentage
+                                  )} group-hover:scale-105 transition-transform`}
+                                >
+                                  {item.progress_percentage}%
+                                </span>
+                                {maxProgress > item.progress_percentage && (
+                                  <span className="ml-1 text-xs text-orange-600">
+                                    (Max: {maxProgress}%)
+                                  </span>
+                                )}
+                                <span className="ml-2 text-xs text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  ➕ Add new
+                                </span>
+                              </div>
+                              {/* Progress Bar */}
+                              <div className="mt-1 w-20">
+                                <div className="bg-gray-200 rounded-full h-1.5">
+                                  <div
+                                    className="bg-blue-600 h-1.5 rounded-full transition-all duration-300 group-hover:bg-blue-700"
+                                    style={{
+                                      width: `${Math.min(
+                                        Math.max(item.progress_percentage, 0),
+                                        100
+                                      )}%`,
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </button>
+                          )}
                         </td>
-                      )}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        📅 {formatDate(item.report_date)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {item.profiles?.name || "Unknown User"}
-                        </div>
-                        {item.profiles?.email && (
-                          <div className="text-xs text-gray-500">
-                            {item.profiles.email}
+                        <td className="px-6 py-4">
+                          <div className="flex items-center">
+                            <div className="text-sm font-medium text-gray-900">
+                              {item.work_details.description}
+                            </div>
+                            {isCompleted && (
+                              <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                ✅ Complete
+                              </span>
+                            )}
                           </div>
+                          {item.work_details.location && (
+                            <div className="text-sm text-gray-500">
+                              📍 {item.work_details.location}
+                            </div>
+                          )}
+                        </td>
+                        {!selectedWorkDetailsIdFilter && (
+                          <td className="px-6 py-4">
+                            <div className="text-sm text-gray-900">
+                              🚢 {item.work_details.work_order.vessel.name}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              📋{" "}
+                              {item.work_details.work_order.shipyard_wo_number}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              {item.work_details.work_order.vessel.type}
+                            </div>
+                          </td>
                         )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        {item.storage_path ? (
-                          <button
-                            onClick={() =>
-                              handleEvidenceClick(item.storage_path)
-                            }
-                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer hover:underline"
-                          >
-                            📷 View Evidence
-                          </button>
-                        ) : (
-                          <span className="text-gray-400">No evidence</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
-                        {formatDateTime(item.created_at)}
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          📅 {formatDate(item.report_date)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {item.profiles?.name || "Unknown User"}
+                          </div>
+                          {item.profiles?.email && (
+                            <div className="text-xs text-gray-500">
+                              {item.profiles.email}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {item.storage_path ? (
+                            <button
+                              onClick={() =>
+                                handleEvidenceClick(item.storage_path)
+                              }
+                              className="text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer hover:underline"
+                            >
+                              📷 View Evidence
+                            </button>
+                          ) : (
+                            <span className="text-gray-400">No evidence</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
+                          {formatDateTime(item.created_at)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -830,13 +1037,13 @@ export default function WorkProgressTable({
                 <div>
                   <div className="text-lg font-semibold text-gray-900">
                     {
-                      workProgress.filter(
-                        (item) => item.progress_percentage >= 100
+                      Object.values(maxProgressByWorkDetail).filter(
+                        (maxProgress) => maxProgress >= 100
                       ).length
                     }
                   </div>
                   <div className="text-sm text-gray-500">
-                    Completed (Current Page)
+                    Completed Work Details
                   </div>
                 </div>
               </div>

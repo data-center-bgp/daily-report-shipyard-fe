@@ -23,7 +23,7 @@ import {
 } from "./components/verification";
 import { AddWorkDetails } from "./components/workDetails";
 import WorkOrderDetails from "./components/workDetails/WODetails";
-import { WorkProgressPage, AddWorkProgress } from "./components/workProgress";
+import { AddWorkProgress, WorkProgressTable } from "./components/workProgress";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -87,12 +87,16 @@ function App() {
           <Route path="/add-work-details" element={<AddWorkDetails />} />
 
           {/* Work Progress Routes */}
-          <Route path="/work-progress" element={<WorkProgressPage />} />
+          <Route path="/work-progress" element={<WorkProgressTable />} />
+          <Route path="/add-work-progress" element={<AddWorkProgress />} />
+          <Route
+            path="/add-work-progress/:workDetailsId"
+            element={<AddWorkProgress />}
+          />
           <Route
             path="/work-details/:workDetailsId/progress"
-            element={<WorkProgressPage />}
+            element={<WorkProgressTable />}
           />
-          <Route path="/add-work-progress" element={<AddWorkProgress />} />
 
           {/* Verification Routes */}
           <Route
