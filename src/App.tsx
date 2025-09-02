@@ -18,9 +18,9 @@ import {
   VesselWorkOrders,
 } from "./components/workOrders";
 import {
-  OperationVerification,
-  VerifyOperation,
-} from "./components/verification";
+  WorkVerification,
+  VerifyWorkDetails,
+} from "./components/workVerification";
 import { AddWorkDetails, EditWorkDetails } from "./components/workDetails";
 import WorkOrderDetails from "./components/workDetails/WODetails";
 import { AddWorkProgress, WorkProgressTable } from "./components/workProgress";
@@ -103,13 +103,10 @@ function App() {
           />
 
           {/* Verification Routes */}
+          <Route path="/work-verification" element={<WorkVerification />} />
           <Route
-            path="/operation-verification"
-            element={<OperationVerification />}
-          />
-          <Route
-            path="/operation-verification/verify/:workOrderId"
-            element={<VerifyOperation />}
+            path="/work-verification/verify/:workDetailsId"
+            element={<VerifyWorkDetails />}
           />
 
           {/* Fallback */}

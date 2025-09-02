@@ -1,39 +1,46 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase, type WorkOrder } from "../../lib/supabase";
+import {
+  supabase,
+  type WorkDetails,
+  type WorkOrder,
+  type Vessel,
+} from "../../lib/supabase";
 
-interface WorkOrderWithProgress extends WorkOrder {
+interface WorkDetailsWithProgress extends WorkDetails {
   current_progress?: number;
   has_progress_data?: boolean;
   latest_progress_date?: string;
+  work_order?: WorkOrder & {
+    vessel?: Vessel;
+  };
 }
 
-interface OperationVerification {
+interface WorkVerification {
   id: number;
   created_at: string;
   updated_at: string;
   deleted_at?: string;
-  progress_verification: boolean;
+  work_verification: boolean;
   verification_date: string;
-  work_order_id: number;
+  work_details_id: number;
   user_id: string;
 }
 
-interface VerificationWithDetails extends OperationVerification {
-  work_order: WorkOrder & {
-    vessel: {
-      name: string;
-      type: string;
-      company: string;
-    };
+interface VerificationWithDetails extends WorkVerification {
+  work_details: WorkDetailsWithProgress;
+  profiles?: {
+    id: number;
+    name: string;
+    email: string;
   };
 }
 
-export default function OperationVerification() {
+export default function WorkVerification() {
   const navigate = useNavigate();
 
-  const [completedWorkOrders, setCompletedWorkOrders] = useState<
-    WorkOrderWithProgress[]
+  const [completedWorkDetails, setCompletedWorkDetails] = useState<
+    WorkDetailsWithProgress[]
   >([]);
   const [verifications, setVerifications] = useState<VerificationWithDetails[]>(
     []
@@ -45,40 +52,52 @@ export default function OperationVerification() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"pending" | "verified">("pending");
 
+  // Filter states
+  const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [selectedVesselId, setSelectedVesselId] = useState<number>(0);
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch completed work orders with progress data - using only existing vessel columns
-      const { data: workOrderData, error: woError } = await supabase
-        .from("work_order")
+      // Fetch work details with progress data
+      const { data: workDetailsData, error: wdError } = await supabase
+        .from("work_details")
         .select(
           `
           *,
-          project_progress (
-            progress,
-            report_date
-          ),
-          vessel:vessel_id (
+          work_order (
             id,
-            name,
-            type,
-            company
+            shipyard_wo_number,
+            customer_wo_number,
+            shipyard_wo_date,
+            customer_wo_date,
+            vessel (
+              id,
+              name,
+              type,
+              company
+            )
+          ),
+          work_progress (
+            progress_percentage,
+            report_date
           )
         `
         )
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
 
-      if (woError) throw woError;
+      if (wdError) throw wdError;
 
-      // Process work orders to find completed ones (100% progress)
-      const workOrdersWithProgress = (workOrderData || []).map((wo) => {
-        const progressRecords = wo.project_progress || [];
+      // Process work details to find completed ones (100% progress)
+      const workDetailsWithProgress = (workDetailsData || []).map((wd) => {
+        const progressRecords = wd.work_progress || [];
 
         if (progressRecords.length === 0) {
           return {
-            ...wo,
+            ...wd,
             current_progress: 0,
             has_progress_data: false,
           };
@@ -90,38 +109,50 @@ export default function OperationVerification() {
             new Date(a.report_date).getTime()
         );
 
-        const latestProgress = sortedProgress[0]?.progress || 0;
+        const latestProgress = sortedProgress[0]?.progress_percentage || 0;
         const latestProgressDate = sortedProgress[0]?.report_date;
 
         return {
-          ...wo,
+          ...wd,
           current_progress: latestProgress,
           has_progress_data: true,
           latest_progress_date: latestProgressDate,
         };
       });
 
-      // Filter only completed work orders (100% progress)
-      const completed = workOrdersWithProgress.filter(
-        (wo) => wo.current_progress === 100
+      // Filter only completed work details (100% progress)
+      const completed = workDetailsWithProgress.filter(
+        (wd) => wd.current_progress === 100
       );
 
-      setCompletedWorkOrders(completed);
+      setCompletedWorkDetails(completed);
 
-      // Fetch existing verifications from operation_verification table - using only existing vessel columns
+      // Fetch existing verifications
       const { data: verificationData, error: verError } = await supabase
-        .from("operation_verification")
+        .from("work_verification")
         .select(
           `
           *,
-          work_order:work_order_id (
+          work_details (
             *,
-            vessel:vessel_id (
+            work_order (
               id,
-              name,
-              type,
-              company
+              shipyard_wo_number,
+              customer_wo_number,
+              shipyard_wo_date,
+              customer_wo_date,
+              vessel (
+                id,
+                name,
+                type,
+                company
+              )
             )
+          ),
+          profiles (
+            id,
+            name,
+            email
           )
         `
         )
@@ -131,6 +162,16 @@ export default function OperationVerification() {
       if (verError) throw verError;
 
       setVerifications(verificationData || []);
+
+      // Fetch vessels for filter
+      const { data: vesselData, error: vesselError } = await supabase
+        .from("vessel")
+        .select("*")
+        .is("deleted_at", null)
+        .order("name", { ascending: true });
+
+      if (vesselError) throw vesselError;
+      setVessels(vesselData || []);
     } catch (err) {
       console.error("Error fetching verification data:", err);
       setError(err instanceof Error ? err.message : "Failed to load data");
@@ -151,13 +192,13 @@ export default function OperationVerification() {
     }
 
     try {
-      setSubmittingId(verification.work_order_id);
+      setSubmittingId(verification.work_details_id);
       setError(null);
       setSuccess(null);
 
-      // Soft delete by setting deleted_at in operation_verification table
+      // Soft delete by setting deleted_at
       const { error } = await supabase
-        .from("operation_verification")
+        .from("work_verification")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", verification.id);
 
@@ -188,42 +229,59 @@ export default function OperationVerification() {
     });
   };
 
-  // Get pending work orders (completed but not yet verified)
-  const verifiedWorkOrderIds = verifications.map((v) => v.work_order_id);
-  const pendingWorkOrders = completedWorkOrders.filter(
-    (wo) => !verifiedWorkOrderIds.includes(wo.id)
+  // Get pending work details (completed but not yet verified)
+  const verifiedWorkDetailsIds = verifications.map((v) => v.work_details_id);
+  const pendingWorkDetails = completedWorkDetails.filter(
+    (wd) => !verifiedWorkDetailsIds.includes(wd.id)
   );
 
-  // Filter based on search term
-  const filteredPending = pendingWorkOrders.filter((wo) => {
+  // Apply vessel filter
+  const filteredPending = pendingWorkDetails.filter((wd) => {
+    const vesselMatch =
+      selectedVesselId === 0 || wd.work_order?.vessel?.id === selectedVesselId;
+
+    if (!vesselMatch) return false;
+
+    if (!searchTerm) return true;
+
     const searchLower = searchTerm.toLowerCase();
     const safeIncludes = (value: string | null | undefined) => {
       return value?.toLowerCase().includes(searchLower) || false;
     };
 
     return (
-      safeIncludes(wo.customer_wo_number) ||
-      safeIncludes(wo.shipyard_wo_number) ||
-      safeIncludes(wo.vessel?.name) ||
-      safeIncludes(wo.vessel?.company) ||
-      safeIncludes(wo.wo_location) ||
-      safeIncludes(wo.wo_description)
+      safeIncludes(wd.description) ||
+      safeIncludes(wd.location) ||
+      safeIncludes(wd.pic) ||
+      safeIncludes(wd.work_order?.customer_wo_number) ||
+      safeIncludes(wd.work_order?.shipyard_wo_number) ||
+      safeIncludes(wd.work_order?.vessel?.name) ||
+      safeIncludes(wd.work_order?.vessel?.company)
     );
   });
 
   const filteredVerified = verifications.filter((verification) => {
+    const vesselMatch =
+      selectedVesselId === 0 ||
+      verification.work_details?.work_order?.vessel?.id === selectedVesselId;
+
+    if (!vesselMatch) return false;
+
+    if (!searchTerm) return true;
+
     const searchLower = searchTerm.toLowerCase();
     const safeIncludes = (value: string | null | undefined) => {
       return value?.toLowerCase().includes(searchLower) || false;
     };
 
     return (
-      safeIncludes(verification.work_order.customer_wo_number) ||
-      safeIncludes(verification.work_order.shipyard_wo_number) ||
-      safeIncludes(verification.work_order.vessel?.name) ||
-      safeIncludes(verification.work_order.vessel?.company) ||
-      safeIncludes(verification.work_order.wo_location) ||
-      safeIncludes(verification.work_order.wo_description)
+      safeIncludes(verification.work_details?.description) ||
+      safeIncludes(verification.work_details?.location) ||
+      safeIncludes(verification.work_details?.pic) ||
+      safeIncludes(verification.work_details?.work_order?.customer_wo_number) ||
+      safeIncludes(verification.work_details?.work_order?.shipyard_wo_number) ||
+      safeIncludes(verification.work_details?.work_order?.vessel?.name) ||
+      safeIncludes(verification.work_details?.work_order?.vessel?.company)
     );
   });
 
@@ -233,7 +291,7 @@ export default function OperationVerification() {
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           <span className="ml-3 text-gray-600">
-            Loading operation verification data...
+            Loading work verification data...
           </span>
         </div>
       </div>
@@ -246,18 +304,18 @@ export default function OperationVerification() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
-            Operation Verification
+            Work Verification
           </h1>
           <p className="text-gray-600 mt-2">
-            Verify completed work orders (100% progress)
+            Verify completed work details (100% progress)
           </p>
         </div>
 
         <button
-          onClick={() => navigate("/work-orders")}
+          onClick={() => navigate("/work-details")}
           className="text-blue-600 hover:text-blue-800 flex items-center gap-2 transition-colors"
         >
-          ← Back to Dashboard
+          ← Back to Work Details
         </button>
       </div>
 
@@ -289,7 +347,7 @@ export default function OperationVerification() {
                 Total Completed
               </p>
               <p className="text-2xl font-bold text-gray-900">
-                {completedWorkOrders.length}
+                {completedWorkDetails.length}
               </p>
             </div>
             <span className="text-blue-500 text-2xl">✅</span>
@@ -303,7 +361,7 @@ export default function OperationVerification() {
                 Pending Verification
               </p>
               <p className="text-2xl font-bold text-gray-900">
-                {pendingWorkOrders.length}
+                {filteredPending.length}
               </p>
             </div>
             <span className="text-yellow-500 text-2xl">⏳</span>
@@ -315,7 +373,7 @@ export default function OperationVerification() {
             <div>
               <p className="text-sm font-medium text-gray-600">Verified</p>
               <p className="text-2xl font-bold text-gray-900">
-                {verifications.length}
+                {filteredVerified.length}
               </p>
             </div>
             <span className="text-green-500 text-2xl">🔍</span>
@@ -323,43 +381,66 @@ export default function OperationVerification() {
         </div>
       </div>
 
-      {/* Tabs and Search */}
+      {/* Filters and Tabs */}
       <div className="bg-white rounded-lg shadow">
-        <div className="border-b border-gray-200">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-6">
-            <div className="flex space-x-8">
-              <button
-                onClick={() => setActiveTab("pending")}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === "pending"
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
-                }`}
+        {/* Filters */}
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                🚢 Filter by Vessel
+              </label>
+              <select
+                value={selectedVesselId}
+                onChange={(e) => setSelectedVesselId(parseInt(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                Pending Verification ({pendingWorkOrders.length})
-              </button>
-              <button
-                onClick={() => setActiveTab("verified")}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === "verified"
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                Verified ({verifications.length})
-              </button>
+                <option value={0}>All Vessels</option>
+                {vessels.map((vessel) => (
+                  <option key={vessel.id} value={vessel.id}>
+                    {vessel.name} ({vessel.type})
+                  </option>
+                ))}
+              </select>
             </div>
-
-            <div className="mt-4 sm:mt-0 relative">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                🔍 Search
+              </label>
               <input
                 type="text"
-                placeholder="Search work orders..."
+                placeholder="Search work details..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-              <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
             </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="border-b border-gray-200">
+          <div className="flex space-x-8 px-6">
+            <button
+              onClick={() => setActiveTab("pending")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "pending"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Pending Verification ({filteredPending.length})
+            </button>
+            <button
+              onClick={() => setActiveTab("verified")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "verified"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Verified ({filteredVerified.length})
+            </button>
           </div>
         </div>
 
@@ -373,13 +454,13 @@ export default function OperationVerification() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Work Details
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Work Order
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Vessel Details
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Work Details
+                        Vessel
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Completion Date
@@ -393,50 +474,47 @@ export default function OperationVerification() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredPending.map((wo) => (
-                      <tr key={wo.id} className="hover:bg-gray-50">
+                    {filteredPending.map((wd) => (
+                      <tr key={wd.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4">
+                          <div className="space-y-1">
+                            <div className="text-sm font-medium text-gray-900 max-w-xs">
+                              {wd.description.length > 60
+                                ? `${wd.description.substring(0, 60)}...`
+                                : wd.description}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              📍 {wd.location}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              👤 {wd.pic}
+                            </div>
+                          </div>
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="space-y-1">
                             <div className="text-sm font-medium text-gray-900">
-                              Customer: {wo.customer_wo_number || "-"}
+                              {wd.work_order?.shipyard_wo_number || "-"}
                             </div>
                             <div className="text-sm text-gray-500">
-                              Shipyard: {wo.shipyard_wo_number || "-"}
-                            </div>
-                            <div className="text-xs text-gray-400">
-                              PIC: {wo.pic || "-"}
+                              {wd.work_order?.customer_wo_number || "-"}
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="space-y-1">
                             <div className="text-sm font-medium text-gray-900">
-                              {wo.vessel?.name || "-"}
+                              {wd.work_order?.vessel?.name || "-"}
                             </div>
                             <div className="text-sm text-gray-500">
-                              {wo.vessel?.type || "-"} •{" "}
-                              {wo.vessel?.company || "-"}
+                              {wd.work_order?.vessel?.type || "-"} •{" "}
+                              {wd.work_order?.vessel?.company || "-"}
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="space-y-1">
-                            <div className="text-sm font-medium text-gray-900">
-                              📍 {wo.wo_location || "-"}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              Qty: {wo.quantity || "-"}
-                            </div>
-                            {wo.wo_description && (
-                              <div className="text-xs text-gray-400 max-w-xs truncate">
-                                {wo.wo_description}
-                              </div>
-                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {wo.latest_progress_date
-                            ? formatDate(wo.latest_progress_date)
+                          {wd.latest_progress_date
+                            ? formatDate(wd.latest_progress_date)
                             : "-"}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -452,9 +530,7 @@ export default function OperationVerification() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <button
                             onClick={() =>
-                              navigate(
-                                `/operation-verification/verify/${wo.id}`
-                              )
+                              navigate(`/work-verification/verify/${wd.id}`)
                             }
                             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
                           >
@@ -469,25 +545,28 @@ export default function OperationVerification() {
             ) : (
               <div className="text-center py-12">
                 <span className="text-gray-400 text-4xl mb-4 block">🔍</span>
-                {searchTerm ? (
+                {searchTerm || selectedVesselId > 0 ? (
                   <>
                     <p className="text-gray-500 text-lg mb-2">
-                      No pending verifications found matching "{searchTerm}"
+                      No pending verifications found matching your filters
                     </p>
                     <button
-                      onClick={() => setSearchTerm("")}
+                      onClick={() => {
+                        setSearchTerm("");
+                        setSelectedVesselId(0);
+                      }}
                       className="text-blue-600 hover:text-blue-800 transition-colors"
                     >
-                      Clear search
+                      Clear filters
                     </button>
                   </>
                 ) : (
                   <>
                     <p className="text-gray-500 text-lg mb-2">
-                      No work orders pending verification
+                      No work details pending verification
                     </p>
                     <p className="text-gray-400 text-sm">
-                      All completed work orders have been verified.
+                      All completed work details have been verified.
                     </p>
                   </>
                 )}
@@ -500,19 +579,19 @@ export default function OperationVerification() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Work Details
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Work Order
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Vessel Details
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Work Details
+                      Vessel
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Verification Date
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
+                      Verified By
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -522,63 +601,67 @@ export default function OperationVerification() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredVerified.map((verification) => (
                     <tr key={verification.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium text-gray-900 max-w-xs">
+                            {verification.work_details?.description?.length > 60
+                              ? `${verification.work_details.description.substring(
+                                  0,
+                                  60
+                                )}...`
+                              : verification.work_details?.description}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            📍 {verification.work_details?.location}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            👤 {verification.work_details?.pic}
+                          </div>
+                        </div>
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="space-y-1">
                           <div className="text-sm font-medium text-gray-900">
-                            Customer:{" "}
-                            {verification.work_order.customer_wo_number || "-"}
+                            {verification.work_details?.work_order
+                              ?.shipyard_wo_number || "-"}
                           </div>
                           <div className="text-sm text-gray-500">
-                            Shipyard:{" "}
-                            {verification.work_order.shipyard_wo_number || "-"}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            PIC: {verification.work_order.pic || "-"}
+                            {verification.work_details?.work_order
+                              ?.customer_wo_number || "-"}
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="space-y-1">
                           <div className="text-sm font-medium text-gray-900">
-                            {verification.work_order.vessel?.name || "-"}
+                            {verification.work_details?.work_order?.vessel
+                              ?.name || "-"}
                           </div>
                           <div className="text-sm text-gray-500">
-                            {verification.work_order.vessel?.type || "-"} •{" "}
-                            {verification.work_order.vessel?.company || "-"}
+                            {verification.work_details?.work_order?.vessel
+                              ?.type || "-"}{" "}
+                            •{" "}
+                            {verification.work_details?.work_order?.vessel
+                              ?.company || "-"}
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="space-y-1">
-                          <div className="text-sm font-medium text-gray-900">
-                            📍 {verification.work_order.wo_location || "-"}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            Qty: {verification.work_order.quantity || "-"}
-                          </div>
-                          {verification.work_order.wo_description && (
-                            <div className="text-xs text-gray-400 max-w-xs truncate">
-                              {verification.work_order.wo_description}
-                            </div>
-                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatDate(verification.verification_date)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          ✅ Verified
-                        </span>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {verification.profiles?.name || "Unknown User"}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <button
                           onClick={() => handleRemoveVerification(verification)}
-                          disabled={submittingId === verification.work_order_id}
+                          disabled={
+                            submittingId === verification.work_details_id
+                          }
                           className="text-red-600 hover:text-red-900 transition-colors disabled:opacity-50"
                           title="Remove Verification"
                         >
-                          {submittingId === verification.work_order_id ? (
+                          {submittingId === verification.work_details_id ? (
                             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
                           ) : (
                             "🗑️ Remove"
@@ -593,25 +676,28 @@ export default function OperationVerification() {
           ) : (
             <div className="text-center py-12">
               <span className="text-gray-400 text-4xl mb-4 block">✅</span>
-              {searchTerm ? (
+              {searchTerm || selectedVesselId > 0 ? (
                 <>
                   <p className="text-gray-500 text-lg mb-2">
-                    No verified operations found matching "{searchTerm}"
+                    No verified work details found matching your filters
                   </p>
                   <button
-                    onClick={() => setSearchTerm("")}
+                    onClick={() => {
+                      setSearchTerm("");
+                      setSelectedVesselId(0);
+                    }}
                     className="text-blue-600 hover:text-blue-800 transition-colors"
                   >
-                    Clear search
+                    Clear filters
                   </button>
                 </>
               ) : (
                 <>
                   <p className="text-gray-500 text-lg mb-2">
-                    No verified operations yet
+                    No verified work details yet
                   </p>
                   <p className="text-gray-400 text-sm">
-                    Verified operations will appear here.
+                    Verified work details will appear here.
                   </p>
                 </>
               )}

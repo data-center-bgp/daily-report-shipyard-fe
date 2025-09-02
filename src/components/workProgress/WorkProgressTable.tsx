@@ -439,6 +439,153 @@ export default function WorkProgressTable({
     }
   };
 
+  const handleAddProgressFromNoResults = async () => {
+    // If we have a specific work details selected, get its data and pass it
+    if (selectedWorkDetailsIdFilter > 0) {
+      try {
+        // Fetch the selected work details data
+        const { data: workDetailsData, error: workDetailsError } =
+          await supabase
+            .from("work_details")
+            .select(
+              `
+          id,
+          description,
+          location,
+          pic,
+          planned_start_date,
+          target_close_date,
+          period_close_target,
+          work_order (
+            id,
+            shipyard_wo_number,
+            shipyard_wo_date,
+            vessel (
+              id,
+              name,
+              type,
+              company
+            )
+          )
+        `
+            )
+            .eq("id", selectedWorkDetailsIdFilter)
+            .single();
+
+        if (workDetailsError) throw workDetailsError;
+
+        // Navigate with comprehensive pre-filled data
+        navigate(`/add-work-progress/${selectedWorkDetailsIdFilter}`, {
+          state: {
+            workDetails: workDetailsData,
+            currentProgress: 0, // No existing progress
+            lastReportDate: null, // No previous reports
+            prefillData: {
+              // Vessel information
+              vesselId: workDetailsData.work_order.vessel.id,
+              vesselName: workDetailsData.work_order.vessel.name,
+              vesselType: workDetailsData.work_order.vessel.type,
+              vesselCompany: workDetailsData.work_order.vessel.company,
+
+              // Work order information
+              workOrderId: workDetailsData.work_order.id,
+              workOrderNumber: workDetailsData.work_order.shipyard_wo_number,
+              workOrderDate: workDetailsData.work_order.shipyard_wo_date,
+
+              // Work details information
+              workDetailsId: selectedWorkDetailsIdFilter,
+              workDescription: workDetailsData.description,
+              location: workDetailsData.location,
+              pic: workDetailsData.pic,
+              plannedStartDate: workDetailsData.planned_start_date,
+              targetCloseDate: workDetailsData.target_close_date,
+              periodCloseTarget: workDetailsData.period_close_target,
+
+              // Progress information
+              currentProgressPercentage: 0,
+              lastProgressPercentage: 0,
+              suggestedNextProgress: 10, // Start with 10%
+
+              // Context information
+              fromProgressTable: true,
+              fromNoResults: true,
+              isFirstProgress: true,
+            },
+          },
+        });
+      } catch (err) {
+        console.error("Error fetching work details:", err);
+        alert("Failed to load work details. Please try again.");
+      }
+    } else if (selectedWorkOrderId > 0) {
+      // If work order is selected but no specific work details, go to general add with work order context
+      try {
+        const { data: workOrderData, error: workOrderError } = await supabase
+          .from("work_order")
+          .select(
+            `
+          id,
+          shipyard_wo_number,
+          shipyard_wo_date,
+          vessel (
+            id,
+            name,
+            type,
+            company
+          )
+        `
+          )
+          .eq("id", selectedWorkOrderId)
+          .single();
+
+        if (workOrderError) throw workOrderError;
+
+        navigate("/add-work-progress", {
+          state: {
+            prefillData: {
+              vesselId: workOrderData.vessel.id,
+              vesselName: workOrderData.vessel.name,
+              vesselType: workOrderData.vessel.type,
+              vesselCompany: workOrderData.vessel.company,
+              workOrderId: selectedWorkOrderId,
+              workOrderNumber: workOrderData.shipyard_wo_number,
+              workOrderDate: workOrderData.shipyard_wo_date,
+              fromProgressTable: true,
+              fromNoResults: true,
+              preSelectWorkOrder: true,
+            },
+          },
+        });
+      } catch (err) {
+        console.error("Error fetching work order:", err);
+        alert("Failed to load work order. Please try again.");
+      }
+    } else if (selectedVesselId > 0) {
+      // If vessel is selected, go to general add with vessel context
+      const selectedVessel = vessels.find((v) => v.id === selectedVesselId);
+      if (selectedVessel) {
+        navigate("/add-work-progress", {
+          state: {
+            prefillData: {
+              vesselId: selectedVesselId,
+              vesselName: selectedVessel.name,
+              vesselType: selectedVessel.type,
+              vesselCompany: selectedVessel.company,
+              fromProgressTable: true,
+              fromNoResults: true,
+              preSelectVessel: true,
+            },
+          },
+        });
+      } else {
+        navigate("/add-work-progress");
+      }
+    } else {
+      // No filters applied, go to general add page
+      navigate("/add-work-progress");
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
@@ -774,6 +921,51 @@ export default function WorkProgressTable({
               ? "No progress reports match your current filters."
               : "No progress reports have been recorded yet."}
           </p>
+
+          {/* Enhanced context message based on filters */}
+          {selectedWorkDetailsIdFilter > 0 && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg max-w-md mx-auto">
+              <p className="text-sm text-blue-800">
+                <strong>Selected Work Details:</strong>{" "}
+                {workDetailsList
+                  .find((wd) => wd.id === selectedWorkDetailsIdFilter)
+                  ?.description.substring(0, 50)}
+                ...
+              </p>
+              <p className="text-xs text-blue-600 mt-1">
+                Click "Add First Progress Report" to create the initial progress
+                report for this work item.
+              </p>
+            </div>
+          )}
+
+          {selectedWorkOrderId > 0 && !selectedWorkDetailsIdFilter && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg max-w-md mx-auto">
+              <p className="text-sm text-green-800">
+                <strong>Selected Work Order:</strong>{" "}
+                {
+                  workOrders.find((wo) => wo.id === selectedWorkOrderId)
+                    ?.shipyard_wo_number
+                }
+              </p>
+              <p className="text-xs text-green-600 mt-1">
+                You can add progress for any work details in this work order.
+              </p>
+            </div>
+          )}
+
+          {selectedVesselId > 0 && !selectedWorkOrderId && (
+            <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg max-w-md mx-auto">
+              <p className="text-sm text-purple-800">
+                <strong>Selected Vessel:</strong>{" "}
+                {vessels.find((v) => v.id === selectedVesselId)?.name}
+              </p>
+              <p className="text-xs text-purple-600 mt-1">
+                You can add progress for any work details on this vessel.
+              </p>
+            </div>
+          )}
+
           <div className="flex gap-3 justify-center">
             {(selectedVesselId > 0 ||
               selectedWorkOrderId > 0 ||
@@ -786,10 +978,13 @@ export default function WorkProgressTable({
               </button>
             )}
             <button
-              onClick={() => navigate("/add-work-progress")}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+              onClick={handleAddProgressFromNoResults}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
             >
-              Add First Progress Report
+              ➕{" "}
+              {selectedWorkDetailsIdFilter > 0
+                ? "Add First Progress Report"
+                : "Add Progress Report"}
             </button>
           </div>
         </div>

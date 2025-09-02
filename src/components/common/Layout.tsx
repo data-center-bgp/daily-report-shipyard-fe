@@ -80,10 +80,12 @@ export default function Layout({ children, onLogout }: LayoutProps) {
         location.pathname.includes("/edit-progress"),
     },
     {
-      name: "Operation Verification",
-      href: "/operation-verification",
-      icon: "🔍",
-      current: location.pathname === "/operation-verification",
+      name: "Work Verification",
+      href: "/work-verification",
+      icon: "✅",
+      current:
+        location.pathname === "/work-verification" ||
+        location.pathname.startsWith("/work-verification/"),
     },
   ];
 
