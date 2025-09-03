@@ -175,20 +175,6 @@ export default function VerifyWorkDetails() {
       return;
     }
 
-    // Confirm verification
-    const confirmMessage = `Are you sure you want to record this work verification?\n\nWork: ${workDetails.description.substring(
-      0,
-      100
-    )}${
-      workDetails.description.length > 100 ? "..." : ""
-    }\nVerification Date: ${new Date(
-      verificationDate
-    ).toLocaleDateString()}\n\nThis action cannot be undone.`;
-
-    if (!window.confirm(confirmMessage)) {
-      return;
-    }
-
     try {
       setSubmitting(true);
       setError(null);
