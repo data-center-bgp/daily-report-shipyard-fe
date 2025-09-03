@@ -16,6 +16,7 @@ import {
   WorkOrders,
   AddWorkOrder,
   VesselWorkOrders,
+  EditWorkOrder,
 } from "./components/workOrders";
 import {
   WorkVerification,
@@ -80,6 +81,10 @@ function App() {
           <Route
             path="/vessel/:vesselId/work-orders"
             element={<VesselWorkOrders />}
+          />
+          <Route
+            path="/edit-work-order/:workOrderId"
+            element={<EditWorkOrder />}
           />
 
           {/* Work Details */}

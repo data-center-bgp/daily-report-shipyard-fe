@@ -216,18 +216,6 @@ export default function VesselWorkOrders() {
   };
 
   const handleDeleteWorkOrder = async (workOrder: WorkOrderWithDetails) => {
-    if (
-      !window.confirm(
-        `Are you sure you want to delete work order ${
-          workOrder.shipyard_wo_number ||
-          workOrder.customer_wo_number ||
-          "this work order"
-        }?`
-      )
-    ) {
-      return;
-    }
-
     try {
       const { error } = await supabase
         .from("work_order")
@@ -502,16 +490,25 @@ export default function VesselWorkOrders() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="space-y-1">
                           <div className="text-sm text-gray-900">
-                            SY: {formatDate(wo.shipyard_wo_date)}
+                            <span className="font-medium text-gray-600">
+                              Shipyard WO:
+                            </span>{" "}
+                            {formatDate(wo.shipyard_wo_date)}
                           </div>
                           {wo.customer_wo_date && (
                             <div className="text-sm text-gray-500">
-                              Customer: {formatDate(wo.customer_wo_date)}
+                              <span className="font-medium text-gray-600">
+                                Customer WO:
+                              </span>{" "}
+                              {formatDate(wo.customer_wo_date)}
                             </div>
                           )}
                           {wo.wo_document_delivery_date && (
                             <div className="text-xs text-blue-600">
-                              Doc: {formatDate(wo.wo_document_delivery_date)}
+                              <span className="font-medium text-blue-700">
+                                Doc Delivery:
+                              </span>{" "}
+                              {formatDate(wo.wo_document_delivery_date)}
                             </div>
                           )}
                         </div>
@@ -607,10 +604,14 @@ export default function VesselWorkOrders() {
                                               <h5 className="font-medium text-gray-900 mb-2">
                                                 {detail.description}
                                               </h5>
+                                              {/* Enhanced work details with clear labels */}
                                               <div className="space-y-1 text-sm text-gray-600">
                                                 {detail.location && (
                                                   <div className="flex items-center gap-1">
                                                     <span>📍</span>
+                                                    <span className="font-medium">
+                                                      Location:
+                                                    </span>
                                                     <span>
                                                       {detail.location}
                                                     </span>
@@ -619,16 +620,19 @@ export default function VesselWorkOrders() {
                                                 {detail.pic && (
                                                   <div className="flex items-center gap-1">
                                                     <span>👤</span>
-                                                    <span>
-                                                      PIC: {detail.pic}
+                                                    <span className="font-medium">
+                                                      PIC:
                                                     </span>
+                                                    <span>{detail.pic}</span>
                                                   </div>
                                                 )}
                                                 {detail.planned_start_date && (
                                                   <div className="flex items-center gap-1">
                                                     <span>📅</span>
+                                                    <span className="font-medium">
+                                                      Planned Start:
+                                                    </span>
                                                     <span>
-                                                      Start:{" "}
                                                       {formatDate(
                                                         detail.planned_start_date
                                                       )}
@@ -638,10 +642,38 @@ export default function VesselWorkOrders() {
                                                 {detail.target_close_date && (
                                                   <div className="flex items-center gap-1">
                                                     <span>🎯</span>
+                                                    <span className="font-medium">
+                                                      Target Close:
+                                                    </span>
                                                     <span>
-                                                      Target:{" "}
                                                       {formatDate(
                                                         detail.target_close_date
+                                                      )}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                                {detail.actual_start_date && (
+                                                  <div className="flex items-center gap-1">
+                                                    <span>▶️</span>
+                                                    <span className="font-medium">
+                                                      Actual Start:
+                                                    </span>
+                                                    <span>
+                                                      {formatDate(
+                                                        detail.actual_start_date
+                                                      )}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                                {detail.actual_close_date && (
+                                                  <div className="flex items-center gap-1">
+                                                    <span>✅</span>
+                                                    <span className="font-medium">
+                                                      Actual Close:
+                                                    </span>
+                                                    <span>
+                                                      {formatDate(
+                                                        detail.actual_close_date
                                                       )}
                                                     </span>
                                                   </div>
@@ -675,7 +707,9 @@ export default function VesselWorkOrders() {
                                             </div>
                                             {detail.latest_progress_date && (
                                               <div className="text-xs text-blue-600 mt-1">
-                                                Last update:{" "}
+                                                <span className="font-medium">
+                                                  Last Progress:
+                                                </span>{" "}
                                                 {formatDateTime(
                                                   detail.latest_progress_date
                                                 )}
