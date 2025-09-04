@@ -25,6 +25,7 @@ import {
 import { AddWorkDetails, EditWorkDetails } from "./components/workDetails";
 import WorkOrderDetails from "./components/workDetails/WODetails";
 import { AddWorkProgress, WorkProgressTable } from "./components/workProgress";
+import { InvoiceList, AddInvoice } from "./components/invoice";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -46,6 +47,10 @@ function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
 
   if (loading) {
     return (
@@ -69,7 +74,7 @@ function App() {
 
   return (
     <Router>
-      <Layout user={user}>
+      <Layout onLogout={handleLogout}>
         <Routes>
           {/* Dashboard */}
           <Route path="/" element={<Dashboard />} />
@@ -113,6 +118,10 @@ function App() {
             path="/work-verification/verify/:workDetailsId"
             element={<VerifyWorkDetails />}
           />
+
+          {/* Invoice Routes */}
+          <Route path="/invoices" element={<InvoiceList />} />
+          <Route path="/invoices/add" element={<AddInvoice />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" />} />

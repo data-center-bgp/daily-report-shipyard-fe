@@ -2,6 +2,25 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase, type WorkOrder } from "../../lib/supabase";
 
+interface WorkDetailsWithProgress {
+  id: number;
+  description: string;
+  location?: string;
+  pic?: string;
+  current_progress: number;
+  latest_progress_date?: string;
+  progress_count: number;
+  verification_status: boolean;
+  verification_date?: string;
+  work_progress: Array<{
+    progress_percentage: number;
+    report_date: string;
+    evidence_url?: string;
+    storage_path?: string;
+    created_at: string;
+  }>;
+}
+
 interface WorkOrderOption extends WorkOrder {
   vessel: {
     id: number;
@@ -9,9 +28,11 @@ interface WorkOrderOption extends WorkOrder {
     type: string;
     company: string;
   };
-  current_progress?: number;
-  has_progress_data?: boolean;
-  latest_progress_date?: string;
+  work_details: WorkDetailsWithProgress[];
+  overall_progress: number;
+  has_progress_data: boolean;
+  verification_status: boolean;
+  is_fully_completed: boolean;
 }
 
 export default function AddInvoice() {
@@ -49,17 +70,29 @@ export default function AddInvoice() {
       setLoading(true);
       setError(null);
 
-      // Fetch work orders with progress data
+      console.log("🔍 Fetching work orders for invoice creation...");
+
+      // Use EXACT same query as InvoiceList.tsx
       const { data: workOrderData, error: woError } = await supabase
         .from("work_order")
         .select(
           `
           *,
-          project_progress (
-            progress,
-            report_date
+          work_details (
+            *,
+            work_progress (
+              progress_percentage,
+              report_date,
+              evidence_url,
+              storage_path,
+              created_at
+            ),
+            work_verification (
+              work_verification,
+              verification_date
+            )
           ),
-          vessel:vessel_id (
+          vessel (
             id,
             name,
             type,
@@ -72,39 +105,123 @@ export default function AddInvoice() {
 
       if (woError) throw woError;
 
-      // Process work orders to calculate progress
-      const workOrdersWithProgress = (workOrderData || []).map((wo) => {
-        const progressRecords = wo.project_progress || [];
+      console.log("📋 Work orders fetched:", workOrderData?.length || 0);
 
-        if (progressRecords.length === 0) {
+      // Process work orders with progress data - EXACT same logic as InvoiceList
+      const workOrdersWithProgress = (workOrderData || []).map((wo) => {
+        const workDetails = wo.work_details || [];
+
+        // Process each work detail to get its latest progress - SAME AS InvoiceList
+        const workDetailsWithProgress = workDetails.map((detail) => {
+          const progressRecords = detail.work_progress || [];
+          const verificationRecords = detail.work_verification || [];
+
+          if (progressRecords.length === 0) {
+            return {
+              ...detail,
+              current_progress: 0,
+              latest_progress_date: undefined,
+              progress_count: 0,
+              verification_status: verificationRecords.some(
+                (v) => v.work_verification === true
+              ),
+              verification_date: verificationRecords.find(
+                (v) => v.work_verification === true
+              )?.verification_date,
+            };
+          }
+
+          // Sort progress records by date (newest first) - SAME AS InvoiceList
+          const sortedProgress = progressRecords.sort(
+            (a, b) =>
+              new Date(b.report_date).getTime() -
+              new Date(a.report_date).getTime()
+          );
+
+          const latestProgress = sortedProgress[0]?.progress_percentage || 0;
+          const latestProgressDate = sortedProgress[0]?.report_date;
+
           return {
-            ...wo,
-            current_progress: 0,
-            has_progress_data: false,
+            ...detail,
+            current_progress: latestProgress,
+            latest_progress_date: latestProgressDate,
+            progress_count: progressRecords.length,
+            verification_status: verificationRecords.some(
+              (v) => v.work_verification === true
+            ),
+            verification_date: verificationRecords.find(
+              (v) => v.work_verification === true
+            )?.verification_date,
           };
+        });
+
+        // Calculate overall work order progress - SAME AS InvoiceList
+        let overallProgress = 0;
+        let hasProgressData = false;
+
+        if (workDetailsWithProgress.length > 0) {
+          // Average progress across all work details
+          const totalProgress = workDetailsWithProgress.reduce(
+            (sum, detail) => sum + (detail.current_progress || 0),
+            0
+          );
+          overallProgress = Math.round(
+            totalProgress / workDetailsWithProgress.length
+          );
+          hasProgressData = workDetailsWithProgress.some(
+            (detail) => detail.current_progress > 0
+          );
         }
 
-        const sortedProgress = progressRecords.sort(
-          (a, b) =>
-            new Date(b.report_date).getTime() -
-            new Date(a.report_date).getTime()
+        // Check if ALL work details are 100% complete
+        const isFullyCompleted =
+          workDetailsWithProgress.length > 0 &&
+          workDetailsWithProgress.every(
+            (detail) => detail.current_progress === 100
+          );
+
+        // Check verification status
+        const verificationStatus = workDetailsWithProgress.some(
+          (detail) => detail.verification_status
         );
 
-        const latestProgress = sortedProgress[0]?.progress || 0;
-        const latestProgressDate = sortedProgress[0]?.report_date;
+        console.log(
+          `Work Order ${wo.id}: ${overallProgress}% complete, ${
+            isFullyCompleted ? "FULLY COMPLETED" : "not complete"
+          }`
+        );
+        console.log(
+          `  - ${workDetailsWithProgress.length} details, ${
+            workDetailsWithProgress.filter((d) => d.current_progress === 100)
+              .length
+          } at 100%`
+        );
 
         return {
           ...wo,
-          current_progress: latestProgress,
-          has_progress_data: true,
-          latest_progress_date: latestProgressDate,
+          work_details: workDetailsWithProgress,
+          overall_progress: overallProgress,
+          has_progress_data: hasProgressData,
+          verification_status: verificationStatus,
+          is_fully_completed: isFullyCompleted,
         };
       });
 
-      // Filter only completed work orders (100% progress)
-      const completed = workOrdersWithProgress.filter(
-        (wo) => wo.current_progress === 100
+      console.log(
+        "📊 Total work orders processed:",
+        workOrdersWithProgress.length
       );
+      console.log(
+        "✅ Fully completed work orders:",
+        workOrdersWithProgress.filter((wo) => wo.is_fully_completed).length
+      );
+
+      // Filter only fully completed work orders (all work details at 100%)
+      const fullyCompleted = workOrdersWithProgress.filter(
+        (wo) => wo.is_fully_completed
+      );
+
+      console.log("🎯 Checking for existing invoices...");
 
       // Get existing invoices to exclude work orders that already have invoices
       const { data: existingInvoices, error: invoiceError } = await supabase
@@ -119,16 +236,19 @@ export default function AddInvoice() {
       const invoicedWorkOrderIds = (existingInvoices || []).map(
         (inv) => inv.work_order_id
       );
+      console.log("📄 Already invoiced work order IDs:", invoicedWorkOrderIds);
 
       // Filter out work orders that already have invoices
-      const availableForInvoicing = completed.filter(
+      const availableForInvoicing = fullyCompleted.filter(
         (wo) => !invoicedWorkOrderIds.includes(wo.id)
       );
+
+      console.log("📋 Available for invoicing:", availableForInvoicing.length);
 
       setWorkOrders(workOrdersWithProgress);
       setCompletedWorkOrders(availableForInvoicing);
     } catch (err) {
-      console.error("Error fetching work orders:", err);
+      console.error("❌ Error fetching work orders:", err);
       setError(
         err instanceof Error ? err.message : "Failed to load work orders"
       );
@@ -183,8 +303,10 @@ export default function AddInvoice() {
       return;
     }
 
-    if (selectedWorkOrder.current_progress !== 100) {
-      setError("Work order must be 100% complete before creating an invoice");
+    if (!selectedWorkOrder.is_fully_completed) {
+      setError(
+        "All work details must be 100% complete before creating an invoice"
+      );
       return;
     }
 
@@ -203,7 +325,7 @@ export default function AddInvoice() {
 
       // Get user profile for numeric ID
       const { data: userProfile, error: profileError } = await supabase
-        .from("user_profile")
+        .from("profiles")
         .select("id")
         .eq("auth_user_id", user.id)
         .single();
@@ -287,7 +409,8 @@ export default function AddInvoice() {
               Add New Invoice
             </h1>
             <p className="text-gray-600 mt-2">
-              Create a new invoice for a completed work order (100% progress)
+              Create a new invoice for a completed work order (all work details
+              at 100% progress)
             </p>
           </div>
 
@@ -297,54 +420,6 @@ export default function AddInvoice() {
           >
             ← Back to Invoices
           </button>
-        </div>
-
-        {/* Stats Card */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-blue-600">
-                  Total Work Orders
-                </p>
-                <p className="text-2xl font-bold text-blue-900">
-                  {workOrders.length}
-                </p>
-              </div>
-              <span className="text-blue-500 text-2xl">📋</span>
-            </div>
-          </div>
-
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-green-600">
-                  Completed (100%)
-                </p>
-                <p className="text-2xl font-bold text-green-900">
-                  {
-                    workOrders.filter((wo) => wo.current_progress === 100)
-                      .length
-                  }
-                </p>
-              </div>
-              <span className="text-green-500 text-2xl">✅</span>
-            </div>
-          </div>
-
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-purple-600">
-                  Available for Invoice
-                </p>
-                <p className="text-2xl font-bold text-purple-900">
-                  {completedWorkOrders.length}
-                </p>
-              </div>
-              <span className="text-purple-500 text-2xl">📄</span>
-            </div>
-          </div>
         </div>
 
         {/* Error Message */}
@@ -367,17 +442,18 @@ export default function AddInvoice() {
               </h3>
             </div>
             <div className="text-yellow-700 space-y-2">
-              <p>To create an invoice, you need work orders that are:</p>
+              <p>To create an invoice, you need work orders where:</p>
               <ul className="list-disc list-inside ml-4 space-y-1">
-                <li>100% complete (finished)</li>
+                <li>All work details are 100% complete</li>
                 <li>Don't already have an existing invoice</li>
+                <li>Verification is optional but recommended</li>
               </ul>
               <div className="mt-4">
                 <button
-                  onClick={() => navigate("/work-orders")}
+                  onClick={() => navigate("/vessels")}
                   className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors mr-3"
                 >
-                  View Work Orders
+                  View Vessels
                 </button>
                 <button
                   onClick={() => navigate("/progress-tracker")}
@@ -417,13 +493,14 @@ export default function AddInvoice() {
                       {wo.customer_wo_number ||
                         wo.shipyard_wo_number ||
                         `WO-${wo.id}`}{" "}
-                      - {wo.vessel?.name} ({wo.vessel?.company}) - Completed{" "}
-                      {formatDate(wo.latest_progress_date)}
+                      - {wo.vessel?.name} ({wo.vessel?.company})
+                      {wo.verification_status ? " 🔍 Verified" : ""}
                     </option>
                   ))}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  Only work orders with 100% progress are shown
+                  Only work orders with all work details at 100% progress are
+                  shown
                 </p>
               </div>
 
@@ -436,10 +513,10 @@ export default function AddInvoice() {
                     );
                     return selectedWO ? (
                       <div>
-                        <h4 className="font-medium text-green-900 mb-2">
+                        <h4 className="font-medium text-green-900 mb-3">
                           Selected Work Order Details
                         </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-green-800">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-green-800 mb-4">
                           <div>
                             <strong>Customer WO:</strong>{" "}
                             {selectedWO.customer_wo_number || "-"}
@@ -457,11 +534,48 @@ export default function AddInvoice() {
                             {selectedWO.vessel?.company || "-"}
                           </div>
                           <div>
-                            <strong>Progress:</strong> ✅ 100% Complete
+                            <strong>Overall Progress:</strong> ✅{" "}
+                            {selectedWO.overall_progress}% Complete
                           </div>
                           <div>
-                            <strong>Completed:</strong>{" "}
-                            {formatDate(selectedWO.latest_progress_date)}
+                            <strong>Verification:</strong>{" "}
+                            {selectedWO.verification_status
+                              ? "🔍 Verified"
+                              : "⏳ Not Verified"}
+                          </div>
+                        </div>
+
+                        {/* Work Details Summary */}
+                        <div>
+                          <h5 className="font-medium text-green-900 mb-2">
+                            Work Details Status:
+                          </h5>
+                          <div className="space-y-2">
+                            {selectedWO.work_details.map((detail) => (
+                              <div
+                                key={detail.id}
+                                className="flex items-center justify-between bg-white rounded p-2 text-sm"
+                              >
+                                <div className="flex-1">
+                                  <span className="font-medium">
+                                    {detail.description}
+                                  </span>
+                                  {detail.location && (
+                                    <span className="text-gray-600 ml-2">
+                                      📍 {detail.location}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-green-700">
+                                    {detail.current_progress}%
+                                  </span>
+                                  {detail.verification_status && (
+                                    <span title="Verified">🔍</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       </div>
@@ -470,6 +584,7 @@ export default function AddInvoice() {
                 </div>
               )}
 
+              {/* Rest of the form remains the same... */}
               {/* Invoice Information */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>

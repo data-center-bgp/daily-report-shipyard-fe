@@ -87,6 +87,15 @@ export default function Layout({ children, onLogout }: LayoutProps) {
         location.pathname === "/work-verification" ||
         location.pathname.startsWith("/work-verification/"),
     },
+    {
+      name: "Invoices",
+      href: "/invoices",
+      icon: "💰",
+      current:
+        location.pathname === "/invoices" ||
+        location.pathname.startsWith("/invoices/") ||
+        location.pathname.includes("/invoice"),
+    },
   ];
 
   return (
