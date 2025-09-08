@@ -25,7 +25,7 @@ import {
 import { AddWorkDetails, EditWorkDetails } from "./components/workDetails";
 import WorkOrderDetails from "./components/workDetails/WODetails";
 import { AddWorkProgress, WorkProgressTable } from "./components/workProgress";
-import { InvoiceList, AddInvoice } from "./components/invoice";
+import { InvoiceList, AddInvoice, EditInvoice } from "./components/invoice";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -122,6 +122,7 @@ function App() {
           {/* Invoice Routes */}
           <Route path="/invoices" element={<InvoiceList />} />
           <Route path="/invoices/add" element={<AddInvoice />} />
+          <Route path="/invoices/:id/edit" element={<EditInvoice />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" />} />
