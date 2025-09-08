@@ -421,12 +421,6 @@ export default function InvoiceList() {
           >
             ➕ Create Invoice
           </button>
-          <button
-            onClick={() => navigate("/vessels")}
-            className="text-blue-600 hover:text-blue-800 flex items-center gap-2 transition-colors"
-          >
-            🚢 Vessels
-          </button>
         </div>
       </div>
 
@@ -556,58 +550,139 @@ export default function InvoiceList() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Invoice & Customer
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Work Order & Vessel
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Amount & Payment
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Invoice Details
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Due Date & Status
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Important Dates
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Quick Actions
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Payment Info
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status & Due
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredWorkOrders.map((wo) => (
                     <tr key={wo.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
+                      {/* Work Order & Vessel */}
+                      <td className="px-4 py-4">
                         <div className="space-y-1">
-                          {wo.invoice_details ? (
-                            <>
-                              <div className="text-sm font-medium text-gray-900">
-                                Invoice:{" "}
-                                {wo.invoice_details.invoice_number || "-"}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                Faktur:{" "}
-                                {wo.invoice_details.faktur_number || "-"}
-                              </div>
-                            </>
-                          ) : (
-                            <div className="text-sm font-medium text-blue-600">
-                              Ready for invoicing
-                            </div>
-                          )}
                           <div className="text-sm font-medium text-gray-900">
+                            WO:{" "}
+                            {wo.customer_wo_number ||
+                              wo.shipyard_wo_number ||
+                              `WO-${wo.id}`}
+                          </div>
+                          <div className="text-sm font-semibold text-blue-900">
                             {wo.vessel?.name || "-"}
                           </div>
-                          <div className="text-sm text-gray-500">
-                            {wo.vessel?.company || "-"}
+                          <div className="text-xs text-gray-500">
+                            {wo.vessel?.type} • {wo.vessel?.company}
                           </div>
-                          {wo.invoice_details?.receiver_name && (
-                            <div className="text-xs text-gray-400">
-                              Receiver: {wo.invoice_details.receiver_name}
+                          {wo.completion_date && (
+                            <div className="text-xs text-green-600">
+                              ✅ Completed: {formatDate(wo.completion_date)}
                             </div>
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+
+                      {/* Invoice Details */}
+                      <td className="px-4 py-4">
                         {wo.invoice_details ? (
                           <div className="space-y-1">
-                            <div className="text-lg font-bold text-gray-900">
+                            <div className="text-sm font-medium text-gray-900">
+                              Invoice:{" "}
+                              {wo.invoice_details.invoice_number || "-"}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              Faktur: {wo.invoice_details.faktur_number || "-"}
+                            </div>
+                            {wo.invoice_details.receiver_name && (
+                              <div className="text-xs text-gray-500">
+                                To: {wo.invoice_details.receiver_name}
+                              </div>
+                            )}
+                            <div className="text-xs text-gray-400">
+                              ID: {wo.invoice_details.id}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-sm font-medium text-orange-600">
+                            📋 Ready for invoicing
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Important Dates */}
+                      <td className="px-4 py-4">
+                        {wo.invoice_details ? (
+                          <div className="space-y-1">
+                            {wo.invoice_details.wo_document_collection_date && (
+                              <div className="text-xs">
+                                <span className="text-gray-500">
+                                  Doc Collection:
+                                </span>
+                                <br />
+                                <span className="text-gray-900">
+                                  {formatDate(
+                                    wo.invoice_details
+                                      .wo_document_collection_date
+                                  )}
+                                </span>
+                              </div>
+                            )}
+                            {wo.invoice_details.delivery_date && (
+                              <div className="text-xs">
+                                <span className="text-gray-500">Delivery:</span>
+                                <br />
+                                <span className="text-gray-900">
+                                  {formatDate(wo.invoice_details.delivery_date)}
+                                </span>
+                              </div>
+                            )}
+                            {wo.invoice_details.collection_date && (
+                              <div className="text-xs">
+                                <span className="text-gray-500">
+                                  Collection:
+                                </span>
+                                <br />
+                                <span className="text-gray-900">
+                                  {formatDate(
+                                    wo.invoice_details.collection_date
+                                  )}
+                                </span>
+                              </div>
+                            )}
+                            <div className="text-xs">
+                              <span className="text-gray-500">Created:</span>
+                              <br />
+                              <span className="text-gray-900">
+                                {formatDate(wo.invoice_details.created_at)}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-gray-400">
+                            No invoice created yet
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Payment Info */}
+                      <td className="px-4 py-4">
+                        {wo.invoice_details ? (
+                          <div className="space-y-2">
+                            <div className="text-base font-bold text-gray-900">
                               {formatCurrency(wo.invoice_details.payment_price)}
                             </div>
                             <span
@@ -622,9 +697,17 @@ export default function InvoiceList() {
                                 : "⏳ Unpaid"}
                             </span>
                             {wo.invoice_details.payment_date && (
-                              <div className="text-xs text-gray-500">
-                                Paid:{" "}
+                              <div className="text-xs text-green-600">
+                                💰 Paid:{" "}
                                 {formatDate(wo.invoice_details.payment_date)}
+                              </div>
+                            )}
+                            {wo.invoice_details.remarks && (
+                              <div className="text-xs text-gray-500 italic">
+                                📝 {wo.invoice_details.remarks.substring(0, 50)}
+                                {wo.invoice_details.remarks.length > 50
+                                  ? "..."
+                                  : ""}
                               </div>
                             )}
                           </div>
@@ -634,11 +717,13 @@ export default function InvoiceList() {
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4">
+
+                      {/* Status & Due */}
+                      <td className="px-4 py-4">
                         {wo.invoice_details ? (
-                          <div className="space-y-1">
-                            <div className="text-sm text-gray-900">
-                              {formatDate(wo.invoice_details.due_date)}
+                          <div className="space-y-2">
+                            <div className="text-sm font-medium text-gray-900">
+                              Due: {formatDate(wo.invoice_details.due_date)}
                             </div>
                             <div
                               className={`text-xs font-medium ${
@@ -655,24 +740,52 @@ export default function InvoiceList() {
                                 ).text
                               }
                             </div>
-                            <div className="text-xs text-gray-400">
-                              Created:{" "}
-                              {formatDate(wo.invoice_details.created_at)}
+                            {/* Progress indicator */}
+                            <div className="flex items-center space-x-1">
+                              <div className="w-16 bg-gray-200 rounded-full h-1.5">
+                                <div
+                                  className="bg-blue-600 h-1.5 rounded-full"
+                                  style={{ width: `${wo.overall_progress}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-xs text-gray-500">
+                                {wo.overall_progress}%
+                              </span>
                             </div>
+                            {wo.verification_status && (
+                              <div className="text-xs text-green-600">
+                                ✓ Verified
+                              </div>
+                            )}
                           </div>
                         ) : (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            🏁 Work Complete
-                          </span>
+                          <div className="space-y-2">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              🏁 Work Complete
+                            </span>
+                            <div className="flex items-center space-x-1">
+                              <div className="w-16 bg-gray-200 rounded-full h-1.5">
+                                <div
+                                  className="bg-green-600 h-1.5 rounded-full"
+                                  style={{ width: `${wo.overall_progress}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-xs text-gray-500">
+                                {wo.overall_progress}%
+                              </span>
+                            </div>
+                          </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <div className="flex items-center gap-2">
+
+                      {/* Actions */}
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="flex flex-col gap-1">
                           {!wo.has_existing_invoice ? (
                             <>
                               <button
                                 onClick={() => handleCreateInvoice(wo.id)}
-                                className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700 transition-colors"
+                                className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition-colors text-center"
                                 title="Create Invoice"
                               >
                                 📄 Create Invoice
@@ -683,7 +796,7 @@ export default function InvoiceList() {
                                     `/vessel/${wo.vessel?.id}/work-orders`
                                   )
                                 }
-                                className="text-blue-600 hover:text-blue-900 transition-colors text-xs"
+                                className="text-blue-600 hover:text-blue-900 transition-colors text-xs text-center"
                                 title="View Work Details"
                               >
                                 📋 View Work
@@ -697,7 +810,7 @@ export default function InvoiceList() {
                                     `/invoices/${wo.invoice_details?.id}/edit`
                                   )
                                 }
-                                className="text-blue-600 hover:text-blue-900 transition-colors text-xs"
+                                className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 transition-colors text-center"
                                 title="Edit Invoice"
                               >
                                 ✏️ Edit Invoice
@@ -708,10 +821,10 @@ export default function InvoiceList() {
                                     `/vessel/${wo.vessel?.id}/work-orders`
                                   )
                                 }
-                                className="text-gray-600 hover:text-gray-900 transition-colors text-xs"
+                                className="text-gray-600 hover:text-gray-900 transition-colors text-xs text-center"
                                 title="View Work Details"
                               >
-                                📋 Work
+                                📋 View Work
                               </button>
                             </>
                           )}
