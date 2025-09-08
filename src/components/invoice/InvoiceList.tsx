@@ -7,7 +7,7 @@ interface InvoiceDetails {
   created_at: string;
   updated_at: string;
   deleted_at?: string;
-  invoice_collection_date?: string;
+  wo_document_collection_date?: string;
   invoice_number?: string;
   faktur_number?: string;
   due_date?: string;
@@ -73,16 +73,11 @@ export default function InvoiceList() {
   const [statusFilter, setStatusFilter] = useState<
     "all" | "ready" | "invoiced" | "paid" | "unpaid"
   >("all");
-  const [submittingPayment, setSubmittingPayment] = useState<number | null>(
-    null
-  );
 
   const fetchCompletedWorkOrders = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-
-      console.log("🔍 Fetching completed work orders with invoice details...");
 
       // Fetch all work orders with details
       const { data: workOrderData, error: woError } = await supabase
@@ -117,24 +112,18 @@ export default function InvoiceList() {
 
       if (woError) throw woError;
 
-      console.log("📋 Work orders fetched:", workOrderData?.length || 0);
-
-      // Get existing invoices with full details
+      // Get existing invoices
       const { data: existingInvoices, error: invoiceError } = await supabase
         .from("invoice_details")
         .select("*")
         .is("deleted_at", null);
 
-      if (invoiceError) {
-        console.error("Error fetching existing invoices:", invoiceError);
-      }
+      if (invoiceError) throw invoiceError;
 
       const invoiceMap = new Map<number, InvoiceDetails>();
       (existingInvoices || []).forEach((invoice) => {
         invoiceMap.set(invoice.work_order_id, invoice);
       });
-
-      console.log("📄 Invoices fetched:", existingInvoices?.length || 0);
 
       // Process work orders with progress data
       const processedWorkOrders = (workOrderData || []).map((wo) => {
@@ -244,7 +233,7 @@ export default function InvoiceList() {
 
       setWorkOrders(completedWorkOrders);
     } catch (err) {
-      console.error("❌ Error fetching completed work orders:", err);
+      console.error("Error fetching completed work orders:", err);
       setError(
         err instanceof Error
           ? err.message
@@ -261,66 +250,6 @@ export default function InvoiceList() {
 
   const handleCreateInvoice = (workOrderId: number) => {
     navigate(`/invoices/add?work_order_id=${workOrderId}`);
-  };
-
-  const handleMarkAsPaid = async (invoice: InvoiceDetails) => {
-    try {
-      setSubmittingPayment(invoice.id);
-      setError(null);
-
-      const { error } = await supabase
-        .from("invoice_details")
-        .update({
-          payment_status: true,
-          payment_date: new Date().toISOString().split("T")[0],
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", invoice.id);
-
-      if (error) throw error;
-
-      setSuccess("Payment marked as completed successfully!");
-      await fetchCompletedWorkOrders();
-
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      console.error("Error updating payment status:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to update payment status"
-      );
-    } finally {
-      setSubmittingPayment(null);
-    }
-  };
-
-  const handleMarkAsUnpaid = async (invoice: InvoiceDetails) => {
-    try {
-      setSubmittingPayment(invoice.id);
-      setError(null);
-
-      const { error } = await supabase
-        .from("invoice_details")
-        .update({
-          payment_status: false,
-          payment_date: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", invoice.id);
-
-      if (error) throw error;
-
-      setSuccess("Payment status updated to unpaid");
-      await fetchCompletedWorkOrders();
-
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      console.error("Error updating payment status:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to update payment status"
-      );
-    } finally {
-      setSubmittingPayment(null);
-    }
   };
 
   const formatDate = (dateString: string | null | undefined) => {
@@ -385,8 +314,9 @@ export default function InvoiceList() {
     };
   };
 
-  // Filter work orders
+  // Filtering logic
   const filteredWorkOrders = workOrders.filter((wo) => {
+    // Search filter
     const matchesSearch =
       searchTerm === "" ||
       wo.customer_wo_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -403,14 +333,32 @@ export default function InvoiceList() {
         ?.toLowerCase()
         .includes(searchTerm.toLowerCase());
 
-    const matchesStatus =
-      statusFilter === "all" ||
-      (statusFilter === "ready" && !wo.has_existing_invoice) ||
-      (statusFilter === "invoiced" && wo.has_existing_invoice) ||
-      (statusFilter === "paid" && wo.invoice_details?.payment_status) ||
-      (statusFilter === "unpaid" &&
-        wo.invoice_details &&
-        !wo.invoice_details.payment_status);
+    // Status filter
+    let matchesStatus = false;
+
+    switch (statusFilter) {
+      case "all":
+        matchesStatus = true;
+        break;
+      case "ready":
+        matchesStatus = !wo.has_existing_invoice;
+        break;
+      case "invoiced":
+        matchesStatus = wo.has_existing_invoice;
+        break;
+      case "paid":
+        matchesStatus =
+          wo.has_existing_invoice &&
+          wo.invoice_details?.payment_status === true;
+        break;
+      case "unpaid":
+        matchesStatus =
+          wo.has_existing_invoice &&
+          wo.invoice_details?.payment_status === false;
+        break;
+      default:
+        matchesStatus = true;
+    }
 
     return matchesSearch && matchesStatus;
   });
@@ -424,23 +372,11 @@ export default function InvoiceList() {
     (wo) => wo.has_existing_invoice
   ).length;
   const paidInvoices = workOrders.filter(
-    (wo) => wo.invoice_details?.payment_status
+    (wo) => wo.invoice_details?.payment_status === true
   ).length;
   const unpaidInvoices = workOrders.filter(
-    (wo) => wo.invoice_details && !wo.invoice_details.payment_status
+    (wo) => wo.invoice_details?.payment_status === false
   ).length;
-  const totalInvoiceValue = workOrders.reduce(
-    (sum, wo) => sum + (wo.invoice_details?.payment_price || 0),
-    0
-  );
-  const paidValue = workOrders
-    .filter((wo) => wo.invoice_details?.payment_status)
-    .reduce((sum, wo) => sum + (wo.invoice_details?.payment_price || 0), 0);
-  const overdueInvoices = workOrders.filter((wo) => {
-    if (!wo.invoice_details || wo.invoice_details.payment_status) return false;
-    const days = getDaysUntilDue(wo.invoice_details.due_date);
-    return days !== null && days < 0;
-  }).length;
 
   if (loading) {
     return (
@@ -468,16 +404,28 @@ export default function InvoiceList() {
 
         <div className="flex gap-3">
           <button
+            onClick={fetchCompletedWorkOrders}
+            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"
+            disabled={loading}
+          >
+            {loading ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            ) : (
+              "🔄"
+            )}
+            Refresh
+          </button>
+          <button
             onClick={() => navigate("/invoices/add")}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
           >
             ➕ Create Invoice
           </button>
           <button
-            onClick={() => navigate("/work-orders")}
+            onClick={() => navigate("/vessels")}
             className="text-blue-600 hover:text-blue-800 flex items-center gap-2 transition-colors"
           >
-            📋 Work Orders
+            🚢 Vessels
           </button>
         </div>
       </div>
@@ -664,12 +612,12 @@ export default function InvoiceList() {
                             </div>
                             <span
                               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                wo.invoice_details.payment_status
+                                wo.invoice_details.payment_status === true
                                   ? "bg-green-100 text-green-800"
                                   : "bg-red-100 text-red-800"
                               }`}
                             >
-                              {wo.invoice_details.payment_status
+                              {wo.invoice_details.payment_status === true
                                 ? "✅ Paid"
                                 : "⏳ Unpaid"}
                             </span>
@@ -696,14 +644,14 @@ export default function InvoiceList() {
                               className={`text-xs font-medium ${
                                 getDueDateStatus(
                                   wo.invoice_details.due_date,
-                                  wo.invoice_details.payment_status
+                                  wo.invoice_details.payment_status === true
                                 ).color
                               }`}
                             >
                               {
                                 getDueDateStatus(
                                   wo.invoice_details.due_date,
-                                  wo.invoice_details.payment_status
+                                  wo.invoice_details.payment_status === true
                                 ).text
                               }
                             </div>
@@ -731,7 +679,9 @@ export default function InvoiceList() {
                               </button>
                               <button
                                 onClick={() =>
-                                  navigate(`/work-orders/${wo.id}`)
+                                  navigate(
+                                    `/vessel/${wo.vessel?.id}/work-orders`
+                                  )
                                 }
                                 className="text-blue-600 hover:text-blue-900 transition-colors text-xs"
                                 title="View Work Details"
@@ -741,43 +691,6 @@ export default function InvoiceList() {
                             </>
                           ) : (
                             <>
-                              {!wo.invoice_details?.payment_status ? (
-                                <button
-                                  onClick={() =>
-                                    handleMarkAsPaid(wo.invoice_details!)
-                                  }
-                                  disabled={
-                                    submittingPayment === wo.invoice_details?.id
-                                  }
-                                  className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center gap-1"
-                                  title="Mark as Paid"
-                                >
-                                  {submittingPayment ===
-                                  wo.invoice_details?.id ? (
-                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                                  ) : (
-                                    "💰 Mark Paid"
-                                  )}
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() =>
-                                    handleMarkAsUnpaid(wo.invoice_details!)
-                                  }
-                                  disabled={
-                                    submittingPayment === wo.invoice_details?.id
-                                  }
-                                  className="bg-orange-600 text-white px-3 py-1 rounded text-xs hover:bg-orange-700 transition-colors disabled:opacity-50 flex items-center gap-1"
-                                  title="Mark as Unpaid"
-                                >
-                                  {submittingPayment ===
-                                  wo.invoice_details?.id ? (
-                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                                  ) : (
-                                    "↩️ Mark Unpaid"
-                                  )}
-                                </button>
-                              )}
                               <button
                                 onClick={() =>
                                   navigate(
@@ -787,7 +700,7 @@ export default function InvoiceList() {
                                 className="text-blue-600 hover:text-blue-900 transition-colors text-xs"
                                 title="Edit Invoice"
                               >
-                                ✏️ Edit
+                                ✏️ Edit Invoice
                               </button>
                               <button
                                 onClick={() =>
@@ -838,10 +751,10 @@ export default function InvoiceList() {
                   </p>
                   <div className="space-x-3">
                     <button
-                      onClick={() => navigate("/work-orders")}
+                      onClick={() => navigate("/vessels")}
                       className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
                     >
-                      📋 View Work Orders
+                      🚢 View Vessels
                     </button>
                     <button
                       onClick={() => navigate("/invoices/add")}

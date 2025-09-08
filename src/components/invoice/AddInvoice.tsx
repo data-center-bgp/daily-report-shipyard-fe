@@ -48,7 +48,7 @@ export default function AddInvoice() {
 
   const [formData, setFormData] = useState({
     work_order_id: "",
-    invoice_collection_date: "",
+    wo_document_collection_date: "",
     invoice_number: "",
     faktur_number: "",
     due_date: "",
@@ -338,7 +338,8 @@ export default function AddInvoice() {
       const invoiceData = {
         work_order_id: parseInt(formData.work_order_id),
         user_id: userProfile.id,
-        invoice_collection_date: formData.invoice_collection_date || null,
+        wo_document_collection_date:
+          formData.wo_document_collection_date || null,
         invoice_number: formData.invoice_number || null,
         faktur_number: formData.faktur_number || null,
         due_date: formData.due_date || null,
@@ -628,16 +629,16 @@ export default function AddInvoice() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div>
                   <label
-                    htmlFor="invoice_collection_date"
+                    htmlFor="wo_document_collection_date"
                     className="block text-sm font-medium text-gray-700 mb-2"
                   >
-                    Invoice Collection Date
+                    Work Order Document Collection Date
                   </label>
                   <input
                     type="date"
-                    id="invoice_collection_date"
-                    name="invoice_collection_date"
-                    value={formData.invoice_collection_date}
+                    id="wo_document_collection_date"
+                    name="wo_document_collection_date"
+                    value={formData.wo_document_collection_date}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
