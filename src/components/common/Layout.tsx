@@ -96,6 +96,12 @@ export default function Layout({ children, onLogout }: LayoutProps) {
         location.pathname.startsWith("/invoices/") ||
         location.pathname.includes("/invoice"),
     },
+    {
+      name: "Import/Export",
+      href: "/import-export",
+      icon: "📤",
+      current: location.pathname === "/import-export-data",
+    },
   ];
 
   return (
