@@ -4,9 +4,7 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { supabase } from "./lib/supabase";
-import type { User } from "@supabase/supabase-js";
+import { AuthProvider, useAuth } from "./hooks/useAuth";
 
 // Components
 import Layout from "./components/common/Layout";
@@ -28,29 +26,12 @@ import { AddWorkProgress, WorkProgressTable } from "./components/workProgress";
 import { InvoiceList, AddInvoice, EditInvoice } from "./components/invoice";
 import { ImportExport } from "./components/importExport";
 
-function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+// Separate the app routes into its own component that uses the auth context
+function AppRoutes() {
+  const { user, loading, signOut } = useAuth();
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await signOut();
   };
 
   if (loading) {
@@ -63,76 +44,82 @@ function App() {
 
   if (!user) {
     return (
-      <Router>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="*" element={<Navigate to="/login" />} />
-        </Routes>
-      </Router>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="*" element={<Navigate to="/login" />} />
+      </Routes>
     );
   }
 
   return (
-    <Router>
-      <Layout onLogout={handleLogout}>
-        <Routes>
-          {/* Dashboard */}
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+    <Layout onLogout={handleLogout}>
+      <Routes>
+        {/* Dashboard */}
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/dashboard" element={<Dashboard />} />
 
-          {/* Work Orders */}
-          <Route path="/work-orders" element={<WorkOrders />} />
-          <Route path="/add-work-order" element={<AddWorkOrder />} />
-          <Route
-            path="/vessel/:vesselId/work-orders"
-            element={<VesselWorkOrders />}
-          />
-          <Route
-            path="/edit-work-order/:workOrderId"
-            element={<EditWorkOrder />}
-          />
+        {/* Work Orders */}
+        <Route path="/work-orders" element={<WorkOrders />} />
+        <Route path="/add-work-order" element={<AddWorkOrder />} />
+        <Route
+          path="/vessel/:vesselId/work-orders"
+          element={<VesselWorkOrders />}
+        />
+        <Route
+          path="/edit-work-order/:workOrderId"
+          element={<EditWorkOrder />}
+        />
 
-          {/* Work Details */}
-          <Route path="/work-details" element={<WorkOrderDetails />} />
-          <Route path="/add-work-details" element={<AddWorkDetails />} />
-          <Route
-            path="/edit-work-details/:workDetailsId"
-            element={<EditWorkDetails />}
-          />
+        {/* Work Details */}
+        <Route path="/work-details" element={<WorkOrderDetails />} />
+        <Route path="/add-work-details" element={<AddWorkDetails />} />
+        <Route
+          path="/edit-work-details/:workDetailsId"
+          element={<EditWorkDetails />}
+        />
 
-          {/* Work Progress Routes */}
-          <Route path="/work-progress" element={<WorkProgressTable />} />
-          <Route path="/add-work-progress" element={<AddWorkProgress />} />
-          <Route
-            path="/add-work-progress/:workDetailsId"
-            element={<AddWorkProgress />}
-          />
-          <Route
-            path="/work-details/:workDetailsId/progress"
-            element={<WorkProgressTable />}
-          />
+        {/* Work Progress Routes */}
+        <Route path="/work-progress" element={<WorkProgressTable />} />
+        <Route path="/add-work-progress" element={<AddWorkProgress />} />
+        <Route
+          path="/add-work-progress/:workDetailsId"
+          element={<AddWorkProgress />}
+        />
+        <Route
+          path="/work-details/:workDetailsId/progress"
+          element={<WorkProgressTable />}
+        />
 
-          {/* Verification Routes */}
-          <Route path="/work-verification" element={<WorkVerification />} />
-          <Route
-            path="/work-verification/verify/:workDetailsId"
-            element={<VerifyWorkDetails />}
-          />
+        {/* Verification Routes */}
+        <Route path="/work-verification" element={<WorkVerification />} />
+        <Route
+          path="/work-verification/verify/:workDetailsId"
+          element={<VerifyWorkDetails />}
+        />
 
-          {/* Invoice Routes */}
-          <Route path="/invoices" element={<InvoiceList />} />
-          <Route path="/invoices/add" element={<AddInvoice />} />
-          <Route path="/invoices/:id/edit" element={<EditInvoice />} />
+        {/* Invoice Routes */}
+        <Route path="/invoices" element={<InvoiceList />} />
+        <Route path="/invoices/add" element={<AddInvoice />} />
+        <Route path="/invoices/:id/edit" element={<EditInvoice />} />
 
-          {/* Import/Export Routes */}
-          <Route path="/import-export" element={<ImportExport />} />
+        {/* Import/Export Routes */}
+        <Route path="/import-export" element={<ImportExport />} />
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </Layout>
-    </Router>
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
+    </Layout>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <Router>
+        <AppRoutes />
+      </Router>
+    </AuthProvider>
   );
 }
 
