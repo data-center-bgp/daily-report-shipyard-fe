@@ -26,18 +26,9 @@ interface AuthContextType {
     password: string
   ) => Promise<{ user: User | null; profile: UserProfile | null; error: any }>;
   signOut: () => Promise<void>;
+  // Simplified role checks
   hasRole: (roles: string | string[]) => boolean;
-  hasPermission: (permission: string) => boolean;
-  isMaster: boolean;
-  isFullAccess: boolean; // MASTER, PPIC, PRODUCTION, OPERATION, ADMIN
-  isFinance: boolean;
-  canAccessInvoices: boolean;
-  canEditInvoices: boolean;
-  canCreateWorkOrders: boolean;
-  canEditWorkOrders: boolean;
-  canViewReports: boolean;
-  canExportData: boolean;
-  refreshProfile: () => Promise<void>;
+  canAccess: (feature: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -50,130 +41,27 @@ export function useAuth() {
   return context;
 }
 
-// Enhanced Role-based permissions mapping
-const ROLE_PERMISSIONS = {
-  MASTER: [
-    // Complete system access - no restrictions
-    "manage_users",
-    "manage_vessels",
-    "manage_work_orders",
-    "create_work_orders",
-    "edit_work_orders",
-    "delete_work_orders",
-    "view_all_reports",
-    "export_data",
-    "manage_invoices",
-    "create_invoices",
-    "edit_invoices",
-    "view_invoices",
-    "delete_invoices",
-    "system_settings",
-    "delete_records",
-    "manage_work_details",
-    "manage_work_progress",
-    "verify_work",
-    "assign_tasks",
-    "approve_work",
-    "upload_evidence",
-  ],
-  PPIC: [
-    // Full access except invoice management (can view invoices read-only)
-    "manage_vessels",
-    "manage_work_orders",
-    "create_work_orders",
-    "edit_work_orders",
-    "delete_work_orders",
-    "view_all_reports",
-    "export_data",
-    "view_invoices", // Read-only access to invoices
-    "manage_work_details",
-    "manage_work_progress",
-    "verify_work",
-    "assign_tasks",
-    "approve_work",
-    "upload_evidence",
-    "create_progress_reports",
-  ],
-  PRODUCTION: [
-    // Full access except invoice management (can view invoices read-only)
-    "manage_vessels",
-    "manage_work_orders",
-    "create_work_orders",
-    "edit_work_orders",
-    "delete_work_orders",
-    "view_all_reports",
-    "export_data",
-    "view_invoices", // Read-only access to invoices
-    "manage_work_details",
-    "manage_work_progress",
-    "verify_work",
-    "assign_tasks",
-    "approve_work",
-    "upload_evidence",
-    "create_progress_reports",
-  ],
-  OPERATION: [
-    // Full access except invoice management (can view invoices read-only)
-    "manage_vessels",
-    "manage_work_orders",
-    "create_work_orders",
-    "edit_work_orders",
-    "delete_work_orders",
-    "view_all_reports",
-    "export_data",
-    "view_invoices", // Read-only access to invoices
-    "manage_work_details",
-    "manage_work_progress",
-    "verify_work",
-    "assign_tasks",
-    "approve_work",
-    "upload_evidence",
-    "create_progress_reports",
-  ],
-  ADMIN: [
-    // Full access except invoice management (can view invoices read-only)
-    "manage_users", // Additional user management for admin
-    "manage_vessels",
-    "manage_work_orders",
-    "create_work_orders",
-    "edit_work_orders",
-    "delete_work_orders",
-    "view_all_reports",
-    "export_data",
-    "view_invoices", // Read-only access to invoices
-    "system_settings", // Additional system settings for admin
-    "manage_work_details",
-    "manage_work_progress",
-    "verify_work",
-    "assign_tasks",
-    "approve_work",
-    "upload_evidence",
-    "create_progress_reports",
-  ],
-  FINANCE: [
-    // Full invoice access + read-only access to other sections
-    "view_all_reports", // Read-only reports
-    "view_vessels", // Read-only vessels
-    "view_work_orders", // Read-only work orders
-    "view_work_details", // Read-only work details
-    "view_work_progress", // Read-only work progress
-    "manage_invoices", // Full invoice management
-    "create_invoices",
-    "edit_invoices",
-    "view_invoices",
-    "delete_invoices",
-    "export_invoice_data", // Can export invoice-related data
-  ],
-};
+// Simple feature access rules
+const FEATURE_ACCESS = {
+  // Features that all authenticated users can access
+  dashboard: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "FINANCE"],
+  workOrders: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"],
+  workDetails: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"],
+  progress: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"],
+  vessels: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"],
 
-// Role hierarchy helper
-const ROLE_HIERARCHY = {
-  MASTER: 6,
-  ADMIN: 5,
-  PPIC: 4,
-  PRODUCTION: 4,
-  OPERATION: 4,
-  FINANCE: 3,
+  // Invoice features - only MASTER and FINANCE
+  invoices: ["MASTER", "FINANCE"],
+  createInvoice: ["MASTER", "FINANCE"],
+  editInvoice: ["MASTER", "FINANCE"],
+
+  // Admin features - only MASTER
+  userManagement: ["MASTER"],
+  systemSettings: ["MASTER"],
+
+  // Reports - everyone can view, but different levels
+  reports: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "FINANCE"],
+  exportData: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"],
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -182,11 +70,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Fetch user profile from profiles table
+  // Simplified profile fetch with better error handling
   const fetchProfile = async (userId: string): Promise<UserProfile | null> => {
     try {
-      console.log("🔍 Fetching user profile for:", userId);
-
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
@@ -194,169 +80,74 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (error) {
-        console.error("❌ Error fetching profile:", error);
-        return null;
+        console.error("Profile fetch error:", error);
+        // Return a default profile instead of null to prevent crashes
+        return {
+          id: 0,
+          auth_user_id: userId,
+          email: user?.email || "",
+          role: "OPERATION", // Safe default
+          status: "active",
+        } as UserProfile;
       }
 
-      console.log("✅ Profile fetched:", data);
       return data;
     } catch (err) {
-      console.error("💥 Error in fetchProfile:", err);
-      return null;
+      console.error("Profile fetch exception:", err);
+      // Return default profile on any error
+      return {
+        id: 0,
+        auth_user_id: userId,
+        email: user?.email || "",
+        role: "OPERATION",
+        status: "active",
+      } as UserProfile;
     }
   };
 
-  // Create profile if doesn't exist
-  const createProfile = async (user: User): Promise<UserProfile | null> => {
-    try {
-      console.log("🆕 Creating new profile for user:", user.id);
-
-      const profileData = {
-        auth_user_id: user.id,
-        email: user.email || "",
-        full_name:
-          user.user_metadata?.full_name || user.email?.split("@")[0] || "",
-        name: user.user_metadata?.name || user.email?.split("@")[0] || "",
-        role: "OPERATION" as const, // Default role for new users
-        status: "active" as const,
-      };
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .insert([profileData])
-        .select()
-        .single();
-
-      if (error) {
-        console.error("❌ Error creating profile:", error);
-        return null;
-      }
-
-      console.log("✅ Profile created:", data);
-      return data;
-    } catch (err) {
-      console.error("💥 Error in createProfile:", err);
-      return null;
-    }
-  };
-
-  // Sign in function
+  // Simplified sign in
   const signIn = async (email: string, password: string) => {
     try {
-      console.log("🔐 Starting sign in process...");
-
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
-        console.error("❌ Sign in error:", error);
         return { user: null, profile: null, error };
       }
 
-      console.log("✅ Authentication successful");
-
-      // Fetch or create user profile
-      let userProfile = await fetchProfile(data.user.id);
-
-      if (!userProfile) {
-        console.log("🆕 Profile not found, creating new one...");
-        userProfile = await createProfile(data.user);
-      }
-
-      console.log("👤 Final user profile:", userProfile);
-      console.log("🎯 User role:", userProfile?.role);
-      console.log(
-        "📊 Role hierarchy level:",
-        ROLE_HIERARCHY[userProfile?.role || "OPERATION"]
-      );
-      console.log(
-        "🔑 User permissions:",
-        ROLE_PERMISSIONS[userProfile?.role || "OPERATION"]
-      );
-
-      return { user: data.user, profile: userProfile, error: null };
+      // Always return success, profile will be loaded async
+      return { user: data.user, profile: null, error: null };
     } catch (err) {
-      console.error("💥 Sign in process error:", err);
       return { user: null, profile: null, error: err };
     }
   };
 
-  // Sign out function
   const signOut = async () => {
-    console.log("🚪 Signing out...");
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
     setSession(null);
-    console.log("✅ Signed out successfully");
   };
 
-  // Check if user has specific role(s)
+  // Simple role check - returns false if no profile instead of crashing
   const hasRole = (roles: string | string[]): boolean => {
     if (!profile) return false;
-
     const rolesArray = Array.isArray(roles) ? roles : [roles];
-    const result = rolesArray.includes(profile.role);
-
-    console.log(
-      `🔍 Role check: ${profile.role} in [${rolesArray.join(", ")}] = ${result}`
-    );
-    return result;
+    return rolesArray.includes(profile.role);
   };
 
-  // Check if user has specific permission
-  const hasPermission = (permission: string): boolean => {
+  // Simple feature access check
+  const canAccess = (feature: string): boolean => {
     if (!profile) return false;
-
-    const userPermissions = ROLE_PERMISSIONS[profile.role] || [];
-    const result = userPermissions.includes(permission);
-
-    console.log(
-      `🔑 Permission check: ${permission} for role ${profile.role} = ${result}`
-    );
-    return result;
-  };
-
-  // Enhanced role checkers based on your requirements
-  const isMaster = hasRole("MASTER");
-  const isFullAccess = hasRole([
-    "MASTER",
-    "PPIC",
-    "PRODUCTION",
-    "OPERATION",
-    "ADMIN",
-  ]);
-  const isFinance = hasRole("FINANCE");
-
-  // Specific access checkers
-  const canAccessInvoices =
-    hasRole(["MASTER", "FINANCE"]) || hasPermission("view_invoices");
-  const canEditInvoices =
-    hasRole(["MASTER", "FINANCE"]) && hasPermission("edit_invoices");
-  const canCreateWorkOrders = hasPermission("create_work_orders");
-  const canEditWorkOrders = hasPermission("edit_work_orders");
-  const canViewReports =
-    hasPermission("view_all_reports") || hasPermission("view_own_reports");
-  const canExportData =
-    hasPermission("export_data") || hasPermission("export_invoice_data");
-
-  // Refresh profile data
-  const refreshProfile = async () => {
-    if (user) {
-      const updatedProfile = await fetchProfile(user.id);
-      setProfile(updatedProfile);
-    }
+    const allowedRoles = FEATURE_ACCESS[feature as keyof typeof FEATURE_ACCESS];
+    return allowedRoles ? allowedRoles.includes(profile.role) : false;
   };
 
   // Initialize auth state
   useEffect(() => {
-    console.log("🚀 Initializing auth state...");
-
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log("📱 Initial session:", session ? "Found" : "Not found");
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -367,13 +158,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("🔄 Auth state changed:", event);
-      console.log("📱 New session:", session ? "Found" : "Not found");
-
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -387,9 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   const value = {
@@ -400,17 +185,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signIn,
     signOut,
     hasRole,
-    hasPermission,
-    isMaster,
-    isFullAccess,
-    isFinance,
-    canAccessInvoices,
-    canEditInvoices,
-    canCreateWorkOrders,
-    canEditWorkOrders,
-    canViewReports,
-    canExportData,
-    refreshProfile,
+    canAccess,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

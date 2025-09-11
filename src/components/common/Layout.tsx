@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
+import { useAuth } from "../../hooks/useAuth"; // Add this import
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -14,6 +15,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
   const [user, setUser] = useState<any>(null);
   const location = useLocation();
   const navigate = useNavigate();
+  const { canAccess } = useAuth(); // Add this hook
 
   useEffect(() => {
     // Get current user
@@ -47,6 +49,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       href: "/",
       icon: "📊",
       current: location.pathname === "/",
+      show: true, // Always show dashboard
     },
     {
       name: "Work Orders",
@@ -58,6 +61,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
         location.pathname.startsWith("/work-order/") ||
         location.pathname.startsWith("/add-work-order") ||
         location.pathname.startsWith("/edit-work-order"),
+      show: canAccess("workOrders"), // Check access
     },
     {
       name: "Work Details",
@@ -68,6 +72,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
         location.pathname.startsWith("/work-details/") ||
         location.pathname.includes("/add-work-details") ||
         location.pathname.includes("/edit-work-details"),
+      show: canAccess("workDetails"), // Check access
     },
     {
       name: "Work Progress",
@@ -78,6 +83,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
         location.pathname.startsWith("/work-progress/") ||
         location.pathname.includes("/add-progress") ||
         location.pathname.includes("/edit-progress"),
+      show: canAccess("progress"), // Check access
     },
     {
       name: "Work Verification",
@@ -86,6 +92,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       current:
         location.pathname === "/work-verification" ||
         location.pathname.startsWith("/work-verification/"),
+      show: canAccess("workOrders"), // Check access (assuming same as work orders)
     },
     {
       name: "Invoices",
@@ -95,14 +102,19 @@ export default function Layout({ children, onLogout }: LayoutProps) {
         location.pathname === "/invoices" ||
         location.pathname.startsWith("/invoices/") ||
         location.pathname.includes("/invoice"),
+      show: canAccess("invoices"), // Only show for MASTER and FINANCE
     },
     {
       name: "Import/Export",
       href: "/import-export",
       icon: "📤",
       current: location.pathname === "/import-export-data",
+      show: canAccess("exportData"), // Check access
     },
   ];
+
+  // Filter navigation items based on access
+  const visibleNavigation = navigation.filter((item) => item.show);
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -140,7 +152,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
 
           {/* Navigation */}
           <nav className="flex-1 px-3 py-6 space-y-1">
-            {navigation.map((item) => (
+            {visibleNavigation.map((item) => (
               <div key={item.name} className="relative group">
                 <button
                   onClick={() => navigate(item.href)}
@@ -260,7 +272,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
 
             {/* Mobile navigation */}
             <nav className="flex-1 px-4 py-6 space-y-1">
-              {navigation.map((item) => (
+              {visibleNavigation.map((item) => (
                 <button
                   key={item.name}
                   onClick={() => {
