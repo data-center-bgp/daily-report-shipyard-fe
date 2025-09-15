@@ -21,6 +21,7 @@ export default function ExportData() {
   const [loading, setLoading] = useState(false);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [selectedVessels, setSelectedVessels] = useState<number[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Load vessels for filtering
   const loadVessels = async () => {
@@ -55,15 +56,44 @@ export default function ExportData() {
 
       const vesselText =
         selectedVessels.length > 0
-          ? `for ${selectedVessels.length} selected vessel(s)`
-          : "for all vessels";
+          ? `${selectedVessels.length} selected vessel(s)`
+          : "all vessels";
 
-      alert(
-        `Successfully exported ${exportResult.totalRecords} records of comprehensive vessel data ${vesselText}`
-      );
+      // Better success notification
+      const notification = document.createElement("div");
+      notification.className =
+        "fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 transform transition-all duration-500";
+      notification.innerHTML = `
+        <div class="flex items-center space-x-2">
+          <span class="text-lg">✅</span>
+          <span>Successfully exported ${exportResult.totalRecords} records for ${vesselText}</span>
+        </div>
+      `;
+      document.body.appendChild(notification);
+
+      setTimeout(() => {
+        notification.classList.add("-translate-y-2", "opacity-0");
+        setTimeout(() => document.body.removeChild(notification), 500);
+      }, 3000);
     } catch (error: any) {
       console.error("Export error:", error);
-      alert(`Export failed: ${error.message}`);
+
+      // Better error notification
+      const notification = document.createElement("div");
+      notification.className =
+        "fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50";
+      notification.innerHTML = `
+        <div class="flex items-center space-x-2">
+          <span class="text-lg">❌</span>
+          <span>Export failed: ${error.message}</span>
+        </div>
+      `;
+      document.body.appendChild(notification);
+
+      setTimeout(() => {
+        notification.classList.add("-translate-y-2", "opacity-0");
+        setTimeout(() => document.body.removeChild(notification), 500);
+      }, 4000);
     } finally {
       setLoading(false);
     }
@@ -80,199 +110,200 @@ export default function ExportData() {
   };
 
   const handleSelectAllVessels = () => {
-    if (selectedVessels.length === vessels.length) {
+    const filteredVessels = vessels.filter(
+      (vessel) =>
+        vessel.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        vessel.company.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    if (selectedVessels.length === filteredVessels.length) {
       setSelectedVessels([]);
     } else {
-      setSelectedVessels(vessels.map((v) => v.id));
+      setSelectedVessels(filteredVessels.map((v) => v.id));
     }
   };
 
+  // Filter vessels based on search term
+  const filteredVessels = vessels.filter(
+    (vessel) =>
+      vessel.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      vessel.company.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const selectedCount = selectedVessels.length;
+  const isAllSelected =
+    selectedCount === filteredVessels.length && filteredVessels.length > 0;
+
   return (
     <div className="p-8">
-      {/* Header */}
-      <div className="mb-8">
+      {/* Header - Same pattern as other pages */}
+      <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Export Data</h1>
         <p className="text-gray-600">
-          Export comprehensive vessel data for analysis and reporting
+          Export comprehensive vessel data including work orders, progress, and
+          invoices
         </p>
       </div>
 
-      {/* Export Section */}
+      {/* Main Content */}
       <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-6">
-          Export Comprehensive Vessel Data
-        </h2>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Export Configuration */}
-          <div className="space-y-6">
-            {/* Vessel Filter */}
+        {/* Export Summary Card */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg p-6 mb-6">
+          <div className="flex items-center justify-between text-white">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Filter by Vessels
-              </label>
-              <div className="bg-gray-50 rounded-lg p-3 mb-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">
-                    {selectedVessels.length} of {vessels.length} vessels
-                    selected
-                  </span>
-                  <button
-                    onClick={handleSelectAllVessels}
-                    className="text-sm text-blue-600 hover:text-blue-800"
-                  >
-                    {selectedVessels.length === vessels.length
-                      ? "Deselect All"
-                      : "Select All"}
-                  </button>
-                </div>
-                {selectedVessels.length === 0 && (
-                  <p className="text-sm text-orange-600">
-                    No vessels selected - will export all vessels
-                  </p>
-                )}
+              <h2 className="text-xl font-bold mb-1">Vessel Data Export</h2>
+              <p className="text-blue-100">
+                Select vessels and export comprehensive data in CSV format
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-bold">{selectedCount}</div>
+              <div className="text-sm text-blue-100">
+                {selectedCount === 0 ? "All vessels" : "vessels selected"}
               </div>
+            </div>
+          </div>
+        </div>
 
-              <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
-                {vessels.map((vessel) => (
-                  <label
-                    key={vessel.id}
-                    className="flex items-center p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedVessels.includes(vessel.id)}
-                      onChange={() => handleVesselSelect(vessel.id)}
-                      className="mr-3"
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium text-sm">{vessel.name}</div>
-                      <div className="text-xs text-gray-500">
-                        {vessel.company}
-                      </div>
-                    </div>
-                  </label>
-                ))}
+        {/* Search and Selection Controls */}
+        <div className="mb-6">
+          <div className="flex flex-col md:flex-row gap-4 mb-4">
+            {/* Search Input */}
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Search Vessels
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                  🔍
+                </span>
+                <input
+                  type="text"
+                  placeholder="Search by vessel name or company..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
               </div>
+            </div>
+
+            {/* Select All Button */}
+            <div className="md:self-end">
+              <button
+                onClick={handleSelectAllVessels}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  isAllSelected
+                    ? "bg-orange-100 text-orange-700 hover:bg-orange-200"
+                    : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                }`}
+              >
+                {isAllSelected ? "Deselect All" : "Select All"}
+              </button>
+            </div>
+          </div>
+
+          {/* Selection Summary */}
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div className="flex items-center space-x-2">
+              <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
+              <span className="text-sm font-medium text-gray-700">
+                {selectedCount > 0
+                  ? `${selectedCount} vessel${
+                      selectedCount > 1 ? "s" : ""
+                    } selected`
+                  : "All vessels will be exported"}
+              </span>
+            </div>
+            <span className="text-sm text-gray-500">
+              {filteredVessels.length} total vessels
+            </span>
+          </div>
+        </div>
+
+        {/* Vessel List */}
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">
+            Available Vessels
+          </h3>
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <div className="max-h-80 overflow-y-auto">
+              {filteredVessels.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  <span className="text-4xl mb-4 block">🔍</span>
+                  <p>No vessels found matching your search criteria</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-200">
+                  {filteredVessels.map((vessel) => (
+                    <label
+                      key={vessel.id}
+                      className={`flex items-center p-4 hover:bg-gray-50 cursor-pointer transition-colors ${
+                        selectedVessels.includes(vessel.id) ? "bg-blue-50" : ""
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedVessels.includes(vessel.id)}
+                        onChange={() => handleVesselSelect(vessel.id)}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <div className="ml-3 flex-1">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {vessel.name}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {vessel.company}
+                            </div>
+                          </div>
+                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                            <span className="text-blue-600 text-sm">🚢</span>
+                          </div>
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Export Actions */}
+        <div className="border-t pt-6">
+          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+            {/* Export Info */}
+            <div className="text-sm text-gray-600">
+              <p>
+                Export will include: vessel information, work orders, work
+                details, progress records, verification status, and invoice
+                data.
+              </p>
             </div>
 
             {/* Export Button */}
             <button
               onClick={handleExport}
               disabled={loading}
-              className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+              className={`inline-flex items-center px-6 py-3 rounded-lg font-medium transition-all ${
+                loading
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700 shadow-md hover:shadow-lg"
+              } text-white`}
             >
               {loading ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                   Exporting...
                 </>
               ) : (
-                <>📤 Export Comprehensive Data as CSV</>
+                <>
+                  <span className="mr-2">📊</span>
+                  Export CSV Data
+                </>
               )}
             </button>
-          </div>
-
-          {/* Export Info */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="font-semibold text-gray-900 mb-3">
-              Export Information
-            </h3>
-            <div className="space-y-2 text-sm text-gray-600">
-              <p>
-                <strong>Data Type:</strong> Comprehensive Vessel Data
-              </p>
-              <p>
-                <strong>Format:</strong> CSV
-              </p>
-              {selectedVessels.length > 0 ? (
-                <p>
-                  <strong>Vessels:</strong> {selectedVessels.length} selected
-                </p>
-              ) : (
-                <p>
-                  <strong>Scope:</strong> All vessels
-                </p>
-              )}
-
-              <div className="bg-blue-50 p-3 rounded mt-3">
-                <p className="font-medium text-blue-900 mb-1">
-                  Comprehensive Export includes:
-                </p>
-                <ul className="text-xs text-blue-800 space-y-1">
-                  <li>
-                    • Vessel information (name, type, company, IMO, flag, built
-                    year)
-                  </li>
-                  <li>
-                    • Work order details (customer/shipyard numbers, dates,
-                    status)
-                  </li>
-                  <li>
-                    • Work details (descriptions, estimated hours, departments)
-                  </li>
-                  <li>
-                    • Progress records (percentages, dates, storage paths,
-                    evidence URLs)
-                  </li>
-                  <li>• Verification status and details</li>
-                  <li>
-                    • Invoice information (numbers, amounts, payment status)
-                  </li>
-                </ul>
-                <p className="text-xs text-blue-700 mt-2 font-medium">
-                  💡 All data is joined and flattened into a single CSV for
-                  comprehensive analysis
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Help Section */}
-      <div className="mt-8 bg-blue-50 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-blue-900 mb-3">
-          📚 Export Guidelines
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-blue-800">
-          <div>
-            <h4 className="font-medium mb-3">Data Structure:</h4>
-            <ul className="list-disc list-inside space-y-2">
-              <li>
-                <strong>Comprehensive Data:</strong> All related data in a
-                single flattened CSV file
-              </li>
-              <li>
-                <strong>Relational Structure:</strong> Vessel → Work Orders →
-                Work Details → Progress
-              </li>
-              <li>
-                <strong>Column Naming:</strong> Prefixed columns for easy
-                identification (vessel_, wo_, wd_, progress_)
-              </li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-medium mb-3">Best Practices:</h4>
-            <ul className="list-disc list-inside space-y-2">
-              <li>
-                <strong>Vessel Selection:</strong> Use vessel filter for focused
-                exports or leave empty for all vessels
-              </li>
-              <li>
-                <strong>File Naming:</strong> Files include vessel name(s) and
-                date for easy identification
-              </li>
-              <li>
-                <strong>Large Exports:</strong> May take several minutes
-                depending on data volume
-              </li>
-              <li>
-                <strong>Data Import:</strong> Use Supabase's native import
-                features for data loading
-              </li>
-            </ul>
           </div>
         </div>
       </div>
