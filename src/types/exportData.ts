@@ -1,11 +1,3 @@
-export interface ImportResult {
-  success: boolean;
-  message: string;
-  importedCount: number;
-  errors: string[];
-  skippedCount: number;
-}
-
 export interface ExportOptions {
   format: "csv"; // Only CSV format now
   filters?: {
@@ -13,12 +5,6 @@ export interface ExportOptions {
     status?: string[];
     companies?: string[];
   };
-}
-
-export interface ImportOptions {
-  overwrite: boolean;
-  skipDuplicates: boolean;
-  validateOnly: boolean;
 }
 
 export type ExportableEntity =

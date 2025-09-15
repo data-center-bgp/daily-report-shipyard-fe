@@ -105,10 +105,10 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       show: canAccess("invoices"), // Only show for MASTER and FINANCE
     },
     {
-      name: "Import/Export",
-      href: "/import-export",
+      name: "Export Data",
+      href: "/export-data",
       icon: "📤",
-      current: location.pathname === "/import-export-data",
+      current: location.pathname === "/export-data",
       show: canAccess("exportData"), // Check access
     },
   ];

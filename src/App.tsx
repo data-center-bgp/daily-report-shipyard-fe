@@ -24,7 +24,7 @@ import { AddWorkDetails, EditWorkDetails } from "./components/workDetails";
 import WorkOrderDetails from "./components/workDetails/WODetails";
 import { AddWorkProgress, WorkProgressTable } from "./components/workProgress";
 import { InvoiceList, AddInvoice, EditInvoice } from "./components/invoice";
-import { ImportExport } from "./components/importExport";
+import { ExportData } from "./components/exportData";
 
 // Separate the app routes into its own component that uses the auth context
 function AppRoutes() {
@@ -104,7 +104,7 @@ function AppRoutes() {
         <Route path="/invoices/:id/edit" element={<EditInvoice />} />
 
         {/* Import/Export Routes */}
-        <Route path="/import-export" element={<ImportExport />} />
+        <Route path="/export-data" element={<ExportData />} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" />} />
