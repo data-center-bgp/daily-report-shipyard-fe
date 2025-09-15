@@ -89,33 +89,22 @@ export interface WorkOrderWithDetails extends WorkOrder {
   has_progress_data?: boolean;
 }
 
-export interface WorkProgress {
-  id: number;
-  work_details_id: number;
-  progress_percentage: number;
-  report_date: string;
-  evidence_url?: string;
-  storage_path?: string;
-  user_id?: number;
+// Fixed Profile interface to match your actual database schema
+export interface Profile {
+  id: number; // int in your DB
   created_at: string;
   updated_at: string;
-  deleted_at?: string;
+  deleted_at: string | null;
+  name: string; // text
+  email: string; // text
+  company: string; // text
+  role: string; // text
+  auth_user_id: string; // uuid
 }
 
-export interface Profile {
-  id: string;
-  name: string;
-  email: string;
-  company: string;
-  role: string;
-  created_at?: string;
-  updated_at?: string;
-}
-
+// User interface for auth.users table
 export interface User {
-  id: string;
+  id: string; // uuid
   email: string;
-  name: string;
-  company: string;
-  role: string;
+  created_at: string;
 }

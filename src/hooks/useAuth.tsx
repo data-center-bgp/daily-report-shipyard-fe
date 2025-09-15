@@ -4,16 +4,14 @@ import type { User, Session } from "@supabase/supabase-js";
 
 export interface UserProfile {
   id: number;
-  auth_user_id: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  name: string;
   email: string;
-  full_name?: string;
-  name?: string;
+  company: string;
   role: "MASTER" | "PPIC" | "PRODUCTION" | "OPERATION" | "ADMIN" | "FINANCE";
-  created_at?: string;
-  updated_at?: string;
-  department?: string;
-  phone?: string;
-  status?: "active" | "inactive";
+  auth_user_id: string;
 }
 
 interface AuthContextType {
@@ -26,7 +24,6 @@ interface AuthContextType {
     password: string
   ) => Promise<{ user: User | null; profile: UserProfile | null; error: any }>;
   signOut: () => Promise<void>;
-  // Simplified role checks
   hasRole: (roles: string | string[]) => boolean;
   canAccess: (feature: string) => boolean;
 }
@@ -35,31 +32,24 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }
 
-// Simple feature access rules
+// Role → feature mapping
 const FEATURE_ACCESS = {
-  // Features that all authenticated users can access
   dashboard: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "FINANCE"],
   workOrders: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"],
   workDetails: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"],
   progress: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"],
   vessels: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"],
-
-  // Invoice features - only MASTER and FINANCE
   invoices: ["MASTER", "FINANCE"],
   createInvoice: ["MASTER", "FINANCE"],
   editInvoice: ["MASTER", "FINANCE"],
-
-  // Admin features - only MASTER
   userManagement: ["MASTER"],
   systemSettings: ["MASTER"],
-
-  // Reports - everyone can view, but different levels
   reports: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "FINANCE"],
   exportData: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"],
 };
@@ -69,124 +59,274 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
 
-  // Simplified profile fetch with better error handling
-  const fetchProfile = async (userId: string): Promise<UserProfile | null> => {
+  // Simplified profile fetch without the heavy debugging (for production use)
+  const fetchProfile = async (
+    userId: string,
+    retryCount = 0
+  ): Promise<UserProfile | null> => {
+    const MAX_RETRIES = 3;
+
     try {
+      console.log(
+        `🔍 Fetching profile for user: ${userId} (attempt ${retryCount + 1})`
+      );
+
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
         .eq("auth_user_id", userId)
+        .is("deleted_at", null)
         .single();
 
       if (error) {
-        console.error("Profile fetch error:", error);
-        // Return a default profile instead of null to prevent crashes
-        return {
-          id: 0,
-          auth_user_id: userId,
-          email: user?.email || "",
-          role: "OPERATION", // Safe default
-          status: "active",
-        } as UserProfile;
+        console.error("❌ Profile fetch error:", error.message);
+
+        // If it's a connection/auth error and we haven't exceeded retries
+        if (
+          retryCount < MAX_RETRIES &&
+          (error.message.includes("JWT") ||
+            error.message.includes("auth") ||
+            error.message.includes("network") ||
+            error.code === "PGRST301")
+        ) {
+          console.log(`🔄 Retrying profile fetch in 1 second...`);
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          return fetchProfile(userId, retryCount + 1);
+        }
+
+        return null;
       }
+
+      console.log("✅ Profile fetched successfully:", {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        role: data.role,
+      });
 
       return data;
     } catch (err) {
-      console.error("Profile fetch exception:", err);
-      // Return default profile on any error
-      return {
-        id: 0,
-        auth_user_id: userId,
-        email: user?.email || "",
-        role: "OPERATION",
-        status: "active",
-      } as UserProfile;
+      console.error("💥 Profile fetch exception:", err);
+
+      // Retry on exceptions too
+      if (retryCount < MAX_RETRIES) {
+        console.log(`🔄 Retrying after exception in 1 second...`);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return fetchProfile(userId, retryCount + 1);
+      }
+
+      return null;
     }
   };
 
-  // Simplified sign in
   const signIn = async (email: string, password: string) => {
     try {
+      console.log("🔐 Starting sign in process...");
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
+        console.error("❌ Auth error:", error);
         return { user: null, profile: null, error };
       }
 
-      // Always return success, profile will be loaded async
-      return { user: data.user, profile: null, error: null };
+      console.log("✅ Authentication successful");
+
+      // Set user and session immediately
+      setUser(data.user);
+      setSession(data.session);
+
+      // Fetch profile
+      const userProfile = await fetchProfile(data.user.id);
+
+      if (!userProfile) {
+        console.log("🚫 No system profile found - signing out user");
+        await supabase.auth.signOut();
+        return {
+          user: null,
+          profile: null,
+          error: {
+            message:
+              "Access denied. You don't have permission to access this system.",
+          },
+        };
+      }
+
+      setProfile(userProfile);
+      setLoading(false);
+
+      return { user: data.user, profile: userProfile, error: null };
     } catch (err) {
+      console.error("💥 SignIn exception:", err);
+      setLoading(false);
       return { user: null, profile: null, error: err };
     }
   };
 
   const signOut = async () => {
+    console.log("🚪 Signing out...");
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
     setSession(null);
   };
 
-  // Simple role check - returns false if no profile instead of crashing
-  const hasRole = (roles: string | string[]): boolean => {
+  const hasRole = (roles: string | string[]) => {
     if (!profile) return false;
-    const rolesArray = Array.isArray(roles) ? roles : [roles];
-    return rolesArray.includes(profile.role);
+    const list = Array.isArray(roles) ? roles : [roles];
+    return list.includes(profile.role);
   };
 
-  // Simple feature access check
-  const canAccess = (feature: string): boolean => {
+  const canAccess = (feature: string) => {
     if (!profile) return false;
     const allowedRoles = FEATURE_ACCESS[feature as keyof typeof FEATURE_ACCESS];
-    return allowedRoles ? allowedRoles.includes(profile.role) : false;
+    return allowedRoles?.includes(profile.role) ?? false;
   };
 
-  // Initialize auth state
+  // Enhanced initialization with proper session waiting
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    let mounted = true;
 
-      if (session?.user) {
-        fetchProfile(session.user.id).then(setProfile);
+    const initAuth = async () => {
+      try {
+        console.log("🚀 Initializing auth state...");
+
+        // Wait for session to be fully loaded
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
+        if (error) {
+          console.error("❌ Session fetch error:", error);
+          if (mounted) {
+            setLoading(false);
+            setInitialized(true);
+          }
+          return;
+        }
+
+        if (!mounted) return;
+
+        console.log("📋 Session check complete:", session ? "found" : "none");
+
+        setSession(session);
+        setUser(session?.user ?? null);
+
+        if (session?.user) {
+          console.log("👤 Session user found, fetching profile...");
+
+          // Add a small delay to ensure the session is fully established
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          const userProfile = await fetchProfile(session.user.id);
+
+          if (!mounted) return;
+
+          if (!userProfile) {
+            console.log("🚫 No system profile - clearing session");
+            await supabase.auth.signOut();
+            setSession(null);
+            setUser(null);
+            setProfile(null);
+          } else {
+            setProfile(userProfile);
+          }
+        }
+
+        if (mounted) {
+          setLoading(false);
+          setInitialized(true);
+          console.log("✅ Auth initialization complete");
+        }
+      } catch (err) {
+        console.error("💥 Auth init error:", err);
+        if (mounted) {
+          setLoading(false);
+          setInitialized(true);
+        }
       }
+    };
 
-      setLoading(false);
-    });
+    initAuth();
 
+    // Enhanced auth state listener
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log(`🔄 Auth state change: ${event}`);
+
+      if (!mounted) return;
+
+      // Only process events after initial load is complete
+      if (!initialized) {
+        console.log("⏳ Skipping auth state change - not initialized yet");
+        return;
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
 
-      if (session?.user) {
+      if (session?.user && event === "SIGNED_IN") {
+        console.log("👤 User signed in via state change, fetching profile...");
         const userProfile = await fetchProfile(session.user.id);
+
+        if (!mounted) return;
+
+        if (!userProfile) {
+          console.log("🚫 No system access - signing out");
+          await supabase.auth.signOut();
+          return;
+        }
+
         setProfile(userProfile);
-      } else {
+      } else if (!session?.user) {
+        console.log("🚫 No user session - clearing profile");
         setProfile(null);
       }
 
-      setLoading(false);
+      if (mounted) {
+        setLoading(false);
+      }
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [initialized]);
 
-  const value = {
-    user,
-    profile,
-    session,
-    loading,
-    signIn,
-    signOut,
-    hasRole,
-    canAccess,
-  };
+  // Debug logging
+  useEffect(() => {
+    console.log("🔍 Auth state:", {
+      loading,
+      initialized,
+      hasUser: !!user,
+      hasProfile: !!profile,
+      userRole: profile?.role,
+      userName: profile?.name,
+    });
+  }, [loading, initialized, user, profile]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        session,
+        loading,
+        signIn,
+        signOut,
+        hasRole,
+        canAccess,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 }
