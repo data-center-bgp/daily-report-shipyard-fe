@@ -8,7 +8,7 @@ import { AuthProvider, useAuth } from "./hooks/useAuth";
 
 // Components
 import Layout from "./components/common/Layout";
-import { Login, Register } from "./components/auth";
+import { Login } from "./components/auth";
 import { Dashboard } from "./components/dashboard";
 import {
   WorkOrders,
@@ -46,7 +46,6 @@ function AppRoutes() {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     );

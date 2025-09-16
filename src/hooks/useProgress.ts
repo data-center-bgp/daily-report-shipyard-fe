@@ -1,5 +1,3 @@
-// src/hooks/useProgress.ts
-
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import type {
@@ -20,7 +18,6 @@ export const useProgress = () => {
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<ProgressStats | null>(null);
 
-  // Fetch all progress records with filters
   const fetchProgress = useCallback(async (filter?: ProgressFilter) => {
     try {
       setLoading(true);
@@ -85,13 +82,12 @@ export const useProgress = () => {
     }
   }, []);
 
-  // Fetch progress summary for each work order (latest progress) - Manual implementation
+  // Fetch progress summary for each work order (latest progress)
   const fetchProgressSummaries = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch all progress with work order details
       const { data: allProgress, error } = await supabase
         .from("project_progress")
         .select(
@@ -126,7 +122,6 @@ export const useProgress = () => {
 
       allProgress?.forEach((item) => {
         if (!summariesMap.has(item.work_order_id)) {
-          // This is the latest entry for this work order (due to ordering)
           summariesMap.set(item.work_order_id, {
             work_order_id: item.work_order_id,
             current_progress: item.progress,
@@ -165,20 +160,17 @@ export const useProgress = () => {
     }
   }, []);
 
-  // Add new progress entry
   const addProgress = useCallback(
     async (progressData: ProgressFormData) => {
       try {
         setLoading(true);
         setError(null);
 
-        // Get current user
         const {
           data: { user },
         } = await supabase.auth.getUser();
         if (!user) throw new Error("User not authenticated");
 
-        // Get user profile to get user_id
         const { data: profile } = await supabase
           .from("profiles")
           .select("id")
@@ -187,7 +179,6 @@ export const useProgress = () => {
 
         if (!profile) throw new Error("User profile not found");
 
-        // Check if progress already exists for this date and work order
         const { data: existingProgress } = await supabase
           .from("project_progress")
           .select("id")
@@ -202,7 +193,6 @@ export const useProgress = () => {
           );
         }
 
-        // Insert new progress
         const { data, error } = await supabase
           .from("project_progress")
           .insert([
@@ -220,7 +210,6 @@ export const useProgress = () => {
 
         if (error) throw error;
 
-        // Refresh progress data
         await fetchProgress();
         await fetchProgressSummaries();
 
@@ -236,7 +225,6 @@ export const useProgress = () => {
     [fetchProgress, fetchProgressSummaries]
   );
 
-  // Get progress for specific work order
   const getWorkOrderProgress = useCallback(
     async (workOrderId: number): Promise<ProgressChartData[]> => {
       try {
@@ -272,7 +260,6 @@ export const useProgress = () => {
   // Get progress statistics
   const fetchProgressStats = useCallback(async (): Promise<ProgressStats> => {
     try {
-      // Get latest progress for each work order
       const summaries = await fetchProgressSummaries();
 
       const total_projects = summaries.length;
@@ -325,7 +312,6 @@ export const useProgress = () => {
     }
   }, [fetchProgressSummaries]);
 
-  // Delete progress entry (soft delete)
   const deleteProgress = useCallback(
     async (progressId: number) => {
       try {
@@ -342,7 +328,6 @@ export const useProgress = () => {
 
         if (error) throw error;
 
-        // Refresh progress data
         await fetchProgress();
         await fetchProgressSummaries();
 
@@ -360,7 +345,6 @@ export const useProgress = () => {
     [fetchProgress, fetchProgressSummaries]
   );
 
-  // Initialize data on mount
   useEffect(() => {
     fetchProgress();
     fetchProgressSummaries();

@@ -4,7 +4,7 @@ export interface ProjectProgress {
   updated_at: string;
   deleted_at: string | null;
   progress: number; // Percentage (0-100)
-  report_date: string; // Date when progress was recorded
+  report_date: string;
   work_order_id: number;
   user_id: number;
 }
@@ -15,7 +15,7 @@ export interface ProgressWithDetails extends ProjectProgress {
     customer_wo_number: string;
     shipyard_wo_number: string;
     wo_location: string;
-    wo_description: string; // Added work description
+    wo_description: string;
     vessel?: {
       name: string;
       type: string;
@@ -39,7 +39,7 @@ export interface ProgressSummary {
     customer_wo_number: string;
     shipyard_wo_number: string;
     wo_location: string;
-    wo_description: string; // Added work description
+    wo_description: string;
     vessel?: {
       name: string;
       type: string;
@@ -57,7 +57,7 @@ export interface ProgressFormData {
   progress: number;
   report_date: string;
   work_order_id: number;
-  notes?: string; // Optional notes field
+  notes?: string;
 }
 
 export interface ProgressChartData {

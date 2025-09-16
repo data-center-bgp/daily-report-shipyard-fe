@@ -13,7 +13,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-// Export types for use in components
 export interface Vessel {
   id: number;
   created_at: string;
@@ -70,7 +69,6 @@ export interface WorkProgress {
   user_id: number;
 }
 
-// Extended interfaces for UI
 export interface WorkDetailsWithProgress extends WorkDetails {
   work_progress: WorkProgress[];
   current_progress?: number;
@@ -89,22 +87,20 @@ export interface WorkOrderWithDetails extends WorkOrder {
   has_progress_data?: boolean;
 }
 
-// Fixed Profile interface to match your actual database schema
 export interface Profile {
-  id: number; // int in your DB
+  id: number;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
-  name: string; // text
-  email: string; // text
-  company: string; // text
-  role: string; // text
-  auth_user_id: string; // uuid
+  name: string;
+  email: string;
+  company: string;
+  role: string;
+  auth_user_id: string;
 }
 
-// User interface for auth.users table
 export interface User {
-  id: string; // uuid
+  id: string;
   email: string;
   created_at: string;
 }

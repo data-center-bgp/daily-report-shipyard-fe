@@ -1,174 +1,38 @@
 import { useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
+import { Navigate } from "react-router-dom";
 
-interface LoginProps {
-  onLogin?: (email: string, password: string) => void;
-  onSwitchToRegister?: () => void;
-}
-
-export default function Login({ onLogin, onSwitchToRegister }: LoginProps) {
+export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Use the RBAC auth system
-  const { signIn } = useAuth();
+  const { signIn, user } = useAuth();
+
+  if (user) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
 
-    // Log login attempt
     console.log("🔐 Login attempt started");
     console.log("📧 Email:", email);
-    console.log("🔒 Password length:", password.length);
-    console.log("⏰ Timestamp:", new Date().toISOString());
 
     try {
       console.log("📡 Calling RBAC sign in...");
-
-      // Use the RBAC signIn instead of direct Supabase auth
-      const {
-        user,
-        profile,
-        error: signInError,
-      } = await signIn(email, password);
-
-      if (signInError) {
-        console.log("🚨 Login failed with error:", signInError.message);
-        throw signInError;
-      }
-
-      console.log("✅ Login successful!");
-
-      // Enhanced logging with Supabase user info
-      console.log("👤 Supabase User Info:", {
-        id: user?.id,
-        email: user?.email,
-        created_at: user?.created_at,
-        updated_at: user?.updated_at,
-        email_confirmed_at: user?.email_confirmed_at,
-        phone: user?.phone,
-        user_metadata: user?.user_metadata,
-        app_metadata: user?.app_metadata,
-      });
-
-      // Detailed profile information from profiles table
-      console.log("📋 User Profile from Database:", {
-        profile_id: profile?.id,
-        auth_user_id: profile?.auth_user_id,
-        email: profile?.email,
-        full_name: profile?.full_name,
-        name: profile?.name,
-        role: profile?.role,
-        department: profile?.department,
-        phone: profile?.phone,
-        status: profile?.status,
-        created_at: profile?.created_at,
-        updated_at: profile?.updated_at,
-      });
-
-      // Role-based access information
-      console.log("🎯 RBAC Information:", {
-        role: profile?.role,
-        is_master: profile?.role === "MASTER",
-        is_full_access: [
-          "MASTER",
-          "PPIC",
-          "PRODUCTION",
-          "OPERATION",
-          "ADMIN",
-        ].includes(profile?.role || ""),
-        is_finance: profile?.role === "FINANCE",
-        can_access_invoices: ["MASTER", "FINANCE"].includes(
-          profile?.role || ""
-        ),
-        can_edit_invoices: ["MASTER", "FINANCE"].includes(profile?.role || ""),
-      });
-
-      // Log specific permissions based on role
-      const rolePermissions = {
-        MASTER: "🔑 MASTER: Complete unrestricted access to everything",
-        PPIC: "🏭 PPIC: Full access except invoice editing (can view invoices)",
-        PRODUCTION:
-          "⚙️ PRODUCTION: Full access except invoice editing (can view invoices)",
-        OPERATION:
-          "🔧 OPERATION: Full access except invoice editing (can view invoices)",
-        ADMIN:
-          "👑 ADMIN: Full access except invoice editing (can view invoices)",
-        FINANCE:
-          "💰 FINANCE: Full invoice access + read-only for other modules",
-      };
-
-      console.log(
-        "🔐 Role Description:",
-        rolePermissions[profile?.role || "OPERATION"]
-      );
-
-      // Log what they can and cannot do
-      if (profile?.role === "MASTER") {
-        console.log(
-          "✅ MASTER Permissions: Can do EVERYTHING - No restrictions"
-        );
-      } else if (
-        ["PPIC", "PRODUCTION", "OPERATION", "ADMIN"].includes(
-          profile?.role || ""
-        )
-      ) {
-        console.log("✅ Full Access Permissions:");
-        console.log("  - ✅ Create/Edit/Delete Work Orders");
-        console.log("  - ✅ Manage Vessels");
-        console.log("  - ✅ View All Reports");
-        console.log("  - ✅ Export Data");
-        console.log("  - ✅ Manage Work Details & Progress");
-        console.log("  - 👁️ View Invoices (Read-only)");
-        console.log("  - ❌ Cannot Edit/Create/Delete Invoices");
-      } else if (profile?.role === "FINANCE") {
-        console.log("💰 Finance Permissions:");
-        console.log("  - ✅ Full Invoice Management (Create/Edit/Delete)");
-        console.log("  - ✅ Export Invoice Data");
-        console.log("  - 👁️ View Work Orders (Read-only)");
-        console.log("  - 👁️ View Vessels (Read-only)");
-        console.log("  - 👁️ View Reports (Read-only)");
-        console.log("  - 👁️ View Work Details & Progress (Read-only)");
-        console.log("  - ❌ Cannot Create/Edit Work Orders");
-        console.log("  - ❌ Cannot Edit Vessels");
-      }
-
-      // Profile validation checks
-      console.log("🔍 Profile Validation:");
-      console.log("  - Profile exists:", !!profile);
-      console.log(
-        "  - Profile ID matches user:",
-        profile?.auth_user_id === user?.id
-      );
-      console.log("  - Email matches:", profile?.email === user?.email);
-      console.log("  - Profile status:", profile?.status || "unknown");
-
-      // Call the onLogin callback if provided
-      if (onLogin) {
-        console.log("📞 Calling onLogin callback...");
-        onLogin(email, password);
-      } else {
-        console.log("⚠️ No onLogin callback provided");
+      const { error } = await signIn(email, password);
+      if (error) {
+        setError(error.message);
       }
     } catch (err) {
-      console.log("💥 Login error caught:", err);
-      console.log("🔍 Error details:", {
-        message: err instanceof Error ? err.message : "Unknown error",
-        stack: err instanceof Error ? err.stack : undefined,
-        name: err instanceof Error ? err.name : undefined,
-      });
-
-      setError(
-        err instanceof Error ? err.message : "An error occurred during login"
-      );
+      console.error("💥 Login error:", err);
+      setError("An unexpected error occurred");
     } finally {
       setIsLoading(false);
-      console.log("🏁 Login process completed");
-      console.log("=".repeat(50));
     }
   };
 
@@ -178,7 +42,10 @@ export default function Login({ onLogin, onSwitchToRegister }: LoginProps) {
         {/* Header */}
         <div className="text-center">
           <h2 className="text-3xl font-bold text-white mb-2">Welcome Back</h2>
-          <p className="text-slate-300">Sign in to your account</p>
+          <p className="text-slate-300">Daily Report Shipyard System</p>
+          <p className="text-slate-400 text-sm mt-1">
+            Barokah Galangan Perkasa
+          </p>
         </div>
 
         {/* Login Form */}
@@ -190,7 +57,6 @@ export default function Login({ onLogin, onSwitchToRegister }: LoginProps) {
           )}
 
           <form className="space-y-6" onSubmit={handleSubmit}>
-            {/* Email Field */}
             <div>
               <label
                 htmlFor="email"
@@ -211,7 +77,6 @@ export default function Login({ onLogin, onSwitchToRegister }: LoginProps) {
               />
             </div>
 
-            {/* Password Field */}
             <div>
               <label
                 htmlFor="password"
@@ -232,34 +97,6 @@ export default function Login({ onLogin, onSwitchToRegister }: LoginProps) {
               />
             </div>
 
-            {/* Remember Me & Forgot Password */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  className="h-4 w-4 text-blue-400 focus:ring-blue-400 border-white/20 rounded bg-white/10"
-                />
-                <label
-                  htmlFor="remember-me"
-                  className="ml-2 block text-sm text-slate-300"
-                >
-                  Remember me
-                </label>
-              </div>
-
-              <div className="text-sm">
-                <a
-                  href="#"
-                  className="text-blue-400 hover:text-blue-300 transition-colors duration-200"
-                >
-                  Forgot your password?
-                </a>
-              </div>
-            </div>
-
-            {/* Submit Button */}
             <div>
               <button
                 type="submit"
@@ -291,27 +128,20 @@ export default function Login({ onLogin, onSwitchToRegister }: LoginProps) {
                     Signing in...
                   </div>
                 ) : (
-                  "Sign in"
+                  "Sign In"
                 )}
               </button>
             </div>
           </form>
 
-          {/* Sign up link */}
           <div className="mt-6 text-center">
-            <p className="text-slate-300">
-              Don't have an account?{" "}
-              <button
-                onClick={onSwitchToRegister}
-                className="text-blue-400 hover:text-blue-300 font-medium transition-colors duration-200 bg-transparent border-none cursor-pointer"
-              >
-                Sign up
-              </button>
+            <p className="text-slate-300 text-sm">
+              Need access?{" "}
+              <span className="text-blue-400">Contact your administrator</span>
             </p>
           </div>
         </div>
 
-        {/* Footer */}
         <div className="text-center">
           <p className="text-slate-400 text-sm">
             © 2025 Daily Report Shipyard. All rights reserved.

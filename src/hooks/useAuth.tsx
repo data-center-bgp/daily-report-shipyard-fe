@@ -1,4 +1,12 @@
-import { useState, useEffect, createContext, useContext } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-refresh/only-export-components */
+import {
+  useState,
+  useEffect,
+  createContext,
+  useContext,
+  useCallback,
+} from "react";
 import { supabase } from "../lib/supabase";
 import type { User, Session } from "@supabase/supabase-js";
 
@@ -62,64 +70,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [initialized, setInitialized] = useState(false);
 
   // Simplified profile fetch without the heavy debugging (for production use)
-  const fetchProfile = async (
-    userId: string,
-    retryCount = 0
-  ): Promise<UserProfile | null> => {
-    const MAX_RETRIES = 3;
+  const fetchProfile = useCallback(
+    async (userId: string, retryCount = 0): Promise<UserProfile | null> => {
+      const MAX_RETRIES = 3;
 
-    try {
-      console.log(
-        `🔍 Fetching profile for user: ${userId} (attempt ${retryCount + 1})`
-      );
+      try {
+        console.log(
+          `🔍 Fetching profile for user: ${userId} (attempt ${retryCount + 1})`
+        );
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("auth_user_id", userId)
-        .is("deleted_at", null)
-        .single();
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("auth_user_id", userId)
+          .is("deleted_at", null)
+          .single();
 
-      if (error) {
-        console.error("❌ Profile fetch error:", error.message);
+        if (error) {
+          console.error("❌ Profile fetch error:", error.message);
 
-        // If it's a connection/auth error and we haven't exceeded retries
-        if (
-          retryCount < MAX_RETRIES &&
-          (error.message.includes("JWT") ||
-            error.message.includes("auth") ||
-            error.message.includes("network") ||
-            error.code === "PGRST301")
-        ) {
-          console.log(`🔄 Retrying profile fetch in 1 second...`);
+          // If it's a connection/auth error and we haven't exceeded retries
+          if (
+            retryCount < MAX_RETRIES &&
+            (error.message.includes("JWT") ||
+              error.message.includes("auth") ||
+              error.message.includes("network") ||
+              error.code === "PGRST301")
+          ) {
+            console.log(`🔄 Retrying profile fetch in 1 second...`);
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            return fetchProfile(userId, retryCount + 1);
+          }
+
+          return null;
+        }
+
+        console.log("✅ Profile fetched successfully:", {
+          id: data.id,
+          name: data.name,
+          email: data.email,
+          role: data.role,
+        });
+
+        return data;
+      } catch (err) {
+        console.error("💥 Profile fetch exception:", err);
+
+        // Retry on exceptions too
+        if (retryCount < MAX_RETRIES) {
+          console.log(`🔄 Retrying after exception in 1 second...`);
           await new Promise((resolve) => setTimeout(resolve, 1000));
           return fetchProfile(userId, retryCount + 1);
         }
 
         return null;
       }
-
-      console.log("✅ Profile fetched successfully:", {
-        id: data.id,
-        name: data.name,
-        email: data.email,
-        role: data.role,
-      });
-
-      return data;
-    } catch (err) {
-      console.error("💥 Profile fetch exception:", err);
-
-      // Retry on exceptions too
-      if (retryCount < MAX_RETRIES) {
-        console.log(`🔄 Retrying after exception in 1 second...`);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        return fetchProfile(userId, retryCount + 1);
-      }
-
-      return null;
-    }
-  };
+    },
+    []
+  );
 
   const signIn = async (email: string, password: string) => {
     try {
@@ -299,7 +307,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [initialized]);
+  }, [initialized, fetchProfile]);
 
   // Debug logging
   useEffect(() => {
