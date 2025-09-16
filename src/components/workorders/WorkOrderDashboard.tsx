@@ -24,7 +24,7 @@ interface WorkOrderWithVessel extends WorkOrder {
 }
 
 export default function WorkOrderDashboard() {
-  const [workOrders, setWorkOrders] = useState<WorkOrderWithVessel[]>([]);
+  // Remove unused workOrders state since we only need vessels for this dashboard
   const [vessels, setVessels] = useState<VesselSummary[]>([]);
   const [filteredVessels, setFilteredVessels] = useState<VesselSummary[]>([]);
   const [stats, setStats] = useState<WorkOrderStats>({
@@ -70,13 +70,13 @@ export default function WorkOrderDashboard() {
       if (error) throw error;
 
       console.log("Work orders fetched:", data);
-      setWorkOrders(data || []);
+      const workOrdersData = data || [];
 
       // Calculate simple statistics
-      calculateStats(data || []);
+      calculateStats(workOrdersData);
 
       // Group by vessels
-      groupWorkOrdersByVessel(data || []);
+      groupWorkOrdersByVessel(workOrdersData);
     } catch (err) {
       console.error("Error fetching work orders:", err);
       setError(err instanceof Error ? err.message : "An error occurred");
@@ -95,11 +95,25 @@ export default function WorkOrderDashboard() {
 
   const groupWorkOrdersByVessel = (workOrders: WorkOrderWithVessel[]) => {
     // Group work orders by vessel
-    const vesselMap = new Map();
+    const vesselMap = new Map<
+      number,
+      {
+        id: number;
+        name: string;
+        type: string;
+        company: string;
+        workOrders: WorkOrderWithVessel[];
+      }
+    >();
 
     workOrders.forEach((wo) => {
-      const vesselId = wo.vessel?.id;
-      if (!vesselId) return;
+      // Add null check for wo.vessel
+      if (!wo.vessel?.id) {
+        console.warn("Work order found without vessel data:", wo.id);
+        return;
+      }
+
+      const vesselId = wo.vessel.id;
 
       if (!vesselMap.has(vesselId)) {
         vesselMap.set(vesselId, {
@@ -110,7 +124,11 @@ export default function WorkOrderDashboard() {
           workOrders: [],
         });
       }
-      vesselMap.get(vesselId).workOrders.push(wo);
+
+      const vesselData = vesselMap.get(vesselId);
+      if (vesselData) {
+        vesselData.workOrders.push(wo);
+      }
     });
 
     // Calculate vessel summaries (simplified)
@@ -184,15 +202,6 @@ export default function WorkOrderDashboard() {
   const endIndex = startIndex + vesselsPerPage;
   const currentVessels = filteredVessels.slice(startIndex, endIndex);
 
-  const handleSort = (field: typeof sortBy) => {
-    if (sortBy === field) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-    } else {
-      setSortBy(field);
-      setSortDirection("asc");
-    }
-  };
-
   // Handle success message from add work order page
   useEffect(() => {
     if (location.state?.message) {
@@ -253,6 +262,12 @@ export default function WorkOrderDashboard() {
     <div className="space-y-8">
       {/* Page Header */}
       <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Work Order Dashboard
+          </h1>
+          <p className="text-gray-600">Manage work orders by vessel</p>
+        </div>
         <div className="flex gap-3">
           <button
             onClick={fetchWorkOrders}

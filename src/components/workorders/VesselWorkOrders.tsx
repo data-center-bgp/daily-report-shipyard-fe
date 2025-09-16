@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase, type WorkOrderWithDetails } from "../../lib/supabase";
+import {
+  supabase,
+  type WorkOrderWithDetails,
+  type WorkDetailsWithProgress,
+} from "../../lib/supabase";
 
 interface VesselData {
   id: number;
@@ -9,14 +13,29 @@ interface VesselData {
   company: string;
 }
 
+// Define the work detail type with progress properties (processed)
+interface WorkDetailWithProgress extends WorkDetailsWithProgress {
+  current_progress: number;
+  latest_progress_date?: string;
+  progress_count: number;
+}
+
+// Define the work order type with progress properties
+interface WorkOrderWithProgress
+  extends Omit<WorkOrderWithDetails, "work_details"> {
+  work_details: WorkDetailWithProgress[];
+  overall_progress: number;
+  has_progress_data: boolean;
+}
+
 export default function VesselWorkOrders() {
   const { vesselId } = useParams<{ vesselId: string }>();
   const navigate = useNavigate();
 
   const [vessel, setVessel] = useState<VesselData | null>(null);
-  const [workOrders, setWorkOrders] = useState<WorkOrderWithDetails[]>([]);
+  const [workOrders, setWorkOrders] = useState<WorkOrderWithProgress[]>([]);
   const [filteredWorkOrders, setFilteredWorkOrders] = useState<
-    WorkOrderWithDetails[]
+    WorkOrderWithProgress[]
   >([]);
   const [expandedWorkOrders, setExpandedWorkOrders] = useState<Set<number>>(
     new Set()
@@ -78,39 +97,41 @@ export default function VesselWorkOrders() {
 
       // Process work orders with progress data
       const workOrdersWithProgress = (workOrderResponse.data || []).map(
-        (wo) => {
+        (wo: WorkOrderWithDetails) => {
           const workDetails = wo.work_details || [];
 
           // Process each work detail to get its latest progress
-          const workDetailsWithProgress = workDetails.map((detail) => {
-            const progressRecords = detail.work_progress || [];
+          const workDetailsWithProgress: WorkDetailWithProgress[] =
+            workDetails.map((detail: WorkDetailsWithProgress) => {
+              const progressRecords = detail.work_progress || [];
 
-            if (progressRecords.length === 0) {
+              if (progressRecords.length === 0) {
+                return {
+                  ...detail,
+                  current_progress: 0,
+                  latest_progress_date: undefined,
+                  progress_count: 0,
+                };
+              }
+
+              // Sort progress records by date (newest first)
+              const sortedProgress = progressRecords.sort(
+                (a, b) =>
+                  new Date(b.report_date).getTime() -
+                  new Date(a.report_date).getTime()
+              );
+
+              const latestProgress =
+                sortedProgress[0]?.progress_percentage || 0;
+              const latestProgressDate = sortedProgress[0]?.report_date;
+
               return {
                 ...detail,
-                current_progress: 0,
-                latest_progress_date: undefined,
-                progress_count: 0,
+                current_progress: latestProgress,
+                latest_progress_date: latestProgressDate,
+                progress_count: progressRecords.length,
               };
-            }
-
-            // Sort progress records by date (newest first)
-            const sortedProgress = progressRecords.sort(
-              (a, b) =>
-                new Date(b.report_date).getTime() -
-                new Date(a.report_date).getTime()
-            );
-
-            const latestProgress = sortedProgress[0]?.progress_percentage || 0;
-            const latestProgressDate = sortedProgress[0]?.report_date;
-
-            return {
-              ...detail,
-              current_progress: latestProgress,
-              latest_progress_date: latestProgressDate,
-              progress_count: progressRecords.length,
-            };
-          });
+            });
 
           // Calculate overall work order progress
           let overallProgress = 0;
@@ -119,14 +140,15 @@ export default function VesselWorkOrders() {
           if (workDetailsWithProgress.length > 0) {
             // Average progress across all work details
             const totalProgress = workDetailsWithProgress.reduce(
-              (sum, detail) => sum + (detail.current_progress || 0),
+              (sum: number, detail: WorkDetailWithProgress) =>
+                sum + (detail.current_progress || 0),
               0
             );
             overallProgress = Math.round(
               totalProgress / workDetailsWithProgress.length
             );
             hasProgressData = workDetailsWithProgress.some(
-              (detail) => detail.current_progress > 0
+              (detail: WorkDetailWithProgress) => detail.current_progress > 0
             );
           }
 
@@ -135,7 +157,7 @@ export default function VesselWorkOrders() {
             work_details: workDetailsWithProgress,
             overall_progress: overallProgress,
             has_progress_data: hasProgressData,
-          };
+          } as WorkOrderWithProgress;
         }
       );
 
@@ -180,7 +202,7 @@ export default function VesselWorkOrders() {
     if (vesselId) {
       fetchVesselWorkOrders();
     }
-  }, [fetchVesselWorkOrders]);
+  }, [fetchVesselWorkOrders, vesselId]);
 
   const toggleWorkOrderExpansion = (workOrderId: number) => {
     setExpandedWorkOrders((prev) => {
@@ -207,15 +229,15 @@ export default function VesselWorkOrders() {
     });
   };
 
-  const handleViewWorkOrder = (workOrder: WorkOrderWithDetails) => {
+  const handleViewWorkOrder = (workOrder: WorkOrderWithProgress) => {
     navigate(`/work-order/${workOrder.id}`);
   };
 
-  const handleEditWorkOrder = (workOrder: WorkOrderWithDetails) => {
+  const handleEditWorkOrder = (workOrder: WorkOrderWithProgress) => {
     navigate(`/edit-work-order/${workOrder.id}`);
   };
 
-  const handleDeleteWorkOrder = async (workOrder: WorkOrderWithDetails) => {
+  const handleDeleteWorkOrder = async (workOrder: WorkOrderWithProgress) => {
     try {
       const { error } = await supabase
         .from("work_order")
@@ -253,7 +275,7 @@ export default function VesselWorkOrders() {
     });
   };
 
-  const getStatusColor = (wo: WorkOrderWithDetails) => {
+  const getStatusColor = (wo: WorkOrderWithProgress) => {
     if (wo.has_progress_data) {
       if (wo.overall_progress === 100) {
         return "bg-green-100 text-green-800 border-green-200";
@@ -280,7 +302,7 @@ export default function VesselWorkOrders() {
     return "🔴";
   };
 
-  const getStatus = (wo: WorkOrderWithDetails) => {
+  const getStatus = (wo: WorkOrderWithProgress) => {
     if (wo.has_progress_data) {
       if (wo.overall_progress === 100) {
         return "Completed";
