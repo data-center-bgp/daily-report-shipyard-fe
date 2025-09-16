@@ -87,6 +87,47 @@ interface ProcessedWorkOrder {
   completion_date?: string;
 }
 
+interface DatabaseWorkDetail {
+  id: number;
+  description: string;
+  work_progress: Array<{
+    progress_percentage: number;
+    report_date: string;
+    evidence_url?: string;
+    storage_path?: string;
+    created_at: string;
+  }>;
+  work_verification: Array<{
+    work_verification: boolean;
+    verification_date: string;
+  }>;
+  [key: string]: unknown;
+}
+
+interface DatabaseWorkOrder {
+  id: number;
+  customer_wo_number?: string;
+  shipyard_wo_number?: string;
+  planned_start_date?: string;
+  target_close_date?: string;
+  actual_start_date?: string;
+  actual_close_date?: string;
+  work_details: DatabaseWorkDetail[];
+  vessel: {
+    id: number;
+    name: string;
+    type: string;
+    company: string;
+  };
+  [key: string]: unknown;
+}
+
+interface DatabaseInvoice {
+  work_order_id: number;
+  payment_status: boolean;
+  [key: string]: unknown;
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
     totalWorkOrders: 0,
@@ -207,11 +248,14 @@ export default function Dashboard() {
   const vesselFilterCounts = useMemo(() => {
     return {
       all: vesselSummaries.length,
-      active: vesselSummaries.filter((v) => v.inProgress > 0 || v.planned > 0)
+      active: vesselSummaries.filter(
+        (v: VesselSummary) => v.inProgress > 0 || v.planned > 0
+      ).length,
+      completed: vesselSummaries.filter((v: VesselSummary) => v.completed > 0)
         .length,
-      completed: vesselSummaries.filter((v) => v.completed > 0).length,
       alerts: vesselSummaries.filter(
-        (v) => v.hasOverdue || v.hasUpcoming || v.readyForInvoicing > 0
+        (v: VesselSummary) =>
+          v.hasOverdue || v.hasUpcoming || v.readyForInvoicing > 0
       ).length,
     };
   }, [vesselSummaries]);
@@ -228,13 +272,18 @@ export default function Dashboard() {
     }
 
     return {
-      overdue: vesselSummaries.filter((v) => v.hasOverdue).length,
-      dueSoon: vesselSummaries.filter((v) => v.hasUpcoming).length,
-      readyToInvoice: vesselSummaries.filter((v) => v.readyForInvoicing > 0)
+      overdue: vesselSummaries.filter((v: VesselSummary) => v.hasOverdue)
         .length,
+      dueSoon: vesselSummaries.filter((v: VesselSummary) => v.hasUpcoming)
+        .length,
+      readyToInvoice: vesselSummaries.filter(
+        (v: VesselSummary) => v.readyForInvoicing > 0
+      ).length,
       avgProgress: Math.round(
-        vesselSummaries.reduce((sum, v) => sum + v.overallProgress, 0) /
-          vesselSummaries.length
+        vesselSummaries.reduce(
+          (sum: number, v: VesselSummary) => sum + v.overallProgress,
+          0
+        ) / vesselSummaries.length
       ),
     };
   }, [vesselSummaries]);
@@ -285,75 +334,78 @@ export default function Dashboard() {
 
       if (invoiceError) throw invoiceError;
 
-      const invoiceMap = new Map();
-      (existingInvoices || []).forEach((invoice) => {
+      const invoiceMap = new Map<number, DatabaseInvoice>();
+      (existingInvoices || []).forEach((invoice: DatabaseInvoice) => {
         invoiceMap.set(invoice.work_order_id, invoice);
       });
 
       // Process work orders with progress data
       const processedWorkOrders: ProcessedWorkOrder[] = (
         workOrderData || []
-      ).map((wo) => {
+      ).map((wo: DatabaseWorkOrder) => {
         const workDetails = wo.work_details || [];
 
-        const workDetailsWithProgress = workDetails.map((detail) => {
-          const progressRecords = detail.work_progress || [];
-          const verificationRecords = detail.work_verification || [];
+        const workDetailsWithProgress = workDetails.map(
+          (detail: DatabaseWorkDetail) => {
+            const progressRecords = detail.work_progress || [];
+            const verificationRecords = detail.work_verification || [];
 
-          if (progressRecords.length === 0) {
+            if (progressRecords.length === 0) {
+              return {
+                ...detail,
+                current_progress: 0,
+                latest_progress_date: undefined,
+                verification_status: verificationRecords.some(
+                  (v) => v.work_verification === true
+                ),
+              };
+            }
+
+            const sortedProgress = progressRecords.sort(
+              (a, b) =>
+                new Date(b.report_date).getTime() -
+                new Date(a.report_date).getTime()
+            );
+
+            const latestProgress = sortedProgress[0]?.progress_percentage || 0;
+            const latestProgressDate = sortedProgress[0]?.report_date;
+
             return {
               ...detail,
-              current_progress: 0,
-              latest_progress_date: undefined,
+              current_progress: latestProgress,
+              latest_progress_date: latestProgressDate,
               verification_status: verificationRecords.some(
                 (v) => v.work_verification === true
               ),
             };
           }
-
-          const sortedProgress = progressRecords.sort(
-            (a, b) =>
-              new Date(b.report_date).getTime() -
-              new Date(a.report_date).getTime()
-          );
-
-          const latestProgress = sortedProgress[0]?.progress_percentage || 0;
-          const latestProgressDate = sortedProgress[0]?.report_date;
-
-          return {
-            ...detail,
-            current_progress: latestProgress,
-            latest_progress_date: latestProgressDate,
-            verification_status: verificationRecords.some(
-              (v) => v.work_verification === true
-            ),
-          };
-        });
+        );
 
         let overallProgress = 0;
         let hasProgressData = false;
 
         if (workDetailsWithProgress.length > 0) {
           const totalProgress = workDetailsWithProgress.reduce(
-            (sum, detail) => sum + (detail.current_progress || 0),
+            (sum: number, detail: WorkDetailsWithProgress) =>
+              sum + (detail.current_progress || 0),
             0
           );
           overallProgress = Math.round(
             totalProgress / workDetailsWithProgress.length
           );
           hasProgressData = workDetailsWithProgress.some(
-            (detail) => detail.current_progress > 0
+            (detail: WorkDetailsWithProgress) => detail.current_progress > 0
           );
         }
 
         const isFullyCompleted =
           workDetailsWithProgress.length > 0 &&
           workDetailsWithProgress.every(
-            (detail) => detail.current_progress === 100
+            (detail: WorkDetailsWithProgress) => detail.current_progress === 100
           );
 
         const verificationStatus = workDetailsWithProgress.some(
-          (detail) => detail.verification_status
+          (detail: WorkDetailsWithProgress) => detail.verification_status
         );
 
         const invoiceDetails = invoiceMap.get(wo.id);
@@ -362,12 +414,15 @@ export default function Dashboard() {
         let completionDate: string | undefined;
         if (isFullyCompleted) {
           const completedDetails = workDetailsWithProgress.filter(
-            (d) => d.current_progress === 100
+            (d: WorkDetailsWithProgress) => d.current_progress === 100
           );
           const latestCompletionDates = completedDetails
-            .filter((d) => d.latest_progress_date)
-            .map((d) => d.latest_progress_date!)
-            .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+            .filter((d: WorkDetailsWithProgress) => d.latest_progress_date)
+            .map((d: WorkDetailsWithProgress) => d.latest_progress_date!)
+            .sort(
+              (a: string, b: string) =>
+                new Date(b).getTime() - new Date(a).getTime()
+            );
 
           completionDate = latestCompletionDates[0];
         }
@@ -400,11 +455,13 @@ export default function Dashboard() {
         verificationPending: 0,
         totalInvoices: existingInvoices?.length || 0,
         paidInvoices:
-          existingInvoices?.filter((inv) => inv.payment_status === true)
-            .length || 0,
+          existingInvoices?.filter(
+            (inv: DatabaseInvoice) => inv.payment_status === true
+          ).length || 0,
         unpaidInvoices:
-          existingInvoices?.filter((inv) => inv.payment_status === false)
-            .length || 0,
+          existingInvoices?.filter(
+            (inv: DatabaseInvoice) => inv.payment_status === false
+          ).length || 0,
         readyForInvoicing: 0,
       };
 
@@ -580,13 +637,14 @@ export default function Dashboard() {
         const activityDates = [
           wo.completion_date,
           ...(wo.work_details
-            ?.map((d) => d.latest_progress_date)
+            ?.map((d: WorkDetailsWithProgress) => d.latest_progress_date)
             .filter(Boolean) || []),
         ].filter(Boolean);
 
         if (activityDates.length > 0) {
           const latestActivity = activityDates.sort(
-            (a, b) => new Date(b!).getTime() - new Date(a!).getTime()
+            (a: string | undefined, b: string | undefined) =>
+              new Date(b!).getTime() - new Date(a!).getTime()
           )[0];
 
           if (
