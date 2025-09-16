@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { supabase, type WorkOrder, type Vessel } from "../../lib/supabase";
+import { supabase } from "../../lib/supabase";
 import {
   uploadWorkPermitFile,
   validateWorkPermitFile,
@@ -67,7 +67,7 @@ export default function EditWorkDetails() {
   const [removeExistingFile, setRemoveExistingFile] = useState(false);
 
   // Fetch work details data
-  const fetchWorkDetails = async () => {
+  const fetchWorkDetails = useCallback(async () => {
     if (!workDetailsId) return;
 
     try {
@@ -121,11 +121,11 @@ export default function EditWorkDetails() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [workDetailsId]);
 
   useEffect(() => {
     fetchWorkDetails();
-  }, [workDetailsId]);
+  }, [fetchWorkDetails]);
 
   // Handle file selection
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -237,8 +237,8 @@ export default function EditWorkDetails() {
     setError(null);
 
     try {
-      let newStoragePath = formData.storage_path;
-      let newWorkPermitUrl = formData.work_permit_url;
+      let newStoragePath: string | null = formData.storage_path || null;
+      let newWorkPermitUrl: string | null = formData.work_permit_url || null;
 
       // Handle file operations
       if (removeExistingFile && originalData?.storage_path) {
@@ -289,8 +289,8 @@ export default function EditWorkDetails() {
           }
         }
 
-        newStoragePath = uploadResult.storagePath;
-        newWorkPermitUrl = uploadResult.publicUrl;
+        newStoragePath = uploadResult.storagePath || null;
+        newWorkPermitUrl = uploadResult.publicUrl || null;
         console.log("New file uploaded successfully:", {
           storagePath: newStoragePath,
           workPermitUrl: newWorkPermitUrl,

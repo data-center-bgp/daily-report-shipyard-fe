@@ -584,8 +584,7 @@ export default function AddWorkDetails() {
                         {selectedWorkOrder.shipyard_wo_number}
                       </div>
                       <div className="text-sm text-green-600">
-                        {selectedWorkOrder.description ||
-                          "No description available"}
+                        Work Order ID: {selectedWorkOrder.id}
                       </div>
                     </div>
                   </div>
@@ -613,10 +612,8 @@ export default function AddWorkDetails() {
                     {workOrders.map((workOrder) => (
                       <option key={workOrder.id} value={workOrder.id}>
                         {workOrder.shipyard_wo_number}
-                        {workOrder.description &&
-                          ` - ${workOrder.description.substring(0, 50)}${
-                            workOrder.description.length > 50 ? "..." : ""
-                          }`}
+                        {workOrder.customer_wo_number &&
+                          ` (Customer: ${workOrder.customer_wo_number})`}
                       </option>
                     ))}
                   </select>
@@ -626,9 +623,9 @@ export default function AddWorkDetails() {
                       <div className="text-sm text-green-800">
                         <strong>Selected Work Order:</strong>{" "}
                         {selectedWorkOrder.shipyard_wo_number}
-                        {selectedWorkOrder.description && (
+                        {selectedWorkOrder.customer_wo_number && (
                           <div className="mt-1 text-green-600">
-                            {selectedWorkOrder.description}
+                            Customer WO: {selectedWorkOrder.customer_wo_number}
                           </div>
                         )}
                       </div>

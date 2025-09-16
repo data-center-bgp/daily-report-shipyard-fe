@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   supabase,
@@ -6,7 +6,7 @@ import {
   type WorkOrder,
   type Vessel,
 } from "../../lib/supabase";
-import { getPermitFileUrl, openPermitFile } from "../../utils/urlHandler";
+import { openPermitFile } from "../../utils/urlHandler";
 
 interface WorkDetailsWithWorkOrder extends WorkDetails {
   work_order?: WorkOrder & {
@@ -130,7 +130,7 @@ export default function WODetailsTable({
     setCurrentPage(1); // Reset to first page
   };
 
-  const fetchWorkDetails = async () => {
+  const fetchWorkDetails = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -225,9 +225,9 @@ export default function WODetailsTable({
           };
         }
 
-        // Sort progress records by date (newest first)
+        // Sort progress records by date (newest first) - Fixed type annotations
         const sortedProgress = progressRecords.sort(
-          (a, b) =>
+          (a: { report_date: string }, b: { report_date: string }) =>
             new Date(b.report_date).getTime() -
             new Date(a.report_date).getTime()
         );
@@ -256,7 +256,16 @@ export default function WODetailsTable({
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    selectedVesselId,
+    selectedWorkOrderId,
+    workOrderId,
+    currentPage,
+    sortField,
+    sortDirection,
+    startIndex,
+    endIndex,
+  ]);
 
   useEffect(() => {
     if (!workOrderId) {
@@ -266,14 +275,7 @@ export default function WODetailsTable({
 
   useEffect(() => {
     fetchWorkDetails();
-  }, [
-    workOrderId,
-    selectedVesselId,
-    selectedWorkOrderId,
-    sortField,
-    sortDirection,
-    currentPage,
-  ]);
+  }, [fetchWorkDetails]);
 
   // Initialize filters if workOrderId is provided
   useEffect(() => {
@@ -379,17 +381,6 @@ export default function WODetailsTable({
     });
   };
 
-  const formatDateTime = (dateString: string | null) => {
-    if (!dateString) return "-";
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
   const getStatus = (detail: WorkDetailsWithWorkOrder) => {
     if (detail.actual_close_date) {
       return {
@@ -468,7 +459,7 @@ export default function WODetailsTable({
     const maxVisiblePages = 5;
 
     let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1); // Fixed: use const instead of let
 
     if (endPage - startPage + 1 < maxVisiblePages) {
       startPage = Math.max(1, endPage - maxVisiblePages + 1);
