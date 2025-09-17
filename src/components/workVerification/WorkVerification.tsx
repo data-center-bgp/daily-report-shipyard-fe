@@ -36,6 +36,11 @@ interface VerificationWithDetails extends WorkVerification {
   };
 }
 
+interface WorkProgressItem {
+  progress_percentage: number;
+  report_date: string;
+}
+
 export default function WorkVerification() {
   const navigate = useNavigate();
 
@@ -104,7 +109,7 @@ export default function WorkVerification() {
         }
 
         const sortedProgress = progressRecords.sort(
-          (a, b) =>
+          (a: WorkProgressItem, b: WorkProgressItem) =>
             new Date(b.report_date).getTime() -
             new Date(a.report_date).getTime()
         );
