@@ -1,18 +1,44 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import {
-  supabase,
-  type Vessel,
-  type WorkOrder,
-  type WorkDetails,
-} from "../../lib/supabase";
-import {
-  uploadProgressEvidence,
-  type ProgressEvidenceUpload,
-} from "../../utils/progressEvidenceHandler";
+import { supabase } from "../../lib/supabase";
+import { uploadProgressEvidence } from "../../utils/progressEvidenceHandler";
 
 interface AddWorkProgressProps {
-  workDetailsId?: number; // If provided, skip the selection flow
+  workDetailsId?: number;
+}
+
+interface VesselFormData {
+  id: number;
+  name: string;
+  type: string;
+  company: string;
+}
+
+interface WorkOrderFormData {
+  id: number;
+  shipyard_wo_number: string;
+  shipyard_wo_date: string;
+}
+
+interface WorkDetailsFormData {
+  id: number;
+  description: string;
+  location: string;
+  pic: string;
+}
+
+interface WorkDetailsContext {
+  id: number;
+  description: string;
+  work_order: {
+    id: number;
+    shipyard_wo_number: string;
+    vessel_id: number;
+    vessel: {
+      id: number;
+      name: string;
+    };
+  };
 }
 
 export default function AddWorkProgress({
@@ -21,15 +47,15 @@ export default function AddWorkProgress({
   const navigate = useNavigate();
   const params = useParams();
 
-  // Get workDetailsId from URL params if not provided as prop
   const effectiveWorkDetailsId =
     workDetailsId ||
     (params.workDetailsId ? parseInt(params.workDetailsId) : undefined);
 
-  // Selection states
-  const [vessels, setVessels] = useState<Vessel[]>([]);
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
-  const [workDetailsList, setWorkDetailsList] = useState<WorkDetails[]>([]);
+  const [vessels, setVessels] = useState<VesselFormData[]>([]);
+  const [workOrders, setWorkOrders] = useState<WorkOrderFormData[]>([]);
+  const [workDetailsList, setWorkDetailsList] = useState<WorkDetailsFormData[]>(
+    []
+  );
 
   const [selectedVesselId, setSelectedVesselId] = useState<number>(0);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<number>(0);
@@ -37,31 +63,26 @@ export default function AddWorkProgress({
     effectiveWorkDetailsId || 0
   );
 
-  // Form states
   const [formData, setFormData] = useState({
     progress_percentage: "",
     report_date: new Date().toISOString().split("T")[0],
     evidence_file: null as File | null,
   });
 
-  // Loading and error states
   const [loadingVessels, setLoadingVessels] = useState(false);
   const [loadingWorkOrders, setLoadingWorkOrders] = useState(false);
   const [loadingWorkDetails, setLoadingWorkDetails] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch vessels on component mount
   useEffect(() => {
     fetchVessels();
 
-    // If we have a workDetailsId, fetch the related data
     if (effectiveWorkDetailsId) {
       fetchWorkDetailsContext(effectiveWorkDetailsId);
     }
   }, [effectiveWorkDetailsId]);
 
-  // Fetch work orders when vessel changes
   useEffect(() => {
     if (selectedVesselId > 0) {
       fetchWorkOrders(selectedVesselId);
@@ -71,7 +92,6 @@ export default function AddWorkProgress({
     }
   }, [selectedVesselId]);
 
-  // Fetch work details when work order changes
   useEffect(() => {
     if (selectedWorkOrderId > 0) {
       fetchWorkDetails(selectedWorkOrderId);
@@ -91,7 +111,15 @@ export default function AddWorkProgress({
         .order("name", { ascending: true });
 
       if (error) throw error;
-      setVessels(data || []);
+
+      const vesselData: VesselFormData[] = (data || []).map((item) => ({
+        id: item.id,
+        name: item.name,
+        type: item.type,
+        company: item.company,
+      }));
+
+      setVessels(vesselData);
     } catch (err) {
       console.error("Error fetching vessels:", err);
       setError("Failed to load vessels");
@@ -111,7 +139,14 @@ export default function AddWorkProgress({
         .order("shipyard_wo_number", { ascending: true });
 
       if (error) throw error;
-      setWorkOrders(data || []);
+
+      const workOrderData: WorkOrderFormData[] = (data || []).map((item) => ({
+        id: item.id,
+        shipyard_wo_number: item.shipyard_wo_number,
+        shipyard_wo_date: item.shipyard_wo_date,
+      }));
+
+      setWorkOrders(workOrderData);
     } catch (err) {
       console.error("Error fetching work orders:", err);
       setError("Failed to load work orders");
@@ -131,7 +166,17 @@ export default function AddWorkProgress({
         .order("description", { ascending: true });
 
       if (error) throw error;
-      setWorkDetailsList(data || []);
+
+      const workDetailsData: WorkDetailsFormData[] = (data || []).map(
+        (item) => ({
+          id: item.id,
+          description: item.description,
+          location: item.location,
+          pic: item.pic,
+        })
+      );
+
+      setWorkDetailsList(workDetailsData);
     } catch (err) {
       console.error("Error fetching work details:", err);
       setError("Failed to load work details");
@@ -164,9 +209,16 @@ export default function AddWorkProgress({
 
       if (error) throw error;
 
-      if (data?.work_order?.vessel) {
-        setSelectedVesselId(data.work_order.vessel.id);
-        setSelectedWorkOrderId(data.work_order.id);
+      // Handle the response structure properly
+      const workDetailsContext = data as unknown as WorkDetailsContext;
+
+      if (workDetailsContext?.work_order?.vessel) {
+        const vessel = Array.isArray(workDetailsContext.work_order.vessel)
+          ? workDetailsContext.work_order.vessel[0]
+          : workDetailsContext.work_order.vessel;
+
+        setSelectedVesselId(vessel.id);
+        setSelectedWorkOrderId(workDetailsContext.work_order.id);
         setSelectedWorkDetailsId(workDetailsId);
       }
     } catch (err) {
@@ -233,7 +285,7 @@ export default function AddWorkProgress({
       return;
     }
 
-    setSubmitting(true); // Fixed: Changed from setLoading to setSubmitting
+    setSubmitting(true);
     setError(null);
 
     try {
@@ -404,6 +456,7 @@ export default function AddWorkProgress({
     });
   };
 
+  // ... rest of your JSX remains exactly the same
   return (
     <div className="p-8">
       <div className="mb-6">

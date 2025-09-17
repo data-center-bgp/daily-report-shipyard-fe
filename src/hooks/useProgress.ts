@@ -1,16 +1,47 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import type {
-  ProgressWithDetails,
-  ProgressSummary,
-  ProgressFormData,
+  ProjectProgress,
+  ProjectProgressWithDetails,
+  ProjectProgressFormData,
   ProgressFilter,
   ProgressStats,
-  ProgressChartData,
-} from "../types/progress";
+} from "../types/progressTypes";
+
+// Add missing types that are specific to the useProgress hook
+interface ProgressSummary {
+  work_order_id: number;
+  current_progress: number;
+  latest_report_date: string;
+  total_reports: number;
+  work_order: {
+    id: number;
+    customer_wo_number: string;
+    shipyard_wo_number: string;
+    wo_location: string;
+    wo_description: string;
+    vessel: {
+      name: string;
+      type: string;
+      company: string;
+    };
+  };
+  progress_history: {
+    date: string;
+    progress: number;
+    reporter: string;
+  }[];
+}
+
+interface ProgressChartData {
+  date: string;
+  progress: number;
+  reporter: string;
+  formatted_date: string;
+}
 
 export const useProgress = () => {
-  const [progress, setProgress] = useState<ProgressWithDetails[]>([]);
+  const [progress, setProgress] = useState<ProjectProgressWithDetails[]>([]);
   const [progressSummaries, setProgressSummaries] = useState<ProgressSummary[]>(
     []
   );
@@ -50,7 +81,7 @@ export const useProgress = () => {
         .is("deleted_at", null)
         .order("report_date", { ascending: false });
 
-      // Apply filters
+      // Apply filters - updated to use the unified filter interface
       if (filter?.work_order_id) {
         query = query.eq("work_order_id", filter.work_order_id);
       }
@@ -60,19 +91,28 @@ export const useProgress = () => {
       if (filter?.date_to) {
         query = query.lte("report_date", filter.date_to);
       }
-      if (filter?.min_progress !== undefined) {
-        query = query.gte("progress", filter.min_progress);
+      if (filter?.project_progress_min !== undefined) {
+        query = query.gte("progress", filter.project_progress_min);
       }
-      if (filter?.max_progress !== undefined) {
-        query = query.lte("progress", filter.max_progress);
+      if (filter?.project_progress_max !== undefined) {
+        query = query.lte("progress", filter.project_progress_max);
       }
 
       const { data, error } = await query;
 
       if (error) throw error;
 
-      setProgress(data || []);
-      return data || [];
+      // Transform data to match ProjectProgressWithDetails interface
+      const transformedData = (data || []).map((item: any) => ({
+        ...item,
+        work_order: Array.isArray(item.work_order)
+          ? item.work_order[0]
+          : item.work_order,
+        user: Array.isArray(item.user) ? item.user[0] : item.user,
+      })) as ProjectProgressWithDetails[];
+
+      setProgress(transformedData);
+      return transformedData;
     } catch (err) {
       console.error("Error fetching progress:", err);
       setError(err instanceof Error ? err.message : "Failed to fetch progress");
@@ -121,18 +161,23 @@ export const useProgress = () => {
       const summariesMap = new Map<number, ProgressSummary>();
 
       allProgress?.forEach((item) => {
+        const workOrder = Array.isArray(item.work_order)
+          ? item.work_order[0]
+          : item.work_order;
+        const user = Array.isArray(item.user) ? item.user[0] : item.user;
+
         if (!summariesMap.has(item.work_order_id)) {
           summariesMap.set(item.work_order_id, {
             work_order_id: item.work_order_id,
             current_progress: item.progress,
             latest_report_date: item.report_date,
             total_reports: 1,
-            work_order: item.work_order,
+            work_order: workOrder,
             progress_history: [
               {
                 date: item.report_date,
                 progress: item.progress,
-                reporter: item.user?.name || "Unknown",
+                reporter: user?.name || "Unknown",
               },
             ],
           });
@@ -143,7 +188,7 @@ export const useProgress = () => {
           existing.progress_history.push({
             date: item.report_date,
             progress: item.progress,
-            reporter: item.user?.name || "Unknown",
+            reporter: user?.name || "Unknown",
           });
         }
       });
@@ -161,7 +206,7 @@ export const useProgress = () => {
   }, []);
 
   const addProgress = useCallback(
-    async (progressData: ProgressFormData) => {
+    async (progressData: ProjectProgressFormData) => {
       try {
         setLoading(true);
         setError(null);
@@ -243,12 +288,15 @@ export const useProgress = () => {
 
         if (error) throw error;
 
-        return (data || []).map((item) => ({
-          date: item.report_date,
-          progress: item.progress,
-          reporter: item.user?.[0]?.name || "Unknown",
-          formatted_date: new Date(item.report_date).toLocaleDateString(),
-        }));
+        return (data || []).map((item) => {
+          const user = Array.isArray(item.user) ? item.user[0] : item.user;
+          return {
+            date: item.report_date,
+            progress: item.progress,
+            reporter: user?.name || "Unknown",
+            formatted_date: new Date(item.report_date).toLocaleDateString(),
+          };
+        });
       } catch (err) {
         console.error("Error fetching work order progress:", err);
         return [];
@@ -257,7 +305,7 @@ export const useProgress = () => {
     []
   );
 
-  // Get progress statistics
+  // Get progress statistics - updated to use unified ProgressStats
   const fetchProgressStats = useCallback(async (): Promise<ProgressStats> => {
     try {
       const summaries = await fetchProgressSummaries();
@@ -267,7 +315,7 @@ export const useProgress = () => {
         (s) => s.current_progress >= 100
       ).length;
       const active_projects = total_projects - completed_projects;
-      const average_progress =
+      const average_project_progress =
         summaries.length > 0
           ? summaries.reduce((sum, s) => sum + s.current_progress, 0) /
             summaries.length
@@ -286,13 +334,66 @@ export const useProgress = () => {
 
       const projects_on_track = active_projects - projects_behind_schedule;
 
+      // Fetch work details stats for the unified interface
+      const { data: workDetailsStats, error: workDetailsError } = await supabase
+        .from("work_progress")
+        .select("work_details_id, progress_percentage, evidence_url")
+        .is("deleted_at", null);
+
+      let total_work_details = 0;
+      let completed_work_details = 0;
+      let work_details_with_evidence = 0;
+      let average_details_progress = 0;
+
+      if (!workDetailsError && workDetailsStats) {
+        // Get unique work details and their max progress
+        const workDetailsMap = new Map<
+          number,
+          { maxProgress: number; hasEvidence: boolean }
+        >();
+
+        workDetailsStats.forEach((item) => {
+          const existing = workDetailsMap.get(item.work_details_id);
+          const hasEvidence = !!item.evidence_url;
+
+          if (!existing || existing.maxProgress < item.progress_percentage) {
+            workDetailsMap.set(item.work_details_id, {
+              maxProgress: item.progress_percentage,
+              hasEvidence: existing?.hasEvidence || hasEvidence,
+            });
+          }
+        });
+
+        total_work_details = workDetailsMap.size;
+        completed_work_details = Array.from(workDetailsMap.values()).filter(
+          (detail) => detail.maxProgress >= 100
+        ).length;
+        work_details_with_evidence = Array.from(workDetailsMap.values()).filter(
+          (detail) => detail.hasEvidence
+        ).length;
+        average_details_progress =
+          Array.from(workDetailsMap.values()).reduce(
+            (sum, detail) => sum + detail.maxProgress,
+            0
+          ) / total_work_details || 0;
+      }
+
       const stats: ProgressStats = {
+        // Project level stats
         total_projects,
         active_projects,
         completed_projects,
-        average_progress: Math.round(average_progress * 100) / 100,
+        average_project_progress:
+          Math.round(average_project_progress * 100) / 100,
         projects_behind_schedule,
         projects_on_track,
+
+        // Work details level stats
+        total_work_details,
+        completed_work_details,
+        work_details_with_evidence,
+        average_details_progress:
+          Math.round(average_details_progress * 100) / 100,
       };
 
       setStats(stats);
@@ -303,9 +404,13 @@ export const useProgress = () => {
         total_projects: 0,
         active_projects: 0,
         completed_projects: 0,
-        average_progress: 0,
+        average_project_progress: 0,
         projects_behind_schedule: 0,
         projects_on_track: 0,
+        total_work_details: 0,
+        completed_work_details: 0,
+        work_details_with_evidence: 0,
+        average_details_progress: 0,
       };
       setStats(defaultStats);
       return defaultStats;

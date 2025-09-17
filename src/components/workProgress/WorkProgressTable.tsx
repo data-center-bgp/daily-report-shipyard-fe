@@ -1,39 +1,33 @@
-import { useState, useEffect } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  supabase,
-  type Vessel,
-  type WorkOrder,
-  type WorkDetails,
-} from "../../lib/supabase";
+import { supabase } from "../../lib/supabase";
 import { openProgressEvidence } from "../../utils/progressEvidenceHandler";
+import type { WorkProgressWithDetails } from "../../types/progressTypes";
 
-interface WorkProgressWithDetails {
+interface VesselInfo {
   id: number;
-  progress_percentage: number;
-  report_date: string;
-  evidence_url?: string;
-  storage_path?: string;
-  created_at: string;
-  work_details: {
-    id: number;
-    description: string;
-    location?: string;
-    work_order: {
-      id: number;
-      shipyard_wo_number: string;
-      vessel: {
-        id: number;
-        name: string;
-        type: string;
-      };
-    };
-  };
-  profiles: {
-    id: number;
-    name: string;
-    email: string;
-  };
+  name: string;
+  type: string;
+  company: string;
+}
+
+interface WorkOrderInfo {
+  id: number;
+  shipyard_wo_number: string;
+  shipyard_wo_date: string;
+  vessel: VesselInfo;
+}
+
+interface WorkDetailsInfo {
+  id: number;
+  description: string;
+  location: string;
+  pic: string;
+  planned_start_date: string;
+  target_close_date: string;
+  period_close_target: string;
+  work_order: WorkOrderInfo;
 }
 
 interface WorkProgressTableProps {
@@ -41,84 +35,153 @@ interface WorkProgressTableProps {
   embedded?: boolean;
 }
 
+interface SupabaseVesselData {
+  id: number;
+  name: string;
+  type: string;
+  company: string;
+}
+
+interface SupabaseWorkOrderData {
+  id: number;
+  shipyard_wo_number: string;
+  shipyard_wo_date: string;
+  vessel: SupabaseVesselData | SupabaseVesselData[];
+}
+
+interface SupabaseWorkDetailsData {
+  id: number;
+  description: string;
+  location: string;
+  pic: string;
+  planned_start_date: string;
+  target_close_date: string;
+  period_close_target: string;
+  work_order: SupabaseWorkOrderData | SupabaseWorkOrderData[];
+}
+
+interface SupabaseWorkProgressResponse {
+  id: number;
+  progress_percentage: number;
+  report_date: string;
+  evidence_url?: string;
+  storage_path?: string;
+  created_at: string;
+  work_details_id: number;
+  user_id?: number;
+  work_details: {
+    id: number;
+    description: string;
+    location: string;
+    work_order: {
+      id: number;
+      shipyard_wo_number: string;
+      vessel: SupabaseVesselData | SupabaseVesselData[];
+    };
+  }[];
+  profiles?: {
+    id: number;
+    name: string;
+    email: string;
+  }[];
+}
+
+const transformSupabaseWorkOrder = (
+  data: SupabaseWorkOrderData
+): WorkOrderInfo => {
+  return {
+    id: data.id,
+    shipyard_wo_number: data.shipyard_wo_number,
+    shipyard_wo_date: data.shipyard_wo_date,
+    vessel: Array.isArray(data.vessel) ? data.vessel[0] : data.vessel,
+  };
+};
+
+const transformSupabaseWorkDetails = (
+  data: SupabaseWorkDetailsData
+): WorkDetailsInfo => {
+  return {
+    id: data.id,
+    description: data.description,
+    location: data.location,
+    pic: data.pic,
+    planned_start_date: data.planned_start_date,
+    target_close_date: data.target_close_date,
+    period_close_target: data.period_close_target,
+    work_order: transformSupabaseWorkOrder(
+      Array.isArray(data.work_order) ? data.work_order[0] : data.work_order
+    ),
+  };
+};
+
+const transformSupabaseWorkProgress = (
+  data: SupabaseWorkProgressResponse
+): WorkProgressWithDetails => {
+  const workDetails = Array.isArray(data.work_details)
+    ? data.work_details[0]
+    : data.work_details;
+  const profiles = Array.isArray(data.profiles)
+    ? data.profiles[0]
+    : data.profiles;
+
+  return {
+    id: data.id,
+    progress_percentage: data.progress_percentage,
+    report_date: data.report_date,
+    evidence_url: data.evidence_url,
+    storage_path: data.storage_path,
+    created_at: data.created_at,
+    work_details_id: data.work_details_id,
+    user_id: data.user_id,
+    work_details: {
+      id: workDetails.id,
+      description: workDetails.description,
+      location: workDetails.location,
+      work_order: {
+        id: workDetails.work_order.id,
+        shipyard_wo_number: workDetails.work_order.shipyard_wo_number,
+        vessel: Array.isArray(workDetails.work_order.vessel)
+          ? workDetails.work_order.vessel[0]
+          : workDetails.work_order.vessel,
+      },
+    },
+    profiles: profiles,
+  };
+};
+
 export default function WorkProgressTable({
   workDetailsId,
   embedded = false,
 }: WorkProgressTableProps) {
   const navigate = useNavigate();
 
-  // Data states
   const [workProgress, setWorkProgress] = useState<WorkProgressWithDetails[]>(
     []
   );
-  const [vessels, setVessels] = useState<Vessel[]>([]);
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
-  const [workDetailsList, setWorkDetailsList] = useState<WorkDetails[]>([]);
+  const [vessels, setVessels] = useState<VesselInfo[]>([]);
+  const [workOrders, setWorkOrders] = useState<WorkOrderInfo[]>([]);
+  const [workDetailsList, setWorkDetailsList] = useState<WorkDetailsInfo[]>([]);
 
-  // Filter states
   const [selectedVesselId, setSelectedVesselId] = useState<number>(0);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<number>(0);
   const [selectedWorkDetailsIdFilter, setSelectedWorkDetailsIdFilter] =
     useState<number>(workDetailsId || 0);
 
-  // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const itemsPerPage = 10;
 
-  // Loading and error states
   const [loading, setLoading] = useState(true);
   const [loadingVessels, setLoadingVessels] = useState(false);
   const [loadingWorkOrders, setLoadingWorkOrders] = useState(false);
   const [loadingWorkDetails, setLoadingWorkDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // New state to track maximum progress for each work detail
   const [maxProgressByWorkDetail, setMaxProgressByWorkDetail] = useState<
     Record<number, number>
   >({});
 
-  // Fetch initial data
-  useEffect(() => {
-    if (!workDetailsId) {
-      fetchVessels();
-    }
-    fetchWorkProgress();
-  }, [workDetailsId]);
-
-  // Fetch work orders when vessel changes
-  useEffect(() => {
-    if (selectedVesselId > 0) {
-      fetchWorkOrders(selectedVesselId);
-    } else {
-      setWorkOrders([]);
-      setSelectedWorkOrderId(0);
-    }
-  }, [selectedVesselId]);
-
-  // Fetch work details when work order changes
-  useEffect(() => {
-    if (selectedWorkOrderId > 0) {
-      fetchWorkDetails(selectedWorkOrderId);
-    } else {
-      setWorkDetailsList([]);
-      if (!workDetailsId) {
-        setSelectedWorkDetailsIdFilter(0);
-      }
-    }
-  }, [selectedWorkOrderId, workDetailsId]);
-
-  // Fetch progress when filters or page changes
-  useEffect(() => {
-    fetchWorkProgress();
-    setCurrentPage(1); // Reset to first page when filters change
-  }, [selectedVesselId, selectedWorkOrderId, selectedWorkDetailsIdFilter]);
-
-  useEffect(() => {
-    fetchWorkProgress();
-  }, [currentPage]);
-
-  const fetchVessels = async () => {
+  const fetchVessels = useCallback(async () => {
     try {
       setLoadingVessels(true);
       const { data, error } = await supabase
@@ -134,52 +197,88 @@ export default function WorkProgressTable({
     } finally {
       setLoadingVessels(false);
     }
-  };
+  }, []);
 
-  const fetchWorkOrders = async (vesselId: number) => {
+  const fetchWorkOrders = useCallback(async (vesselId: number) => {
     try {
       setLoadingWorkOrders(true);
       const { data, error } = await supabase
         .from("work_order")
-        .select("id, shipyard_wo_number, shipyard_wo_date")
+        .select(
+          `
+          id, 
+          shipyard_wo_number, 
+          shipyard_wo_date,
+          vessel!inner (
+            id,
+            name,
+            type,
+            company
+          )
+        `
+        )
         .eq("vessel_id", vesselId)
         .is("deleted_at", null)
         .order("shipyard_wo_number", { ascending: true });
 
       if (error) throw error;
-      setWorkOrders(data || []);
+
+      const transformedData = (data || []).map(transformSupabaseWorkOrder);
+      setWorkOrders(transformedData);
     } catch (err) {
       console.error("Error fetching work orders:", err);
     } finally {
       setLoadingWorkOrders(false);
     }
-  };
+  }, []);
 
-  const fetchWorkDetails = async (workOrderId: number) => {
+  const fetchWorkDetails = useCallback(async (workOrderId: number) => {
     try {
       setLoadingWorkDetails(true);
       const { data, error } = await supabase
         .from("work_details")
-        .select("id, description, location, pic")
+        .select(
+          `
+          id, 
+          description, 
+          location, 
+          pic,
+          planned_start_date,
+          target_close_date,
+          period_close_target,
+          work_order!inner (
+            id,
+            shipyard_wo_number,
+            shipyard_wo_date,
+            vessel!inner (
+              id,
+              name,
+              type,
+              company
+            )
+          )
+        `
+        )
         .eq("work_order_id", workOrderId)
         .is("deleted_at", null)
         .order("description", { ascending: true });
 
       if (error) throw error;
-      setWorkDetailsList(data || []);
+
+      const transformedData = (data || []).map(transformSupabaseWorkDetails);
+      setWorkDetailsList(transformedData);
     } catch (err) {
       console.error("Error fetching work details:", err);
     } finally {
       setLoadingWorkDetails(false);
     }
-  };
+  }, []);
 
-  const fetchWorkProgress = async () => {
+  const fetchWorkProgress = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Build the query with filters
       let query = supabase.from("work_progress").select(
         `
           id,
@@ -188,14 +287,16 @@ export default function WorkProgressTable({
           evidence_url,
           storage_path,
           created_at,
-          work_details (
+          work_details_id,
+          user_id,
+          work_details!inner (
             id,
             description,
             location,
-            work_order (
+            work_order!inner (
               id,
               shipyard_wo_number,
-              vessel (
+              vessel!inner (
                 id,
                 name,
                 type
@@ -211,11 +312,9 @@ export default function WorkProgressTable({
         { count: "exact" }
       );
 
-      // Apply filters
       if (selectedWorkDetailsIdFilter > 0) {
         query = query.eq("work_details_id", selectedWorkDetailsIdFilter);
       } else if (selectedWorkOrderId > 0) {
-        // Filter by work order - need to join through work_details
         const { data: workDetailsInOrder } = await supabase
           .from("work_details")
           .select("id")
@@ -225,14 +324,12 @@ export default function WorkProgressTable({
           const workDetailsIds = workDetailsInOrder.map((wd) => wd.id);
           query = query.in("work_details_id", workDetailsIds);
         } else {
-          // No work details found for this work order
           setWorkProgress([]);
           setTotalCount(0);
           setLoading(false);
           return;
         }
       } else if (selectedVesselId > 0) {
-        // Filter by vessel - need to join through work_order and work_details
         const { data: workOrdersInVessel } = await supabase
           .from("work_order")
           .select("id")
@@ -249,14 +346,12 @@ export default function WorkProgressTable({
             const workDetailsIds = workDetailsInVessel.map((wd) => wd.id);
             query = query.in("work_details_id", workDetailsIds);
           } else {
-            // No work details found for this vessel
             setWorkProgress([]);
             setTotalCount(0);
             setLoading(false);
             return;
           }
         } else {
-          // No work orders found for this vessel
           setWorkProgress([]);
           setTotalCount(0);
           setLoading(false);
@@ -264,7 +359,6 @@ export default function WorkProgressTable({
         }
       }
 
-      // Apply pagination
       const startIndex = (currentPage - 1) * itemsPerPage;
       query = query
         .order("report_date", { ascending: false })
@@ -275,11 +369,14 @@ export default function WorkProgressTable({
 
       if (error) throw error;
 
-      const progressData = data || [];
+      const progressData = (data || []).map((item: any) => {
+        return transformSupabaseWorkProgress(
+          item as SupabaseWorkProgressResponse
+        );
+      });
       setWorkProgress(progressData);
       setTotalCount(count || 0);
 
-      // Calculate maximum progress for each work detail
       await calculateMaxProgress(progressData);
     } catch (err) {
       console.error("Error fetching work progress:", err);
@@ -287,14 +384,17 @@ export default function WorkProgressTable({
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    selectedVesselId,
+    selectedWorkOrderId,
+    selectedWorkDetailsIdFilter,
+    currentPage,
+  ]);
 
-  // New function to calculate maximum progress for each work detail
   const calculateMaxProgress = async (
     currentProgressData: WorkProgressWithDetails[]
   ) => {
     try {
-      // Get all unique work detail IDs from current data
       const workDetailIds = [
         ...new Set(currentProgressData.map((item) => item.work_details.id)),
       ];
@@ -304,7 +404,6 @@ export default function WorkProgressTable({
         return;
       }
 
-      // Fetch maximum progress for each work detail
       const { data: maxProgressData, error } = await supabase
         .from("work_progress")
         .select("work_details_id, progress_percentage")
@@ -316,11 +415,9 @@ export default function WorkProgressTable({
         return;
       }
 
-      // Create a map of work_details_id to maximum progress
       const maxProgressMap: Record<number, number> = {};
 
       if (maxProgressData) {
-        // Group by work_details_id and get the maximum progress for each
         workDetailIds.forEach((workDetailId) => {
           const progressReports = maxProgressData.filter(
             (item) => item.work_details_id === workDetailId
@@ -338,6 +435,47 @@ export default function WorkProgressTable({
       console.error("Error calculating max progress:", err);
     }
   };
+
+  useEffect(() => {
+    if (!workDetailsId) {
+      fetchVessels();
+    }
+    fetchWorkProgress();
+  }, [workDetailsId, fetchVessels, fetchWorkProgress]);
+
+  useEffect(() => {
+    if (selectedVesselId > 0) {
+      fetchWorkOrders(selectedVesselId);
+    } else {
+      setWorkOrders([]);
+      setSelectedWorkOrderId(0);
+    }
+  }, [selectedVesselId, fetchWorkOrders]);
+
+  useEffect(() => {
+    if (selectedWorkOrderId > 0) {
+      fetchWorkDetails(selectedWorkOrderId);
+    } else {
+      setWorkDetailsList([]);
+      if (!workDetailsId) {
+        setSelectedWorkDetailsIdFilter(0);
+      }
+    }
+  }, [selectedWorkOrderId, workDetailsId, fetchWorkDetails]);
+
+  useEffect(() => {
+    fetchWorkProgress();
+    setCurrentPage(1);
+  }, [
+    selectedVesselId,
+    selectedWorkOrderId,
+    selectedWorkDetailsIdFilter,
+    fetchWorkProgress,
+  ]);
+
+  useEffect(() => {
+    fetchWorkProgress();
+  }, [currentPage, fetchWorkProgress]);
 
   const handleVesselChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const vesselId = parseInt(e.target.value);
@@ -364,19 +502,16 @@ export default function WorkProgressTable({
     setCurrentPage(1);
   };
 
-  // Updated function to check if progress can be added
   const canAddProgress = (workDetailsId: number): boolean => {
     const maxProgress = maxProgressByWorkDetail[workDetailsId] || 0;
     return maxProgress < 100;
   };
 
-  // Updated function to handle clicking on progress to add new report
   const handleAddProgressFromCurrent = async (
     progressItem: WorkProgressWithDetails
   ) => {
     const workDetailsId = progressItem.work_details.id;
 
-    // Check if work is already completed
     if (!canAddProgress(workDetailsId)) {
       alert(
         "❌ Cannot add progress report. This work detail has already reached 100% completion."
@@ -385,7 +520,6 @@ export default function WorkProgressTable({
     }
 
     try {
-      // Get current work details data for pre-filling
       const { data: workDetailsData, error: workDetailsError } = await supabase
         .from("work_details")
         .select(
@@ -394,13 +528,18 @@ export default function WorkProgressTable({
           description,
           location,
           pic,
-          work_order (
+          planned_start_date,
+          target_close_date,
+          period_close_target,
+          work_order!inner (
             id,
             shipyard_wo_number,
-            vessel (
+            shipyard_wo_date,
+            vessel!inner (
               id,
               name,
-              type
+              type,
+              company
             )
           )
         `
@@ -410,26 +549,38 @@ export default function WorkProgressTable({
 
       if (workDetailsError) throw workDetailsError;
 
-      // Navigate to add progress page with pre-filled data
+      const transformedData = transformSupabaseWorkDetails(workDetailsData);
+
       navigate(`/add-work-progress/${workDetailsId}`, {
         state: {
-          workDetails: workDetailsData,
+          workDetails: transformedData,
           currentProgress: progressItem.progress_percentage,
           lastReportDate: progressItem.report_date,
           prefillData: {
-            vesselName: progressItem.work_details.work_order.vessel.name,
-            workOrderNumber:
-              progressItem.work_details.work_order.shipyard_wo_number,
-            workDescription: progressItem.work_details.description,
-            location: progressItem.work_details.location,
+            vesselId: transformedData.work_order.vessel.id,
+            vesselName: transformedData.work_order.vessel.name,
+            vesselType: transformedData.work_order.vessel.type,
+            vesselCompany: transformedData.work_order.vessel.company,
+            workOrderId: transformedData.work_order.id,
+            workOrderNumber: transformedData.work_order.shipyard_wo_number,
+            workOrderDate: transformedData.work_order.shipyard_wo_date,
+            workDetailsId: workDetailsId,
+            workDescription: transformedData.description,
+            location: transformedData.location,
+            pic: transformedData.pic,
+            plannedStartDate: transformedData.planned_start_date,
+            targetCloseDate: transformedData.target_close_date,
+            periodCloseTarget: transformedData.period_close_target,
             currentProgressPercentage:
               maxProgressByWorkDetail[workDetailsId] ||
               progressItem.progress_percentage,
+            lastProgressPercentage: progressItem.progress_percentage,
             suggestedNextProgress: Math.min(
               (maxProgressByWorkDetail[workDetailsId] ||
                 progressItem.progress_percentage) + 10,
               100
-            ), // Suggest 10% increment from max progress
+            ),
+            fromProgressTable: true,
           },
         },
       });
@@ -440,73 +591,67 @@ export default function WorkProgressTable({
   };
 
   const handleAddProgressFromNoResults = async () => {
-    // If we have a specific work details selected, get its data and pass it
     if (selectedWorkDetailsIdFilter > 0) {
       try {
-        // Fetch the selected work details data
         const { data: workDetailsData, error: workDetailsError } =
           await supabase
             .from("work_details")
             .select(
               `
-          id,
-          description,
-          location,
-          pic,
-          planned_start_date,
-          target_close_date,
-          period_close_target,
-          work_order (
-            id,
-            shipyard_wo_number,
-            shipyard_wo_date,
-            vessel (
               id,
-              name,
-              type,
-              company
-            )
-          )
-        `
+              description,
+              location,
+              pic,
+              planned_start_date,
+              target_close_date,
+              period_close_target,
+              work_order!inner (
+                id,
+                shipyard_wo_number,
+                shipyard_wo_date,
+                vessel!inner (
+                  id,
+                  name,
+                  type,
+                  company
+                )
+              )
+            `
             )
             .eq("id", selectedWorkDetailsIdFilter)
             .single();
 
         if (workDetailsError) throw workDetailsError;
 
-        // Navigate with comprehensive pre-filled data
+        const transformedData = transformSupabaseWorkDetails(workDetailsData);
+
         navigate(`/add-work-progress/${selectedWorkDetailsIdFilter}`, {
           state: {
-            workDetails: workDetailsData,
-            currentProgress: 0, // No existing progress
-            lastReportDate: null, // No previous reports
+            workDetails: transformedData,
+            currentProgress: 0,
+            lastReportDate: null,
             prefillData: {
-              // Vessel information
-              vesselId: workDetailsData.work_order.vessel.id,
-              vesselName: workDetailsData.work_order.vessel.name,
-              vesselType: workDetailsData.work_order.vessel.type,
-              vesselCompany: workDetailsData.work_order.vessel.company,
+              vesselId: transformedData.work_order.vessel.id,
+              vesselName: transformedData.work_order.vessel.name,
+              vesselType: transformedData.work_order.vessel.type,
+              vesselCompany: transformedData.work_order.vessel.company,
 
-              // Work order information
-              workOrderId: workDetailsData.work_order.id,
-              workOrderNumber: workDetailsData.work_order.shipyard_wo_number,
-              workOrderDate: workDetailsData.work_order.shipyard_wo_date,
+              workOrderId: transformedData.work_order.id,
+              workOrderNumber: transformedData.work_order.shipyard_wo_number,
+              workOrderDate: transformedData.work_order.shipyard_wo_date,
 
-              // Work details information
               workDetailsId: selectedWorkDetailsIdFilter,
-              workDescription: workDetailsData.description,
-              location: workDetailsData.location,
-              pic: workDetailsData.pic,
-              plannedStartDate: workDetailsData.planned_start_date,
-              targetCloseDate: workDetailsData.target_close_date,
-              periodCloseTarget: workDetailsData.period_close_target,
+              workDescription: transformedData.description,
+              location: transformedData.location,
+              pic: transformedData.pic,
+              plannedStartDate: transformedData.planned_start_date,
+              targetCloseDate: transformedData.target_close_date,
+              periodCloseTarget: transformedData.period_close_target,
 
-              // Progress information
               currentProgressPercentage: 0,
               lastProgressPercentage: 0,
-              suggestedNextProgress: 10, // Start with 10%
+              suggestedNextProgress: 10,
 
-              // Context information
               fromProgressTable: true,
               fromNoResults: true,
               isFirstProgress: true,
@@ -518,38 +663,39 @@ export default function WorkProgressTable({
         alert("Failed to load work details. Please try again.");
       }
     } else if (selectedWorkOrderId > 0) {
-      // If work order is selected but no specific work details, go to general add with work order context
       try {
         const { data: workOrderData, error: workOrderError } = await supabase
           .from("work_order")
           .select(
             `
-          id,
-          shipyard_wo_number,
-          shipyard_wo_date,
-          vessel (
             id,
-            name,
-            type,
-            company
-          )
-        `
+            shipyard_wo_number,
+            shipyard_wo_date,
+            vessel!inner (
+              id,
+              name,
+              type,
+              company
+            )
+          `
           )
           .eq("id", selectedWorkOrderId)
           .single();
 
         if (workOrderError) throw workOrderError;
 
+        const transformedWorkOrder = transformSupabaseWorkOrder(workOrderData);
+
         navigate("/add-work-progress", {
           state: {
             prefillData: {
-              vesselId: workOrderData.vessel.id,
-              vesselName: workOrderData.vessel.name,
-              vesselType: workOrderData.vessel.type,
-              vesselCompany: workOrderData.vessel.company,
+              vesselId: transformedWorkOrder.vessel.id,
+              vesselName: transformedWorkOrder.vessel.name,
+              vesselType: transformedWorkOrder.vessel.type,
+              vesselCompany: transformedWorkOrder.vessel.company,
               workOrderId: selectedWorkOrderId,
-              workOrderNumber: workOrderData.shipyard_wo_number,
-              workOrderDate: workOrderData.shipyard_wo_date,
+              workOrderNumber: transformedWorkOrder.shipyard_wo_number,
+              workOrderDate: transformedWorkOrder.shipyard_wo_date,
               fromProgressTable: true,
               fromNoResults: true,
               preSelectWorkOrder: true,
@@ -561,7 +707,6 @@ export default function WorkProgressTable({
         alert("Failed to load work order. Please try again.");
       }
     } else if (selectedVesselId > 0) {
-      // If vessel is selected, go to general add with vessel context
       const selectedVessel = vessels.find((v) => v.id === selectedVesselId);
       if (selectedVessel) {
         navigate("/add-work-progress", {
@@ -581,7 +726,6 @@ export default function WorkProgressTable({
         navigate("/add-work-progress");
       }
     } else {
-      // No filters applied, go to general add page
       navigate("/add-work-progress");
     }
   };
@@ -636,19 +780,17 @@ export default function WorkProgressTable({
     }
   };
 
-  // Pagination calculations
   const totalPages = Math.ceil(totalCount / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage + 1;
   const endIndex = Math.min(currentPage * itemsPerPage, totalCount);
 
-  // Pagination component
   const renderPagination = () => {
     if (totalPages <= 1) return null;
 
     const pages = [];
     const maxVisiblePages = 5;
     let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
 
     if (endPage - startPage < maxVisiblePages - 1) {
       startPage = Math.max(1, endPage - maxVisiblePages + 1);
@@ -704,7 +846,7 @@ export default function WorkProgressTable({
                   onClick={() => setCurrentPage(page)}
                   className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
                     page === currentPage
-                      ? "z-10 bg-blue-600 text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                      ? "z-10 bg-blue-600 text-white focus:z-20 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                       : "text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0"
                   }`}
                 >
