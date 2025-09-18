@@ -35,10 +35,43 @@ interface WorkOrderOption extends WorkOrder {
   is_fully_completed: boolean;
 }
 
+// Type for work detail from Supabase response
+interface SupabaseWorkDetail {
+  id: number;
+  description: string;
+  location?: string;
+  pic?: string;
+  work_progress: Array<{
+    progress_percentage: number;
+    report_date: string;
+    evidence_url?: string;
+    storage_path?: string;
+    created_at: string;
+  }>;
+  work_verification: Array<{
+    work_verification: boolean;
+    verification_date?: string;
+  }>;
+}
+
+// Type for verification record
+interface VerificationRecord {
+  work_verification: boolean;
+  verification_date?: string;
+}
+
+// Type for progress record
+interface ProgressRecord {
+  progress_percentage: number;
+  report_date: string;
+  evidence_url?: string;
+  storage_path?: string;
+  created_at: string;
+}
+
 export default function AddInvoice() {
   const navigate = useNavigate();
 
-  const [workOrders, setWorkOrders] = useState<WorkOrderOption[]>([]);
   const [completedWorkOrders, setCompletedWorkOrders] = useState<
     WorkOrderOption[]
   >([]);
@@ -72,7 +105,6 @@ export default function AddInvoice() {
 
       console.log("🔍 Fetching work orders for invoice creation...");
 
-      // Use EXACT same query as InvoiceList.tsx
       const { data: workOrderData, error: woError } = await supabase
         .from("work_order")
         .select(
@@ -107,82 +139,78 @@ export default function AddInvoice() {
 
       console.log("📋 Work orders fetched:", workOrderData?.length || 0);
 
-      // Process work orders with progress data - EXACT same logic as InvoiceList
       const workOrdersWithProgress = (workOrderData || []).map((wo) => {
         const workDetails = wo.work_details || [];
 
-        // Process each work detail to get its latest progress - SAME AS InvoiceList
-        const workDetailsWithProgress = workDetails.map((detail) => {
-          const progressRecords = detail.work_progress || [];
-          const verificationRecords = detail.work_verification || [];
+        const workDetailsWithProgress = workDetails.map(
+          (detail: SupabaseWorkDetail) => {
+            const progressRecords = detail.work_progress || [];
+            const verificationRecords = detail.work_verification || [];
 
-          if (progressRecords.length === 0) {
+            if (progressRecords.length === 0) {
+              return {
+                ...detail,
+                current_progress: 0,
+                latest_progress_date: undefined,
+                progress_count: 0,
+                verification_status: verificationRecords.some(
+                  (v: VerificationRecord) => v.work_verification === true
+                ),
+                verification_date: verificationRecords.find(
+                  (v: VerificationRecord) => v.work_verification === true
+                )?.verification_date,
+              };
+            }
+
+            const sortedProgress = progressRecords.sort(
+              (a: ProgressRecord, b: ProgressRecord) =>
+                new Date(b.report_date).getTime() -
+                new Date(a.report_date).getTime()
+            );
+
+            const latestProgress = sortedProgress[0]?.progress_percentage || 0;
+            const latestProgressDate = sortedProgress[0]?.report_date;
+
             return {
               ...detail,
-              current_progress: 0,
-              latest_progress_date: undefined,
-              progress_count: 0,
+              current_progress: latestProgress,
+              latest_progress_date: latestProgressDate,
+              progress_count: progressRecords.length,
               verification_status: verificationRecords.some(
-                (v) => v.work_verification === true
+                (v: VerificationRecord) => v.work_verification === true
               ),
               verification_date: verificationRecords.find(
-                (v) => v.work_verification === true
+                (v: VerificationRecord) => v.work_verification === true
               )?.verification_date,
             };
           }
+        );
 
-          // Sort progress records by date (newest first) - SAME AS InvoiceList
-          const sortedProgress = progressRecords.sort(
-            (a, b) =>
-              new Date(b.report_date).getTime() -
-              new Date(a.report_date).getTime()
-          );
-
-          const latestProgress = sortedProgress[0]?.progress_percentage || 0;
-          const latestProgressDate = sortedProgress[0]?.report_date;
-
-          return {
-            ...detail,
-            current_progress: latestProgress,
-            latest_progress_date: latestProgressDate,
-            progress_count: progressRecords.length,
-            verification_status: verificationRecords.some(
-              (v) => v.work_verification === true
-            ),
-            verification_date: verificationRecords.find(
-              (v) => v.work_verification === true
-            )?.verification_date,
-          };
-        });
-
-        // Calculate overall work order progress - SAME AS InvoiceList
         let overallProgress = 0;
         let hasProgressData = false;
 
         if (workDetailsWithProgress.length > 0) {
-          // Average progress across all work details
           const totalProgress = workDetailsWithProgress.reduce(
-            (sum, detail) => sum + (detail.current_progress || 0),
+            (sum: number, detail: WorkDetailsWithProgress) =>
+              sum + (detail.current_progress || 0),
             0
           );
           overallProgress = Math.round(
             totalProgress / workDetailsWithProgress.length
           );
           hasProgressData = workDetailsWithProgress.some(
-            (detail) => detail.current_progress > 0
+            (detail: WorkDetailsWithProgress) => detail.current_progress > 0
           );
         }
 
-        // Check if ALL work details are 100% complete
         const isFullyCompleted =
           workDetailsWithProgress.length > 0 &&
           workDetailsWithProgress.every(
-            (detail) => detail.current_progress === 100
+            (detail: WorkDetailsWithProgress) => detail.current_progress === 100
           );
 
-        // Check verification status
         const verificationStatus = workDetailsWithProgress.some(
-          (detail) => detail.verification_status
+          (detail: WorkDetailsWithProgress) => detail.verification_status
         );
 
         console.log(
@@ -192,8 +220,9 @@ export default function AddInvoice() {
         );
         console.log(
           `  - ${workDetailsWithProgress.length} details, ${
-            workDetailsWithProgress.filter((d) => d.current_progress === 100)
-              .length
+            workDetailsWithProgress.filter(
+              (d: WorkDetailsWithProgress) => d.current_progress === 100
+            ).length
           } at 100%`
         );
 
@@ -216,14 +245,12 @@ export default function AddInvoice() {
         workOrdersWithProgress.filter((wo) => wo.is_fully_completed).length
       );
 
-      // Filter only fully completed work orders (all work details at 100%)
       const fullyCompleted = workOrdersWithProgress.filter(
         (wo) => wo.is_fully_completed
       );
 
       console.log("🎯 Checking for existing invoices...");
 
-      // Get existing invoices to exclude work orders that already have invoices
       const { data: existingInvoices, error: invoiceError } = await supabase
         .from("invoice_details")
         .select("work_order_id")
@@ -238,14 +265,12 @@ export default function AddInvoice() {
       );
       console.log("📄 Already invoiced work order IDs:", invoicedWorkOrderIds);
 
-      // Filter out work orders that already have invoices
       const availableForInvoicing = fullyCompleted.filter(
         (wo) => !invoicedWorkOrderIds.includes(wo.id)
       );
 
       console.log("📋 Available for invoicing:", availableForInvoicing.length);
 
-      setWorkOrders(workOrdersWithProgress);
       setCompletedWorkOrders(availableForInvoicing);
     } catch (err) {
       console.error("❌ Error fetching work orders:", err);
@@ -269,7 +294,6 @@ export default function AddInvoice() {
       setFormData((prev) => ({
         ...prev,
         [name]: checked,
-        // Auto-set payment date if marking as paid
         payment_date:
           checked && !prev.payment_date
             ? new Date().toISOString().split("T")[0]
@@ -293,7 +317,6 @@ export default function AddInvoice() {
       return;
     }
 
-    // Double-check that selected work order is completed
     const selectedWorkOrder = completedWorkOrders.find(
       (wo) => wo.id === parseInt(formData.work_order_id)
     );
@@ -314,7 +337,6 @@ export default function AddInvoice() {
       setSubmitting(true);
       setError(null);
 
-      // Get current user
       const {
         data: { user },
         error: userError,
@@ -323,7 +345,6 @@ export default function AddInvoice() {
         throw new Error("User not authenticated");
       }
 
-      // Get user profile for numeric ID
       const { data: userProfile, error: profileError } = await supabase
         .from("profiles")
         .select("id")
@@ -334,7 +355,6 @@ export default function AddInvoice() {
         throw new Error("User profile not found");
       }
 
-      // Prepare data for insertion
       const invoiceData = {
         work_order_id: parseInt(formData.work_order_id),
         user_id: userProfile.id,
@@ -357,7 +377,7 @@ export default function AddInvoice() {
         remarks: formData.remarks || null,
       };
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("invoice_details")
         .insert(invoiceData)
         .select()
@@ -378,15 +398,6 @@ export default function AddInvoice() {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return "";
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
   };
 
   if (loading) {

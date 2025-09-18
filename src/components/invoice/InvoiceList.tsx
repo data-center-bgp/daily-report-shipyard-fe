@@ -22,6 +22,35 @@ interface InvoiceDetails {
   user_id: number;
 }
 
+// Add interface for work progress items
+interface WorkProgressItem {
+  progress_percentage: number;
+  report_date: string;
+  evidence_url?: string;
+  storage_path?: string;
+  created_at: string;
+}
+
+// Add interface for work verification items
+interface WorkVerificationItem {
+  work_verification: boolean;
+  verification_date?: string;
+}
+
+// Add interface for raw work details from Supabase
+interface RawWorkDetail {
+  id: number;
+  description: string;
+  location?: string;
+  pic?: string;
+  planned_start_date?: string;
+  target_close_date?: string;
+  actual_start_date?: string;
+  actual_close_date?: string;
+  work_progress: WorkProgressItem[];
+  work_verification: WorkVerificationItem[];
+}
+
 interface WorkDetailsWithProgress {
   id: number;
   description: string;
@@ -36,13 +65,7 @@ interface WorkDetailsWithProgress {
   progress_count: number;
   verification_status: boolean;
   verification_date?: string;
-  work_progress: Array<{
-    progress_percentage: number;
-    report_date: string;
-    evidence_url?: string;
-    storage_path?: string;
-    created_at: string;
-  }>;
+  work_progress: WorkProgressItem[];
 }
 
 interface CompletedWorkOrder extends WorkOrder {
@@ -68,7 +91,8 @@ export default function InvoiceList() {
   const [workOrders, setWorkOrders] = useState<CompletedWorkOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  // Remove unused setSuccess or use it if needed
+  // const [success, setSuccess] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<
     "all" | "ready" | "invoiced" | "paid" | "unpaid"
@@ -127,74 +151,78 @@ export default function InvoiceList() {
 
       // Process work orders with progress data
       const processedWorkOrders = (workOrderData || []).map((wo) => {
-        const workDetails = wo.work_details || [];
+        const workDetails: RawWorkDetail[] = wo.work_details || [];
 
-        const workDetailsWithProgress = workDetails.map((detail) => {
-          const progressRecords = detail.work_progress || [];
-          const verificationRecords = detail.work_verification || [];
+        const workDetailsWithProgress: WorkDetailsWithProgress[] =
+          workDetails.map((detail: RawWorkDetail) => {
+            const progressRecords: WorkProgressItem[] =
+              detail.work_progress || [];
+            const verificationRecords: WorkVerificationItem[] =
+              detail.work_verification || [];
 
-          if (progressRecords.length === 0) {
+            if (progressRecords.length === 0) {
+              return {
+                ...detail,
+                current_progress: 0,
+                latest_progress_date: undefined,
+                progress_count: 0,
+                verification_status: verificationRecords.some(
+                  (v: WorkVerificationItem) => v.work_verification === true
+                ),
+                verification_date: verificationRecords.find(
+                  (v: WorkVerificationItem) => v.work_verification === true
+                )?.verification_date,
+              };
+            }
+
+            const sortedProgress = progressRecords.sort(
+              (a: WorkProgressItem, b: WorkProgressItem) =>
+                new Date(b.report_date).getTime() -
+                new Date(a.report_date).getTime()
+            );
+
+            const latestProgress = sortedProgress[0]?.progress_percentage || 0;
+            const latestProgressDate = sortedProgress[0]?.report_date;
+
             return {
               ...detail,
-              current_progress: 0,
-              latest_progress_date: undefined,
-              progress_count: 0,
+              current_progress: latestProgress,
+              latest_progress_date: latestProgressDate,
+              progress_count: progressRecords.length,
               verification_status: verificationRecords.some(
-                (v) => v.work_verification === true
+                (v: WorkVerificationItem) => v.work_verification === true
               ),
               verification_date: verificationRecords.find(
-                (v) => v.work_verification === true
+                (v: WorkVerificationItem) => v.work_verification === true
               )?.verification_date,
             };
-          }
-
-          const sortedProgress = progressRecords.sort(
-            (a, b) =>
-              new Date(b.report_date).getTime() -
-              new Date(a.report_date).getTime()
-          );
-
-          const latestProgress = sortedProgress[0]?.progress_percentage || 0;
-          const latestProgressDate = sortedProgress[0]?.report_date;
-
-          return {
-            ...detail,
-            current_progress: latestProgress,
-            latest_progress_date: latestProgressDate,
-            progress_count: progressRecords.length,
-            verification_status: verificationRecords.some(
-              (v) => v.work_verification === true
-            ),
-            verification_date: verificationRecords.find(
-              (v) => v.work_verification === true
-            )?.verification_date,
-          };
-        });
+          });
 
         let overallProgress = 0;
         let hasProgressData = false;
 
         if (workDetailsWithProgress.length > 0) {
           const totalProgress = workDetailsWithProgress.reduce(
-            (sum, detail) => sum + (detail.current_progress || 0),
+            (sum: number, detail: WorkDetailsWithProgress) =>
+              sum + (detail.current_progress || 0),
             0
           );
           overallProgress = Math.round(
             totalProgress / workDetailsWithProgress.length
           );
           hasProgressData = workDetailsWithProgress.some(
-            (detail) => detail.current_progress > 0
+            (detail: WorkDetailsWithProgress) => detail.current_progress > 0
           );
         }
 
         const isFullyCompleted =
           workDetailsWithProgress.length > 0 &&
           workDetailsWithProgress.every(
-            (detail) => detail.current_progress === 100
+            (detail: WorkDetailsWithProgress) => detail.current_progress === 100
           );
 
         const verificationStatus = workDetailsWithProgress.some(
-          (detail) => detail.verification_status
+          (detail: WorkDetailsWithProgress) => detail.verification_status
         );
 
         const invoiceDetails = invoiceMap.get(wo.id);
@@ -203,12 +231,15 @@ export default function InvoiceList() {
         let completionDate: string | undefined;
         if (isFullyCompleted) {
           const completedDetails = workDetailsWithProgress.filter(
-            (d) => d.current_progress === 100
+            (d: WorkDetailsWithProgress) => d.current_progress === 100
           );
           const latestCompletionDates = completedDetails
-            .filter((d) => d.latest_progress_date)
-            .map((d) => d.latest_progress_date!)
-            .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+            .filter((d: WorkDetailsWithProgress) => d.latest_progress_date)
+            .map((d: WorkDetailsWithProgress) => d.latest_progress_date!)
+            .sort(
+              (a: string, b: string) =>
+                new Date(b).getTime() - new Date(a).getTime()
+            );
 
           completionDate = latestCompletionDates[0];
         }
@@ -434,14 +465,7 @@ export default function InvoiceList() {
         </div>
       )}
 
-      {success && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <span className="text-green-600 mr-2">✅</span>
-            <p className="text-green-700 font-medium">{success}</p>
-          </div>
-        </div>
-      )}
+      {/* Removed success message display since setSuccess is not used */}
 
       {/* Finance Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -484,6 +508,7 @@ export default function InvoiceList() {
         </div>
       </div>
 
+      {/* Rest of your component remains exactly the same... */}
       {/* Finance Table */}
       <div className="bg-white rounded-lg shadow">
         <div className="p-6 border-b border-gray-200">

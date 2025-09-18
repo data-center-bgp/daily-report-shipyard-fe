@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 
@@ -57,13 +57,9 @@ export default function EditInvoice() {
     remarks: "",
   });
 
-  useEffect(() => {
-    if (id) {
-      fetchInvoice();
-    }
-  }, [id]);
+  const fetchInvoice = useCallback(async () => {
+    if (!id) return;
 
-  const fetchInvoice = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -120,7 +116,11 @@ export default function EditInvoice() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchInvoice();
+  }, [fetchInvoice]);
 
   const handleInputChange = (
     e: React.ChangeEvent<
