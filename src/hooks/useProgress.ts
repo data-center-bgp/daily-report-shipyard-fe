@@ -1,11 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import type {
-  ProjectProgress,
-  ProjectProgressWithDetails,
   ProjectProgressFormData,
   ProgressFilter,
   ProgressStats,
+  WorkProgressWithDetails,
 } from "../types/progressTypes";
 
 // Add missing types that are specific to the useProgress hook
@@ -41,7 +41,7 @@ interface ProgressChartData {
 }
 
 export const useProgress = () => {
-  const [progress, setProgress] = useState<ProjectProgressWithDetails[]>([]);
+  const [progress, setProgress] = useState<WorkProgressWithDetails[]>([]);
   const [progressSummaries, setProgressSummaries] = useState<ProgressSummary[]>(
     []
   );
@@ -102,14 +102,14 @@ export const useProgress = () => {
 
       if (error) throw error;
 
-      // Transform data to match ProjectProgressWithDetails interface
+      // Transform data to match WorkProgressWithDetails interface
       const transformedData = (data || []).map((item: any) => ({
         ...item,
         work_order: Array.isArray(item.work_order)
           ? item.work_order[0]
           : item.work_order,
         user: Array.isArray(item.user) ? item.user[0] : item.user,
-      })) as ProjectProgressWithDetails[];
+      })) as WorkProgressWithDetails[];
 
       setProgress(transformedData);
       return transformedData;
