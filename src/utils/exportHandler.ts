@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { supabase } from "../lib/supabase";
 
 export interface ExportOptions {
@@ -5,16 +6,161 @@ export interface ExportOptions {
   filters?: {
     vesselIds?: number[];
   };
+  includeFinancialData?: boolean;
 }
 
 export interface ExportData {
-  data: any[];
+  data: ExportRow[];
   filename: string;
   totalRecords: number;
 }
 
-// CSV generation utility
-export const generateCSV = (data: any[]): string => {
+// Define proper types for the flattened data structure
+interface ExportRow {
+  vessel_id: number;
+  vessel_name: string;
+  vessel_type: string;
+  vessel_company: string;
+  work_order_id: number | null;
+  wo_created_at: string | null;
+  wo_updated_at: string | null;
+  customer_wo_number: string | null;
+  customer_wo_date: string | null;
+  shipyard_wo_number: string | null;
+  shipyard_wo_date: string | null;
+  wo_document_delivery_date: string | null;
+  wo_user_id: number | null;
+  wo_vessel_id: number | null;
+  invoice_id: number | null;
+  invoice_created_at: string | null;
+  invoice_updated_at: string | null;
+  wo_document_collection_date: string | null;
+  invoice_number: string | null;
+  faktur_number: string | null;
+  invoice_due_date: string | null;
+  delivery_date: string | null;
+  collection_date: string | null;
+  receiver_name: string | null;
+  payment_price?: number | null; // Optional based on includeFinancialData
+  payment_status: boolean | null;
+  payment_date: string | null;
+  invoice_remarks: string | null;
+  invoice_work_order_id: number | null;
+  invoice_user_id: number | null;
+  work_detail_id: number | null;
+  wd_created_at: string | null;
+  wd_updated_at: string | null;
+  work_description: string | null;
+  work_location: string | null;
+  work_pic: string | null;
+  wd_planned_start_date: string | null;
+  wd_target_close_date: string | null;
+  period_close_target: string | null;
+  wd_actual_start_date: string | null;
+  wd_actual_close_date: string | null;
+  work_permit_url: string | null;
+  wd_storage_path: string | null;
+  wd_user_id: number | null;
+  wd_work_order_id: number | null;
+  verification_id: number | null;
+  verification_date: string | null;
+  work_verification: boolean | null;
+  verification_user_id: number | null;
+  verification_work_details_id: number | null;
+  progress_id: number | null;
+  progress_percentage: number | null;
+  report_date: string | null;
+  progress_storage_path: string | null;
+  evidence_url: string | null;
+  progress_work_details_id: number | null;
+  progress_user_id: number | null;
+  progress_created_at: string | null;
+}
+
+// Define types for the Supabase response structure
+interface SupabaseVessel {
+  id: number;
+  name: string;
+  type: string;
+  company: string;
+  work_order: SupabaseWorkOrder[] | null;
+}
+
+interface SupabaseWorkOrder {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  customer_wo_number: string;
+  customer_wo_date: string;
+  shipyard_wo_number: string;
+  shipyard_wo_date: string;
+  wo_document_delivery_date: string;
+  user_id: number;
+  vessel_id: number;
+  work_details: SupabaseWorkDetail[] | null;
+  invoice_details: SupabaseInvoice[] | null;
+}
+
+interface SupabaseWorkDetail {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  description: string;
+  location: string;
+  pic: string;
+  planned_start_date: string;
+  target_close_date: string;
+  period_close_target: string;
+  actual_start_date: string;
+  actual_close_date: string;
+  work_permit_url: string;
+  storage_path: string;
+  user_id: number;
+  work_order_id: number;
+  work_progress: SupabaseWorkProgress[] | null;
+  work_verification: SupabaseWorkVerification[] | null;
+}
+
+interface SupabaseInvoice {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  wo_document_collection_date: string;
+  invoice_number: string;
+  faktur_number: string;
+  due_date: string;
+  delivery_date: string;
+  collection_date: string;
+  receiver_name: string;
+  payment_price: number;
+  payment_status: boolean;
+  payment_date: string;
+  remarks: string;
+  work_order_id: number;
+  user_id: number;
+}
+
+interface SupabaseWorkProgress {
+  id: number;
+  progress_percentage: number;
+  report_date: string;
+  storage_path: string;
+  evidence_url: string;
+  work_details_id: number;
+  user_id: number;
+  created_at: string;
+}
+
+interface SupabaseWorkVerification {
+  id: number;
+  verification_date: string;
+  work_verification: boolean;
+  user_id: number;
+  work_details_id: number;
+}
+
+// CSV generation utility with proper typing
+export const generateCSV = (data: ExportRow[]): string => {
   if (!data.length) return "";
 
   const headers = Object.keys(data[0]);
@@ -23,7 +169,7 @@ export const generateCSV = (data: any[]): string => {
     ...data.map((row) =>
       headers
         .map((header) => {
-          const value = row[header];
+          const value = row[header as keyof ExportRow];
           // Handle null/undefined values and escape commas and quotes
           if (value === null || value === undefined) return "";
           const stringValue = String(value);
@@ -60,14 +206,82 @@ export const downloadFile = (
   URL.revokeObjectURL(url);
 };
 
+// Function to remove financial data from invoice info
+const sanitizeInvoiceData = (
+  invoiceInfo: Partial<ExportRow>,
+  includeFinancialData: boolean
+): Partial<ExportRow> => {
+  if (!includeFinancialData) {
+    // Remove sensitive financial fields
+    const { payment_price, ...sanitizedInvoice } = invoiceInfo;
+    return sanitizedInvoice;
+  }
+  return invoiceInfo;
+};
+
+// Helper function to create base invoice info
+const createInvoiceInfo = (
+  invoice: SupabaseInvoice,
+  includeFinancialData: boolean
+): Partial<ExportRow> => {
+  const rawInvoiceInfo = {
+    invoice_id: invoice.id,
+    invoice_created_at: invoice.created_at,
+    invoice_updated_at: invoice.updated_at,
+    wo_document_collection_date: invoice.wo_document_collection_date,
+    invoice_number: invoice.invoice_number,
+    faktur_number: invoice.faktur_number,
+    invoice_due_date: invoice.due_date,
+    delivery_date: invoice.delivery_date,
+    collection_date: invoice.collection_date,
+    receiver_name: invoice.receiver_name,
+    payment_price: invoice.payment_price,
+    payment_status: invoice.payment_status,
+    payment_date: invoice.payment_date,
+    invoice_remarks: invoice.remarks,
+    invoice_work_order_id: invoice.work_order_id,
+    invoice_user_id: invoice.user_id,
+  };
+
+  return sanitizeInvoiceData(rawInvoiceInfo, includeFinancialData);
+};
+
+// Helper function to create null invoice info
+const createNullInvoiceInfo = (
+  includeFinancialData: boolean
+): Partial<ExportRow> => {
+  const nullInvoiceInfo = {
+    invoice_id: null,
+    invoice_created_at: null,
+    invoice_updated_at: null,
+    wo_document_collection_date: null,
+    invoice_number: null,
+    faktur_number: null,
+    invoice_due_date: null,
+    delivery_date: null,
+    collection_date: null,
+    receiver_name: null,
+    payment_price: null,
+    payment_status: null,
+    payment_date: null,
+    invoice_remarks: null,
+    invoice_work_order_id: null,
+    invoice_user_id: null,
+  };
+
+  return sanitizeInvoiceData(nullInvoiceInfo, includeFinancialData);
+};
+
 // Export comprehensive vessel data with all related tables joined
 export const exportVesselData = async (
   options: ExportOptions
 ): Promise<ExportData> => {
   const vesselFilter = options.filters?.vesselIds || [];
+  const includeFinancialData = options.includeFinancialData ?? false;
+
   let vesselName = "all_vessels";
 
-  // Generate filename based on vessel selection
+  // Generate filename based on vessel selection and access level
   if (vesselFilter.length > 0) {
     if (vesselFilter.length === 1) {
       const { data: vesselData } = await supabase
@@ -174,9 +388,10 @@ export const exportVesselData = async (
   }
 
   if (!vessels || vessels.length === 0) {
+    const accessSuffix = includeFinancialData ? "_full" : "_operational";
     return {
       data: [],
-      filename: `vessel_data_${vesselName}_${
+      filename: `vessel_data_${vesselName}${accessSuffix}_${
         new Date().toISOString().split("T")[0]
       }.csv`,
       totalRecords: 0,
@@ -184,9 +399,9 @@ export const exportVesselData = async (
   }
 
   // Flatten the nested data structure into a single table format
-  const flattenedData: any[] = [];
+  const flattenedData: ExportRow[] = [];
 
-  vessels.forEach((vessel: any) => {
+  (vessels as SupabaseVessel[]).forEach((vessel) => {
     const baseVesselInfo = {
       vessel_id: vessel.id,
       vessel_name: vessel.name,
@@ -196,7 +411,7 @@ export const exportVesselData = async (
 
     // If vessel has work orders
     if (vessel.work_order && vessel.work_order.length > 0) {
-      vessel.work_order.forEach((workOrder: any) => {
+      vessel.work_order.forEach((workOrder) => {
         const baseWorkOrderInfo = {
           ...baseVesselInfo,
           work_order_id: workOrder.id,
@@ -211,33 +426,16 @@ export const exportVesselData = async (
           wo_vessel_id: workOrder.vessel_id,
         };
 
-        // Add invoice information if exists
-        let invoiceInfo = {};
+        // Add invoice information if exists (with role-based filtering)
+        let invoiceInfo: Partial<ExportRow> = {};
         if (workOrder.invoice_details && workOrder.invoice_details.length > 0) {
           const invoice = workOrder.invoice_details[0]; // Take first invoice
-          invoiceInfo = {
-            invoice_id: invoice.id,
-            invoice_created_at: invoice.created_at,
-            invoice_updated_at: invoice.updated_at,
-            wo_document_collection_date: invoice.wo_document_collection_date,
-            invoice_number: invoice.invoice_number,
-            faktur_number: invoice.faktur_number,
-            invoice_due_date: invoice.due_date,
-            delivery_date: invoice.delivery_date,
-            collection_date: invoice.collection_date,
-            receiver_name: invoice.receiver_name,
-            payment_price: invoice.payment_price,
-            payment_status: invoice.payment_status,
-            payment_date: invoice.payment_date,
-            invoice_remarks: invoice.remarks,
-            invoice_work_order_id: invoice.work_order_id,
-            invoice_user_id: invoice.user_id,
-          };
+          invoiceInfo = createInvoiceInfo(invoice, includeFinancialData);
         }
 
         // If work order has work details
         if (workOrder.work_details && workOrder.work_details.length > 0) {
-          workOrder.work_details.forEach((workDetail: any) => {
+          workOrder.work_details.forEach((workDetail) => {
             const baseWorkDetailInfo = {
               ...baseWorkOrderInfo,
               ...invoiceInfo,
@@ -259,7 +457,7 @@ export const exportVesselData = async (
             };
 
             // Add verification info if exists
-            let verificationInfo = {};
+            let verificationInfo: Partial<ExportRow> = {};
             if (
               workDetail.work_verification &&
               workDetail.work_verification.length > 0
@@ -279,7 +477,7 @@ export const exportVesselData = async (
               workDetail.work_progress &&
               workDetail.work_progress.length > 0
             ) {
-              workDetail.work_progress.forEach((progress: any) => {
+              workDetail.work_progress.forEach((progress) => {
                 flattenedData.push({
                   ...baseWorkDetailInfo,
                   ...verificationInfo,
@@ -291,7 +489,7 @@ export const exportVesselData = async (
                   progress_work_details_id: progress.work_details_id,
                   progress_user_id: progress.user_id,
                   progress_created_at: progress.created_at,
-                });
+                } as ExportRow);
               });
             } else {
               // Work detail without progress
@@ -306,7 +504,7 @@ export const exportVesselData = async (
                 progress_work_details_id: null,
                 progress_user_id: null,
                 progress_created_at: null,
-              });
+              } as ExportRow);
             }
           });
         } else {
@@ -342,11 +540,13 @@ export const exportVesselData = async (
             progress_work_details_id: null,
             progress_user_id: null,
             progress_created_at: null,
-          });
+          } as ExportRow);
         }
       });
     } else {
       // Vessel without work orders
+      const nullInvoiceInfo = createNullInvoiceInfo(includeFinancialData);
+
       flattenedData.push({
         ...baseVesselInfo,
         work_order_id: null,
@@ -359,22 +559,7 @@ export const exportVesselData = async (
         wo_document_delivery_date: null,
         wo_user_id: null,
         wo_vessel_id: null,
-        invoice_id: null,
-        invoice_created_at: null,
-        invoice_updated_at: null,
-        wo_document_collection_date: null,
-        invoice_number: null,
-        faktur_number: null,
-        invoice_due_date: null,
-        delivery_date: null,
-        collection_date: null,
-        receiver_name: null,
-        payment_price: null,
-        payment_status: null,
-        payment_date: null,
-        invoice_remarks: null,
-        invoice_work_order_id: null,
-        invoice_user_id: null,
+        ...nullInvoiceInfo,
         work_detail_id: null,
         wd_created_at: null,
         wd_updated_at: null,
@@ -403,12 +588,13 @@ export const exportVesselData = async (
         progress_work_details_id: null,
         progress_user_id: null,
         progress_created_at: null,
-      });
+      } as ExportRow);
     }
   });
 
   const timestamp = new Date().toISOString().split("T")[0];
-  const filename = `vessel_data_${vesselName}_${timestamp}.csv`;
+  const accessSuffix = includeFinancialData ? "_full" : "_operational";
+  const filename = `vessel_data_${vesselName}${accessSuffix}_${timestamp}.csv`;
 
   return {
     data: flattenedData,
