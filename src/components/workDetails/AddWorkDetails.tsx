@@ -275,17 +275,11 @@ export default function AddWorkDetails() {
         throw new Error("User not authenticated");
       }
 
-      console.log("Current user:", user);
-      console.log("Current user ID:", user.id);
-
-      // Check if user_profile exists for current user - using the same logic as AddWorkOrder
       const { data: userProfile, error: profileError } = await supabase
         .from("profiles")
         .select("id")
         .eq("auth_user_id", user.id)
-        .maybeSingle(); // Use maybeSingle instead of single to avoid error if no record
-
-      console.log("User profile query result:", { userProfile, profileError });
+        .maybeSingle();
 
       if (profileError) {
         console.error("Error querying user profile:", profileError);
@@ -297,8 +291,6 @@ export default function AddWorkDetails() {
       let userId;
 
       if (!userProfile) {
-        console.log("User profile not found, creating new profile...");
-
         // Create user profile if it doesn't exist
         const { data: newProfile, error: createError } = await supabase
           .from("profiles")
@@ -319,10 +311,6 @@ export default function AddWorkDetails() {
 
           // Check if it's a duplicate key error (user profile might have been created by another process)
           if (createError.code === "23505") {
-            console.log(
-              "User profile already exists, trying to fetch again..."
-            );
-
             const { data: existingProfile, error: fetchError } = await supabase
               .from("profiles")
               .select("id")
@@ -343,7 +331,6 @@ export default function AddWorkDetails() {
           if (!newProfile || !newProfile.id) {
             throw new Error("Failed to create user profile - no ID returned");
           }
-          console.log("Created new user profile:", newProfile);
           userId = newProfile.id;
         }
       } else {
@@ -354,8 +341,6 @@ export default function AddWorkDetails() {
       if (!userId || typeof userId !== "number") {
         throw new Error(`Invalid user ID: ${userId}`);
       }
-
-      console.log("Using user ID:", userId, "Type:", typeof userId);
 
       let storagePath = null;
       let workPermitUrl = null;
@@ -373,8 +358,6 @@ export default function AddWorkDetails() {
           "_"
         )}`;
 
-        console.log("Uploading file to path:", customPath);
-
         const uploadResult = await uploadWorkPermitFile(
           selectedFile,
           customPath
@@ -388,10 +371,6 @@ export default function AddWorkDetails() {
 
         storagePath = uploadResult.storagePath;
         workPermitUrl = uploadResult.publicUrl;
-        console.log("File uploaded successfully:", {
-          storagePath,
-          workPermitUrl,
-        });
       }
 
       // Prepare data for insertion
@@ -408,8 +387,6 @@ export default function AddWorkDetails() {
         user_id: userId,
       };
 
-      console.log("Inserting work details:", workDetailsData);
-
       const { data, error } = await supabase
         .from("work_details")
         .insert([workDetailsData])
@@ -420,8 +397,6 @@ export default function AddWorkDetails() {
         console.error("Database insert error:", error);
         throw error;
       }
-
-      console.log("Work details created successfully:", data);
 
       // Navigate back to appropriate page
       if (workOrderId) {

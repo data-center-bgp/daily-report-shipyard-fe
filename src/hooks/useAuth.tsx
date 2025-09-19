@@ -75,10 +75,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const MAX_RETRIES = 3;
 
       try {
-        console.log(
-          `🔍 Fetching profile for user: ${userId} (attempt ${retryCount + 1})`
-        );
-
         const { data, error } = await supabase
           .from("profiles")
           .select("*")
@@ -97,7 +93,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               error.message.includes("network") ||
               error.code === "PGRST301")
           ) {
-            console.log(`🔄 Retrying profile fetch in 1 second...`);
             await new Promise((resolve) => setTimeout(resolve, 1000));
             return fetchProfile(userId, retryCount + 1);
           }

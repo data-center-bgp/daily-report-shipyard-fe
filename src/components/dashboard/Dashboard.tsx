@@ -702,7 +702,6 @@ export default function Dashboard() {
       setAlerts(newAlerts);
       setVesselSummaries(sortedVesselSummaries);
     } catch (err) {
-      console.error("Error fetching dashboard data:", err);
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setLoading(false);

@@ -39,7 +39,6 @@ export default function ExportData() {
       } = await supabase.auth.getUser();
 
       if (userError || !user) {
-        console.error("User not authenticated:", userError);
         return;
       }
 
@@ -50,7 +49,6 @@ export default function ExportData() {
         .single();
 
       if (profileError) {
-        console.error("Error fetching user profile:", profileError);
         return;
       }
 
@@ -132,7 +130,6 @@ export default function ExportData() {
       }, 4000);
     } catch (error) {
       console.error("Export error:", error);
-
       // Better error notification with proper typing
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";

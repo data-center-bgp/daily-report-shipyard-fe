@@ -56,9 +56,6 @@ export default function VesselWorkOrders() {
       if (!vesselId) {
         throw new Error("Vessel ID is required");
       }
-
-      console.log(`Fetching work orders for vessel ${vesselId}...`);
-
       // Fetch vessel data and work orders in parallel
       const [vesselResponse, workOrderResponse] = await Promise.all([
         supabase.from("vessel").select("*").eq("id", vesselId).single(),
@@ -160,7 +157,6 @@ export default function VesselWorkOrders() {
         }
       );
 
-      console.log("Vessel work orders:", workOrdersWithProgress);
       setWorkOrders(workOrdersWithProgress);
     } catch (err) {
       console.error("Error fetching vessel work orders:", err);
@@ -245,7 +241,6 @@ export default function VesselWorkOrders() {
 
       if (error) throw error;
 
-      console.log("Work order deleted successfully");
       fetchVesselWorkOrders();
     } catch (err) {
       console.error("Error deleting work order:", err);

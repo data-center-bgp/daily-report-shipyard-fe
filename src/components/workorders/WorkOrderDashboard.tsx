@@ -48,10 +48,6 @@ export default function WorkOrderDashboard() {
     try {
       setLoading(true);
       setError(null);
-
-      console.log("Fetching work orders with vessel data...");
-
-      // Simple query - only work_order table with vessel join
       const { data, error } = await supabase
         .from("work_order")
         .select(
@@ -69,7 +65,6 @@ export default function WorkOrderDashboard() {
 
       if (error) throw error;
 
-      console.log("Work orders fetched:", data);
       const workOrdersData = data || [];
 
       // Calculate simple statistics
@@ -206,12 +201,9 @@ export default function WorkOrderDashboard() {
   useEffect(() => {
     if (location.state?.message) {
       setShowSuccessMessage(true);
-      console.log(location.state.message);
 
-      // Clear the state from location
       navigate(location.pathname, { replace: true, state: {} });
 
-      // Hide success message after 5 seconds
       const timer = setTimeout(() => {
         setShowSuccessMessage(false);
       }, 5000);

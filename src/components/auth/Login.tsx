@@ -19,18 +19,15 @@ export default function Login() {
     setIsLoading(true);
     setError(null);
 
-    console.log("🔐 Login attempt started");
-    console.log("📧 Email:", email);
-
     try {
-      console.log("📡 Calling RBAC sign in...");
       const { error } = await signIn(email, password);
       if (error) {
         setError(error.message);
       }
     } catch (err) {
-      console.error("💥 Login error:", err);
-      setError("An unexpected error occurred");
+      setError(
+        err instanceof Error ? err.message : "An unexpected error occurred"
+      );
     } finally {
       setIsLoading(false);
     }

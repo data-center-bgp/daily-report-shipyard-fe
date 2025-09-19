@@ -111,8 +111,6 @@ export default function EditWorkDetails() {
         work_permit_url: data.work_permit_url || "",
         storage_path: data.storage_path || "",
       });
-
-      console.log("Work details loaded:", data);
     } catch (err) {
       console.error("Error fetching work details:", err);
       setError(
@@ -243,7 +241,6 @@ export default function EditWorkDetails() {
       // Handle file operations
       if (removeExistingFile && originalData?.storage_path) {
         // Remove existing file
-        console.log("Removing existing permit file...");
         await deleteWorkPermitFile(originalData.storage_path);
         newStoragePath = null;
         newWorkPermitUrl = null;
@@ -262,8 +259,6 @@ export default function EditWorkDetails() {
           "_"
         )}`;
 
-        console.log("Uploading new permit file to path:", customPath);
-
         const uploadResult = await uploadWorkPermitFile(
           selectedFile,
           customPath
@@ -280,7 +275,6 @@ export default function EditWorkDetails() {
           originalData?.storage_path &&
           originalData.storage_path !== uploadResult.storagePath
         ) {
-          console.log("Deleting old permit file...");
           try {
             await deleteWorkPermitFile(originalData.storage_path);
           } catch (deleteErr) {
@@ -291,10 +285,6 @@ export default function EditWorkDetails() {
 
         newStoragePath = uploadResult.storagePath || null;
         newWorkPermitUrl = uploadResult.publicUrl || null;
-        console.log("New file uploaded successfully:", {
-          storagePath: newStoragePath,
-          workPermitUrl: newWorkPermitUrl,
-        });
       }
 
       // Prepare data for update
@@ -310,8 +300,6 @@ export default function EditWorkDetails() {
         updated_at: new Date().toISOString(),
       };
 
-      console.log("Updating work details with:", updateData);
-
       const { data, error } = await supabase
         .from("work_details")
         .update(updateData)
@@ -323,8 +311,6 @@ export default function EditWorkDetails() {
         console.error("Database update error:", error);
         throw error;
       }
-
-      console.log("Work details updated successfully:", data);
 
       // Navigate back to work details view
       navigate(`/work-details/${workDetailsId}`);

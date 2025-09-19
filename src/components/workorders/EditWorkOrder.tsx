@@ -44,8 +44,6 @@ export default function EditWorkOrder() {
         setLoadingWorkOrder(true);
         setError(null);
 
-        console.log(`Fetching work order ${workOrderId}...`);
-
         const { data, error } = await supabase
           .from("work_order")
           .select(
@@ -68,7 +66,6 @@ export default function EditWorkOrder() {
           throw new Error("Work order not found");
         }
 
-        console.log("Fetched work order:", data);
         setWorkOrder(data);
 
         // Populate form data
@@ -105,8 +102,6 @@ export default function EditWorkOrder() {
           .order("name");
 
         if (error) throw error;
-
-        console.log("Fetched vessels:", data);
         setVessels(data || []);
       } catch (err) {
         console.error("Error fetching vessels:", err);
@@ -167,9 +162,6 @@ export default function EditWorkOrder() {
     setError(null);
 
     try {
-      console.log("Updating work order with data:", formData);
-
-      // Prepare update data
       const updateData = {
         vessel_id: parseInt(formData.vessel_id.toString()),
         shipyard_wo_number: formData.shipyard_wo_number.trim(),
@@ -195,9 +187,6 @@ export default function EditWorkOrder() {
       if (!data) {
         throw new Error("No data returned from work order update");
       }
-
-      console.log("Work order updated successfully:", data);
-
       // Navigate back to vessel work orders or dashboard
       const vesselId = formData.vessel_id;
       if (vesselId) {

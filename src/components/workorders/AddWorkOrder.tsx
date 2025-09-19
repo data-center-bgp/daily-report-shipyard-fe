@@ -45,8 +45,6 @@ export default function AddWorkOrder() {
           error,
         } = await supabase.auth.getUser();
         if (error) throw error;
-
-        console.log("Current user:", user);
         setCurrentUser(user);
       } catch (err) {
         console.error("Error getting current user:", err);
@@ -70,7 +68,6 @@ export default function AddWorkOrder() {
 
         if (error) throw error;
 
-        console.log("Fetched vessels:", data);
         setVessels(data || []);
       } catch (err) {
         console.error("Error fetching vessels:", err);
@@ -137,17 +134,11 @@ export default function AddWorkOrder() {
     setError(null);
 
     try {
-      console.log("Current user:", currentUser);
-      console.log("Current user ID:", currentUser.id);
-
-      // Check if user_profile exists for current user
       const { data: userProfile, error: profileError } = await supabase
         .from("profiles")
         .select("id")
         .eq("auth_user_id", currentUser.id)
         .maybeSingle(); // Use maybeSingle instead of single to avoid error if no record
-
-      console.log("User profile query result:", { userProfile, profileError });
 
       if (profileError) {
         console.error("Error querying user profile:", profileError);
@@ -159,8 +150,6 @@ export default function AddWorkOrder() {
       let userId;
 
       if (!userProfile) {
-        console.log("User profile not found, creating new profile...");
-
         // Create user profile if it doesn't exist
         const { data: newProfile, error: createError } = await supabase
           .from("user_profile")
@@ -180,10 +169,6 @@ export default function AddWorkOrder() {
 
           // Check if it's a duplicate key error (user profile might have been created by another process)
           if (createError.code === "23505") {
-            console.log(
-              "User profile already exists, trying to fetch again..."
-            );
-
             const { data: existingProfile, error: fetchError } = await supabase
               .from("user_profile")
               .select("id")
@@ -204,7 +189,6 @@ export default function AddWorkOrder() {
           if (!newProfile || !newProfile.id) {
             throw new Error("Failed to create user profile - no ID returned");
           }
-          console.log("Created new user profile:", newProfile);
           userId = newProfile.id;
         }
       } else {
@@ -215,10 +199,6 @@ export default function AddWorkOrder() {
       if (!userId || typeof userId !== "number") {
         throw new Error(`Invalid user ID: ${userId}`);
       }
-
-      console.log("Using user ID:", userId, "Type:", typeof userId);
-
-      // Prepare submit data
       const submitData = {
         vessel_id: parseInt(formData.vessel_id.toString()),
         shipyard_wo_number: formData.shipyard_wo_number.trim(),
@@ -228,9 +208,6 @@ export default function AddWorkOrder() {
         wo_document_delivery_date: formData.wo_document_delivery_date || null,
         user_id: userId,
       };
-
-      console.log("Submitting work order data:", submitData);
-
       const { data, error } = await supabase
         .from("work_order")
         .insert([submitData])
@@ -244,10 +221,6 @@ export default function AddWorkOrder() {
       if (!data || data.length === 0) {
         throw new Error("No data returned from work order creation");
       }
-
-      console.log("Work order created successfully:", data);
-
-      // Navigate back to dashboard with success message
       navigate("/work-orders", {
         state: { message: "Work order created successfully!" },
       });

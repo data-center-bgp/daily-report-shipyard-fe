@@ -135,14 +135,6 @@ export default function WODetailsTable({
       setLoading(true);
       setError(null);
 
-      console.log("=== FETCHING WORK DETAILS ===");
-      console.log("Filters:", {
-        selectedVesselId,
-        selectedWorkOrderId,
-        workOrderId,
-        currentPage,
-      });
-
       let baseQuery = supabase
         .from("work_details")
         .select(
@@ -243,11 +235,6 @@ export default function WODetailsTable({
         };
       });
 
-      console.log(
-        `Found ${count || 0} total work details, showing ${
-          workDetailsWithProgress.length || 0
-        } on page ${currentPage}`
-      );
       setWorkDetails(workDetailsWithProgress);
       setTotalItems(count || 0);
     } catch (err) {
@@ -333,9 +320,6 @@ export default function WODetailsTable({
         .eq("id", detail.id);
 
       if (error) throw error;
-
-      console.log("Work details deleted successfully");
-
       // Adjust current page if we're on the last page and it becomes empty
       const newTotalItems = totalItems - 1;
       const newTotalPages = Math.ceil(newTotalItems / itemsPerPage);

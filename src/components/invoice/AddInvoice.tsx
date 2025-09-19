@@ -103,8 +103,6 @@ export default function AddInvoice() {
       setLoading(true);
       setError(null);
 
-      console.log("🔍 Fetching work orders for invoice creation...");
-
       const { data: workOrderData, error: woError } = await supabase
         .from("work_order")
         .select(
@@ -136,8 +134,6 @@ export default function AddInvoice() {
         .order("created_at", { ascending: false });
 
       if (woError) throw woError;
-
-      console.log("📋 Work orders fetched:", workOrderData?.length || 0);
 
       const workOrdersWithProgress = (workOrderData || []).map((wo) => {
         const workDetails = wo.work_details || [];
@@ -213,19 +209,6 @@ export default function AddInvoice() {
           (detail: WorkDetailsWithProgress) => detail.verification_status
         );
 
-        console.log(
-          `Work Order ${wo.id}: ${overallProgress}% complete, ${
-            isFullyCompleted ? "FULLY COMPLETED" : "not complete"
-          }`
-        );
-        console.log(
-          `  - ${workDetailsWithProgress.length} details, ${
-            workDetailsWithProgress.filter(
-              (d: WorkDetailsWithProgress) => d.current_progress === 100
-            ).length
-          } at 100%`
-        );
-
         return {
           ...wo,
           work_details: workDetailsWithProgress,
@@ -236,20 +219,9 @@ export default function AddInvoice() {
         };
       });
 
-      console.log(
-        "📊 Total work orders processed:",
-        workOrdersWithProgress.length
-      );
-      console.log(
-        "✅ Fully completed work orders:",
-        workOrdersWithProgress.filter((wo) => wo.is_fully_completed).length
-      );
-
       const fullyCompleted = workOrdersWithProgress.filter(
         (wo) => wo.is_fully_completed
       );
-
-      console.log("🎯 Checking for existing invoices...");
 
       const { data: existingInvoices, error: invoiceError } = await supabase
         .from("invoice_details")
@@ -263,13 +235,10 @@ export default function AddInvoice() {
       const invoicedWorkOrderIds = (existingInvoices || []).map(
         (inv) => inv.work_order_id
       );
-      console.log("📄 Already invoiced work order IDs:", invoicedWorkOrderIds);
 
       const availableForInvoicing = fullyCompleted.filter(
         (wo) => !invoicedWorkOrderIds.includes(wo.id)
       );
-
-      console.log("📋 Available for invoicing:", availableForInvoicing.length);
 
       setCompletedWorkOrders(availableForInvoicing);
     } catch (err) {
