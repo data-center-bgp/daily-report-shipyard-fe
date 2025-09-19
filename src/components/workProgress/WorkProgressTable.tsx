@@ -132,7 +132,7 @@ const transformSupabaseWorkProgress = (
     storage_path: data.storage_path,
     created_at: data.created_at,
     work_details_id: data.work_details_id,
-    user_id: data.user_id,
+    user_id: data.user_id ?? 0,
     work_details: {
       id: workDetails.id,
       description: workDetails.description,

@@ -121,8 +121,7 @@ export default function VesselWorkOrders() {
                   new Date(a.report_date).getTime()
               );
 
-              const latestProgress =
-                sortedProgress[0]?.progress_percentage || 0;
+              const latestProgress = sortedProgress[0]?.progress || 0;
               const latestProgressDate = sortedProgress[0]?.report_date;
 
               return {
