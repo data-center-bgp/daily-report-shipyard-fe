@@ -231,21 +231,14 @@ export default function VerifyWorkDetails() {
         throw new Error("Failed to fetch user profile");
       }
 
-      // Insert verification record into work_verification table
-      const { data, error } = await supabase
-        .from("work_verification")
-        .insert({
-          work_verification: true,
-          verification_date: verificationDate,
-          work_details_id: workDetails.id,
-          user_id: userProfile.id,
-        })
-        .select()
-        .single();
+      const { error } = await supabase.from("work_verification").insert({
+        work_verification: true,
+        verification_date: verificationDate,
+        work_details_id: workDetails.id,
+        user_id: userProfile.id,
+      });
 
       if (error) throw error;
-
-      console.log("Work details verified successfully:", data);
 
       // Navigate back with success message
       navigate("/work-verification", {
@@ -397,7 +390,6 @@ export default function VerifyWorkDetails() {
         </div>
       </div>
 
-      {/* Rest of your JSX remains exactly the same... */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Error Message */}
         {error && (
@@ -567,9 +559,6 @@ export default function VerifyWorkDetails() {
                 </div>
               </div>
             </div>
-
-            {/* Rest of your collapsible sections remain the same... */}
-            {/* I'm keeping the rest as they are since they don't have errors */}
           </div>
 
           {/* Verification Sidebar - 1/3 */}

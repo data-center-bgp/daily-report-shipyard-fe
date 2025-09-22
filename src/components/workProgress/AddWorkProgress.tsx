@@ -209,7 +209,6 @@ export default function AddWorkProgress({
 
       if (error) throw error;
 
-      // Handle the response structure properly
       const workDetailsContext = data as unknown as WorkDetailsContext;
 
       if (workDetailsContext?.work_order?.vessel) {
@@ -292,7 +291,6 @@ export default function AddWorkProgress({
       let evidenceUrl = "";
       let storagePath = "";
 
-      // Upload evidence file if provided
       if (formData.evidence_file) {
         const uploadResult = await uploadProgressEvidence({
           file: formData.evidence_file,
@@ -308,7 +306,6 @@ export default function AddWorkProgress({
         storagePath = uploadResult.storagePath || "";
       }
 
-      // Get current user - using the same method as AddWorkDetails
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -316,17 +313,11 @@ export default function AddWorkProgress({
         throw new Error("User not authenticated");
       }
 
-      console.log("Current user:", user);
-      console.log("Current user ID:", user.id);
-
-      // Check if user_profile exists for current user - using the same logic as AddWorkDetails
       const { data: userProfile, error: profileError } = await supabase
         .from("profiles")
         .select("id")
         .eq("auth_user_id", user.id)
-        .maybeSingle(); // Use maybeSingle instead of single to avoid error if no record
-
-      console.log("User profile query result:", { userProfile, profileError });
+        .maybeSingle();
 
       if (profileError) {
         console.error("Error querying user profile:", profileError);
@@ -338,9 +329,6 @@ export default function AddWorkProgress({
       let userId;
 
       if (!userProfile) {
-        console.log("User profile not found, creating new profile...");
-
-        // Create user profile if it doesn't exist
         const { data: newProfile, error: createError } = await supabase
           .from("profiles")
           .insert({
@@ -350,7 +338,7 @@ export default function AddWorkProgress({
               user.user_metadata?.full_name ||
               user.email?.split("@")[0] ||
               "User",
-            role: "user", // Default role for work progress
+            role: "user",
           })
           .select("id")
           .single();
@@ -358,12 +346,7 @@ export default function AddWorkProgress({
         if (createError) {
           console.error("Error creating user profile:", createError);
 
-          // Check if it's a duplicate key error (user profile might have been created by another process)
           if (createError.code === "23505") {
-            console.log(
-              "User profile already exists, trying to fetch again..."
-            );
-
             const { data: existingProfile, error: fetchError } = await supabase
               .from("profiles")
               .select("id")
@@ -384,22 +367,17 @@ export default function AddWorkProgress({
           if (!newProfile || !newProfile.id) {
             throw new Error("Failed to create user profile - no ID returned");
           }
-          console.log("Created new user profile:", newProfile);
           userId = newProfile.id;
         }
       } else {
         userId = userProfile.id;
       }
 
-      // Ensure userId is a valid integer
       if (!userId || typeof userId !== "number") {
         throw new Error(`Invalid user ID: ${userId}`);
       }
 
-      console.log("Using user ID:", userId, "Type:", typeof userId);
-
-      // Insert progress record
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("work_progress")
         .insert({
           work_details_id: selectedWorkDetailsId,
@@ -407,16 +385,13 @@ export default function AddWorkProgress({
           report_date: formData.report_date,
           evidence_url: evidenceUrl,
           storage_path: storagePath,
-          user_id: userId, // Use the integer profile ID
+          user_id: userId,
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      console.log("Work progress created successfully:", data);
-
-      // Navigate back to progress page or work details page
       if (effectiveWorkDetailsId) {
         navigate(`/work-details/${effectiveWorkDetailsId}/progress`);
       } else {
@@ -456,7 +431,6 @@ export default function AddWorkProgress({
     });
   };
 
-  // ... rest of your JSX remains exactly the same
   return (
     <div className="p-8">
       <div className="mb-6">

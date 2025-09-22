@@ -92,7 +92,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       current:
         location.pathname === "/work-verification" ||
         location.pathname.startsWith("/work-verification/"),
-      show: canAccess("workOrders"), // Check access (assuming same as work orders)
+      show: canAccess("workOrders"),
     },
     {
       name: "Invoices",

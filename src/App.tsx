@@ -6,7 +6,6 @@ import {
 } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 
-// Components
 import Layout from "./components/common/Layout";
 import { Login } from "./components/auth";
 import { Dashboard } from "./components/dashboard";
@@ -26,7 +25,6 @@ import { AddWorkProgress, WorkProgressTable } from "./components/workProgress";
 import { InvoiceList, AddInvoice, EditInvoice } from "./components/invoice";
 import { ExportData } from "./components/exportData";
 
-// Separate the app routes into its own component that uses the auth context
 function AppRoutes() {
   const { user, loading, signOut } = useAuth();
 

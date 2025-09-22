@@ -13,50 +13,33 @@ export interface ProgressEvidenceResponse {
   error?: string;
 }
 
-/**
- * Upload progress evidence file to Supabase storage
- */
 export async function uploadProgressEvidence({
   file,
   workDetailsId,
   reportDate,
 }: ProgressEvidenceUpload): Promise<ProgressEvidenceResponse> {
   try {
-    // Validate file
     if (!file) {
       return { success: false, error: "No file provided" };
     }
 
-    // Validate file using the validation function
     const validation = validateProgressEvidenceFile(file);
     if (!validation.isValid) {
       return { success: false, error: validation.error };
     }
 
-    // Generate unique filename
     const timestamp = Date.now();
     const randomSuffix = Math.random().toString(36).substring(2, 8);
     const fileExtension = file.name.split(".").pop()?.toLowerCase() || "jpg";
     const fileName = `work_${workDetailsId}_${reportDate}_${timestamp}_${randomSuffix}.${fileExtension}`;
 
-    // Create folder structure: work-details-{id}/filename
     const storagePath = `work-details-${workDetailsId}/${fileName}`;
 
-    console.log("Uploading progress evidence:", {
-      fileName,
-      storagePath,
-      fileSize: file.size,
-      fileType: file.type,
-      workDetailsId,
-      reportDate,
-    });
-
-    // Upload to Supabase storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from("progress_evidence")
       .upload(storagePath, file, {
         cacheControl: "3600",
-        upsert: false, // Don't overwrite existing files
+        upsert: false,
       });
 
     if (uploadError) {
@@ -64,13 +47,7 @@ export async function uploadProgressEvidence({
       return { success: false, error: `Upload failed: ${uploadError.message}` };
     }
 
-    // Generate a signed URL for the uploaded file
     const signedUrl = await getProgressEvidenceSignedUrl(uploadData.path, 3600);
-
-    console.log("Progress evidence uploaded successfully:", {
-      storagePath: uploadData.path,
-      signedUrl: signedUrl ? "Generated successfully" : "Failed to generate",
-    });
 
     return {
       success: true,
@@ -110,21 +87,14 @@ export async function getProgressEvidenceSignedUrl(
   }
 }
 
-/**
- * Open progress evidence file in new tab/window
- */
 export async function openProgressEvidence(storagePath: string): Promise<void> {
   try {
-    console.log("Opening progress evidence:", storagePath);
-
-    // Generate signed URL with 30 minutes expiration for viewing
     const signedUrl = await getProgressEvidenceSignedUrl(storagePath, 1800);
 
     if (!signedUrl) {
       throw new Error("Failed to generate signed URL for progress evidence");
     }
 
-    console.log("Opening signed URL:", signedUrl);
     window.open(signedUrl, "_blank");
   } catch (error) {
     console.error("Error opening progress evidence:", error);
@@ -132,21 +102,17 @@ export async function openProgressEvidence(storagePath: string): Promise<void> {
   }
 }
 
-/**
- * Download progress evidence file with a temporary signed URL
- */
 export async function downloadProgressEvidence(
   storagePath: string,
   fileName?: string
 ): Promise<void> {
   try {
-    const signedUrl = await getProgressEvidenceSignedUrl(storagePath, 300); // 5 minutes for download
+    const signedUrl = await getProgressEvidenceSignedUrl(storagePath, 300);
 
     if (!signedUrl) {
       throw new Error("Failed to generate download URL");
     }
 
-    // Create a temporary link and trigger download
     const link = document.createElement("a");
     link.href = signedUrl;
     link.download = fileName || storagePath.split("/").pop() || "evidence.jpg";
@@ -175,7 +141,6 @@ export async function deleteProgressEvidence(
       return { success: false, error: error.message };
     }
 
-    console.log("Progress evidence deleted successfully:", storagePath);
     return { success: true };
   } catch (error) {
     console.error("Error deleting progress evidence:", error);
@@ -215,16 +180,12 @@ export async function checkProgressEvidenceExists(
   }
 }
 
-/**
- * Validates if a file is suitable for progress evidence upload
- */
 export const validateProgressEvidenceFile = (
   file: File
 ): {
   isValid: boolean;
   error?: string;
 } => {
-  // Check file type
   const allowedTypes = [
     "image/jpeg",
     "image/jpg",
@@ -239,8 +200,7 @@ export const validateProgressEvidenceFile = (
     };
   }
 
-  // Check file size (max 10MB)
-  const maxSize = 10 * 1024 * 1024; // 10MB
+  const maxSize = 10 * 1024 * 1024;
   if (file.size > maxSize) {
     return {
       isValid: false,
@@ -248,7 +208,6 @@ export const validateProgressEvidenceFile = (
     };
   }
 
-  // Check filename length
   if (file.name.length > 100) {
     return {
       isValid: false,

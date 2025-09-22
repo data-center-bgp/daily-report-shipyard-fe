@@ -16,7 +16,6 @@ export const uploadWorkPermitFile = async (
   error?: string;
 }> => {
   try {
-    // Validate file type (only allow PDF files)
     if (file.type !== "application/pdf") {
       return {
         success: false,
@@ -24,8 +23,7 @@ export const uploadWorkPermitFile = async (
       };
     }
 
-    // Validate file size (max 10MB)
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
       return {
         success: false,
@@ -33,19 +31,15 @@ export const uploadWorkPermitFile = async (
       };
     }
 
-    // Generate storage path if not provided
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const fileName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_"); // Sanitize filename
+    const fileName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
     const storagePath = customPath || `permits/${timestamp}_${fileName}`;
 
-    console.log("Uploading file to:", storagePath);
-
-    // Upload file to Supabase storage
     const { data, error } = await supabase.storage
       .from("work_permit")
       .upload(storagePath, file, {
         cacheControl: "3600",
-        upsert: false, // Don't overwrite existing files
+        upsert: false,
       });
 
     if (error) {
@@ -56,12 +50,9 @@ export const uploadWorkPermitFile = async (
       };
     }
 
-    // Get public URL for the uploaded file
     const { data: publicUrlData } = supabase.storage
       .from("work_permit")
       .getPublicUrl(storagePath);
-
-    console.log("File uploaded successfully:", data);
 
     return {
       success: true,
@@ -97,8 +88,6 @@ export const deleteWorkPermitFile = async (
         error: `Delete failed: ${error.message}`,
       };
     }
-
-    console.log("File deleted successfully:", storagePath);
     return { success: true };
   } catch (error) {
     console.error("Error in deleteWorkPermitFile:", error);
@@ -127,18 +116,15 @@ export const replaceWorkPermitFile = async (
   error?: string;
 }> => {
   try {
-    // Upload new file first
     const uploadResult = await uploadWorkPermitFile(newFile, customPath);
 
     if (!uploadResult.success) {
       return uploadResult;
     }
 
-    // Delete old file (don't fail the operation if this fails)
     const deleteResult = await deleteWorkPermitFile(oldStoragePath);
     if (!deleteResult.success) {
       console.warn("Failed to delete old file:", deleteResult.error);
-      // Continue anyway since the new file was uploaded successfully
     }
 
     return uploadResult;
@@ -214,7 +200,6 @@ export const validateWorkPermitFile = (
   isValid: boolean;
   error?: string;
 } => {
-  // Check file type
   if (file.type !== "application/pdf") {
     return {
       isValid: false,
@@ -222,8 +207,7 @@ export const validateWorkPermitFile = (
     };
   }
 
-  // Check file size (max 10MB)
-  const maxSize = 10 * 1024 * 1024; // 10MB
+  const maxSize = 10 * 1024 * 1024;
   if (file.size > maxSize) {
     return {
       isValid: false,
@@ -231,7 +215,6 @@ export const validateWorkPermitFile = (
     };
   }
 
-  // Check filename length
   if (file.name.length > 100) {
     return {
       isValid: false,
