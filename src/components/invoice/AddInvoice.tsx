@@ -1,7 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase, type WorkOrder } from "../../lib/supabase";
 import SelectWorkDetailsForInvoice from "./SelectWorkDetailsForInvoice";
+import { useAuth } from "../../hooks/useAuth";
+
+// Add interface for cached user profile
+interface CachedUserProfile {
+  id: number;
+  auth_user_id: string;
+  email?: string;
+  role?: string;
+}
 
 interface WorkDetailsWithProgress {
   id: number;
@@ -80,6 +89,7 @@ interface ProgressRecord {
 
 export default function AddInvoice() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [workOrdersWithAvailableDetails, setWorkOrdersWithAvailableDetails] =
     useState<WorkOrderOption[]>([]);
@@ -95,6 +105,14 @@ export default function AddInvoice() {
   const [selectedWorkDetails, setSelectedWorkDetails] = useState<
     WorkDetailsWithProgress[]
   >([]);
+
+  // Enhanced user profile caching with better state management
+  const [cachedUserProfile, setCachedUserProfile] =
+    useState<CachedUserProfile | null>(null);
+  const [userProfileLoading, setUserProfileLoading] = useState(false);
+  const [userProfileError, setUserProfileError] = useState<string | null>(null);
+  const [profileFetchAttempted, setProfileFetchAttempted] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +130,85 @@ export default function AddInvoice() {
     payment_date: "",
     remarks: "",
   });
+
+  // Improved user profile fetching with better error handling
+  const fetchUserProfile = useCallback(
+    async (forceRefresh = false) => {
+      if (!user) {
+        console.log("🚫 No user available for profile fetch");
+        return;
+      }
+
+      // Skip if already cached and not forcing refresh
+      if (cachedUserProfile?.auth_user_id === user.id && !forceRefresh) {
+        console.log("✅ User profile already cached:", cachedUserProfile);
+        return;
+      }
+
+      try {
+        setUserProfileLoading(true);
+        setUserProfileError(null);
+        console.log(
+          "🔍 Fetching user profile for:",
+          user.id,
+          forceRefresh ? "(forced refresh)" : ""
+        );
+
+        const { data: userProfile, error: profileError } = await supabase
+          .from("profiles")
+          .select("id, auth_user_id, email, role")
+          .eq("auth_user_id", user.id)
+          .single();
+
+        if (profileError) {
+          console.error("Profile fetch error:", profileError);
+          throw new Error(`Profile lookup failed: ${profileError.message}`);
+        }
+
+        if (!userProfile) {
+          throw new Error("User profile not found");
+        }
+
+        console.log("✅ User profile fetched and cached:", userProfile);
+        setCachedUserProfile(userProfile);
+        setUserProfileError(null);
+        setProfileFetchAttempted(true);
+      } catch (err) {
+        console.error("❌ Failed to fetch user profile:", err);
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to load user profile";
+        setUserProfileError(errorMessage);
+        setProfileFetchAttempted(true);
+
+        // Don't clear existing cache if refresh fails
+        if (!forceRefresh && cachedUserProfile) {
+          console.log(
+            "🔄 Keeping existing cached profile due to refresh failure"
+          );
+        }
+      } finally {
+        setUserProfileLoading(false);
+      }
+    },
+    [user, cachedUserProfile]
+  );
+
+  // Fetch profile when user changes or component mounts
+  useEffect(() => {
+    if (user && !profileFetchAttempted) {
+      fetchUserProfile();
+    }
+  }, [user, profileFetchAttempted, fetchUserProfile]);
+
+  // Clear cache when user logs out
+  useEffect(() => {
+    if (!user) {
+      console.log("🧹 Clearing user profile cache (user logged out)");
+      setCachedUserProfile(null);
+      setUserProfileError(null);
+      setProfileFetchAttempted(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     fetchWorkOrders();
@@ -281,10 +378,27 @@ export default function AddInvoice() {
 
   const handleWorkDetailsSelected = (
     workDetailsIds: number[],
-    workDetailsData: WorkDetailsWithProgress[]
+    workDetailsData?: WorkDetailsWithProgress[]
   ) => {
     setSelectedWorkDetailsIds(workDetailsIds);
-    setSelectedWorkDetails(workDetailsData);
+
+    if (workDetailsData && Array.isArray(workDetailsData)) {
+      setSelectedWorkDetails(workDetailsData);
+    } else {
+      const currentWorkOrder = workOrdersWithAvailableDetails.find(
+        (wo) => wo.id === selectedWorkOrderId
+      );
+
+      if (currentWorkOrder) {
+        const selectedDetails = currentWorkOrder.work_details.filter((detail) =>
+          workDetailsIds.includes(detail.id)
+        );
+        setSelectedWorkDetails(selectedDetails);
+      } else {
+        setSelectedWorkDetails([]);
+      }
+    }
+
     setStep("invoice-form");
   };
 
@@ -316,36 +430,73 @@ export default function AddInvoice() {
   };
 
   const handleCreateInvoice = async () => {
+    console.log("🚀 Starting invoice creation...");
+    console.log("Selected work order ID:", selectedWorkOrderId);
+    console.log("Selected work details IDs:", selectedWorkDetailsIds);
+
     if (!selectedWorkOrderId || selectedWorkDetailsIds.length === 0) {
       setError("Please select work details to invoice");
       return;
     }
 
+    if (!user) {
+      setError("User not authenticated. Please refresh and try again.");
+      return;
+    }
+
+    // Enhanced user profile validation
+    if (!cachedUserProfile) {
+      if (userProfileLoading) {
+        setError("Loading user profile... Please wait and try again.");
+        return;
+      }
+
+      if (userProfileError) {
+        console.log("🔄 Attempting to refresh user profile due to error...");
+        await fetchUserProfile(true); // Force refresh
+
+        // Check again after refresh attempt
+        if (!cachedUserProfile) {
+          setError(
+            `User profile error: ${userProfileError}. Please refresh the page.`
+          );
+          return;
+        }
+      } else {
+        setError(
+          "User profile not loaded. Please refresh the page and try again."
+        );
+        return;
+      }
+    }
+
     try {
       setSubmitting(true);
       setError(null);
+      console.log("✅ Using authenticated user from hook:", user.id);
+      console.log("✅ Using cached user profile:", cachedUserProfile);
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-      if (userError || !user) {
-        throw new Error("User not authenticated");
-      }
-
-      const { data: userProfile, error: profileError } = await supabase
-        .from("profiles")
+      // Test database connection first
+      console.log("🧪 Testing database connection...");
+      const { data: testData, error: testError } = await supabase
+        .from("invoice_details")
         .select("id")
-        .eq("auth_user_id", user.id)
-        .single();
+        .limit(1);
 
-      if (profileError || !userProfile) {
-        throw new Error("User profile not found");
+      console.log("Database test result:", { testData, testError });
+
+      if (testError) {
+        throw new Error(`Database connection failed: ${testError.message}`);
       }
 
+      // Use the cached user profile ID (from logged-in user)
+      const userProfileId = cachedUserProfile.id;
+      console.log("✅ Using logged-in user profile ID:", userProfileId);
+
+      // Create invoice with full data directly
       const invoiceData = {
         work_order_id: selectedWorkOrderId,
-        user_id: userProfile.id,
+        user_id: userProfileId, // Use actual logged-in user
         wo_document_collection_date:
           formData.wo_document_collection_date || null,
         invoice_number: formData.invoice_number || null,
@@ -357,7 +508,7 @@ export default function AddInvoice() {
         payment_price: formData.payment_price
           ? parseFloat(formData.payment_price)
           : null,
-        payment_status: formData.payment_status,
+        payment_status: formData.payment_status || false,
         payment_date:
           formData.payment_status && formData.payment_date
             ? formData.payment_date
@@ -365,16 +516,26 @@ export default function AddInvoice() {
         remarks: formData.remarks || null,
       };
 
-      // Create the invoice
+      console.log("📋 Creating invoice with logged-in user data:", invoiceData);
+
       const { data: invoice, error: invoiceError } = await supabase
         .from("invoice_details")
         .insert(invoiceData)
-        .select()
+        .select("id, invoice_number")
         .single();
 
-      if (invoiceError) throw invoiceError;
+      console.log("Invoice creation result:", { invoice, invoiceError });
 
-      // Create invoice_work_details entries to link work details to this invoice
+      if (invoiceError) {
+        console.error("Invoice creation failed:", invoiceError);
+        throw new Error(`Invoice creation failed: ${invoiceError.message}`);
+      }
+
+      console.log("✅ Invoice created with ID:", invoice.id);
+
+      // Create junction table entries
+      console.log("✅ Creating invoice work details junction...");
+
       const invoiceWorkDetailsData = selectedWorkDetailsIds.map(
         (workDetailId) => ({
           invoice_details_id: invoice.id,
@@ -382,27 +543,64 @@ export default function AddInvoice() {
         })
       );
 
+      console.log("Junction data to insert:", invoiceWorkDetailsData);
+
       const { error: junctionError } = await supabase
         .from("invoice_work_details")
         .insert(invoiceWorkDetailsData);
 
-      if (junctionError) throw junctionError;
+      console.log("Junction result:", { junctionError });
+
+      if (junctionError) {
+        console.error("Junction creation failed:", junctionError);
+        throw new Error(`Junction creation failed: ${junctionError.message}`);
+      }
+
+      console.log("✅ Invoice creation successful! Navigating...");
+
+      // Reset form and state for potential next invoice creation
+      setFormData({
+        wo_document_collection_date: "",
+        invoice_number: "",
+        faktur_number: "",
+        due_date: "",
+        delivery_date: "",
+        collection_date: "",
+        receiver_name: "",
+        payment_price: "",
+        payment_status: false,
+        payment_date: "",
+        remarks: "",
+      });
+
+      // Reset steps
+      setStep("select-work-order");
+      setSelectedWorkOrderId(null);
+      setSelectedWorkDetailsIds([]);
+      setSelectedWorkDetails([]);
 
       navigate("/invoices", {
         state: {
           successMessage: `Invoice ${
-            formData.invoice_number || invoice.id
+            formData.invoice_number || invoice.invoice_number || invoice.id
           } created successfully for ${
             selectedWorkDetailsIds.length
           } work details`,
         },
       });
     } catch (err) {
-      console.error("Error creating invoice:", err);
+      console.error("❌ Error creating invoice:", err);
       setError(err instanceof Error ? err.message : "Failed to create invoice");
     } finally {
+      console.log("🔄 Resetting submitting state...");
       setSubmitting(false);
     }
+  };
+
+  // Add a refresh profile function for manual retry
+  const handleRefreshProfile = async () => {
+    console.log("🔄 Manual profile refresh requested");
+    await fetchUserProfile(true);
   };
 
   const handleBackToWorkOrderSelection = () => {
@@ -418,12 +616,68 @@ export default function AddInvoice() {
     setSelectedWorkDetails([]);
   };
 
-  if (loading) {
+  // Show loading state while user profile is being fetched
+  if (loading || (userProfileLoading && !cachedUserProfile)) {
     return (
       <div className="p-8">
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <span className="ml-3 text-gray-600">Loading work orders...</span>
+          <span className="ml-3 text-gray-600">
+            {loading ? "Loading work orders..." : "Loading user profile..."}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error if user profile failed to load and no cache available
+  if (userProfileError && !cachedUserProfile && profileFetchAttempted) {
+    return (
+      <div className="p-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <div className="flex items-center mb-4">
+              <span className="text-red-600 mr-3 text-2xl">⚠️</span>
+              <h3 className="text-lg font-medium text-red-800">
+                User Profile Error
+              </h3>
+            </div>
+            <div className="text-red-700 space-y-2">
+              <p>{userProfileError}</p>
+              <p>
+                Please try refreshing your profile or contact support if the
+                issue persists.
+              </p>
+            </div>
+            <div className="mt-4 flex gap-3">
+              <button
+                onClick={handleRefreshProfile}
+                disabled={userProfileLoading}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {userProfileLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Refreshing...
+                  </>
+                ) : (
+                  <>🔄 Retry Profile Load</>
+                )}
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+              >
+                🔄 Refresh Page
+              </button>
+              <button
+                onClick={() => navigate("/invoices")}
+                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                ← Back to Invoices
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -442,6 +696,22 @@ export default function AddInvoice() {
               Create invoices for completed work details. You can invoice work
               details separately across multiple invoices.
             </p>
+            {/* Show current user info */}
+            {cachedUserProfile && (
+              <div className="mt-2 text-sm text-gray-500">
+                Creating as:{" "}
+                {cachedUserProfile.email || user?.email || "Current User"}
+                {cachedUserProfile.role && ` (${cachedUserProfile.role})`}
+                <button
+                  onClick={handleRefreshProfile}
+                  disabled={userProfileLoading}
+                  className="ml-2 text-blue-600 hover:text-blue-800 text-xs underline disabled:opacity-50"
+                  title="Refresh profile data"
+                >
+                  {userProfileLoading ? "⟳" : "🔄"}
+                </button>
+              </div>
+            )}
           </div>
 
           <button
@@ -451,6 +721,32 @@ export default function AddInvoice() {
             ← Back to Invoices
           </button>
         </div>
+
+        {/* User Profile Status Warning */}
+        {userProfileError && cachedUserProfile && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <span className="text-yellow-600 mr-2">⚠️</span>
+                <p className="text-yellow-700">
+                  <strong>Warning:</strong> {userProfileError}
+                  <br />
+                  <small>
+                    Using cached profile data. Invoice will be created
+                    successfully.
+                  </small>
+                </p>
+              </div>
+              <button
+                onClick={handleRefreshProfile}
+                disabled={userProfileLoading}
+                className="bg-yellow-600 text-white px-3 py-1 rounded text-sm hover:bg-yellow-700 transition-colors disabled:opacity-50"
+              >
+                {userProfileLoading ? "⟳" : "🔄 Retry"}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Step Indicator */}
         <div className="mb-8">
@@ -650,37 +946,43 @@ export default function AddInvoice() {
               {/* Selected Work Details Summary */}
               <div className="bg-gray-50 p-4 rounded-lg mb-6">
                 <h3 className="font-semibold mb-3">
-                  Selected Work Details ({selectedWorkDetails.length})
+                  Selected Work Details ({selectedWorkDetails?.length || 0})
                 </h3>
                 <div className="space-y-2">
-                  {selectedWorkDetails.map((detail) => (
-                    <div
-                      key={detail.id}
-                      className="flex justify-between items-center bg-white rounded p-3 text-sm"
-                    >
-                      <div>
-                        <span className="font-medium">
-                          {detail.description}
-                        </span>
-                        {detail.location && (
-                          <span className="text-gray-600 ml-2">
-                            📍 {detail.location}
+                  {selectedWorkDetails && selectedWorkDetails.length > 0 ? (
+                    selectedWorkDetails.map((detail) => (
+                      <div
+                        key={detail.id}
+                        className="flex justify-between items-center bg-white rounded p-3 text-sm"
+                      >
+                        <div>
+                          <span className="font-medium">
+                            {detail.description}
                           </span>
-                        )}
-                        {detail.pic && (
-                          <span className="text-gray-600 ml-2">
-                            👤 {detail.pic}
-                          </span>
-                        )}
+                          {detail.location && (
+                            <span className="text-gray-600 ml-2">
+                              📍 {detail.location}
+                            </span>
+                          )}
+                          {detail.pic && (
+                            <span className="text-gray-600 ml-2">
+                              👤 {detail.pic}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-green-700">100%</span>
+                          {detail.verification_status && (
+                            <span title="Verified">🔍</span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-green-700">100%</span>
-                        {detail.verification_status && (
-                          <span title="Verified">🔍</span>
-                        )}
-                      </div>
+                    ))
+                  ) : (
+                    <div className="text-gray-500 text-sm">
+                      No work details selected
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
 
@@ -912,7 +1214,7 @@ export default function AddInvoice() {
                   </button>
                   <button
                     type="submit"
-                    disabled={submitting}
+                    disabled={submitting || !cachedUserProfile}
                     className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
                     {submitting ? (

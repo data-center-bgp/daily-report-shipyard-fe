@@ -20,6 +20,17 @@ interface InvoiceDetails {
   remarks?: string;
   work_order_id: number;
   user_id: number;
+  // Add work details info for partial invoicing
+  invoice_work_details?: Array<{
+    id: number;
+    work_details_id: number;
+    work_details: {
+      id: number;
+      description: string;
+      location?: string;
+      pic?: string;
+    };
+  }>;
 }
 
 // Add interface for work progress items
@@ -66,9 +77,10 @@ interface WorkDetailsWithProgress {
   verification_status: boolean;
   verification_date?: string;
   work_progress: WorkProgressItem[];
+  is_invoiced: boolean;
 }
 
-interface CompletedWorkOrder extends WorkOrder {
+interface WorkOrderWithInvoices extends WorkOrder {
   vessel: {
     id: number;
     name: string;
@@ -80,30 +92,68 @@ interface CompletedWorkOrder extends WorkOrder {
   has_progress_data: boolean;
   verification_status: boolean;
   is_fully_completed: boolean;
-  has_existing_invoice: boolean;
   completion_date?: string;
-  invoice_details?: InvoiceDetails;
+  invoices: InvoiceDetails[]; // Changed from single invoice to array
+  has_invoices: boolean;
+  total_invoiced_amount: number;
+  total_work_details: number;
+  invoiced_work_details: number;
+  available_work_details: number;
 }
 
 export default function InvoiceList() {
   const navigate = useNavigate();
 
-  const [workOrders, setWorkOrders] = useState<CompletedWorkOrder[]>([]);
+  const [workOrders, setWorkOrders] = useState<WorkOrderWithInvoices[]>([]);
+  const [allInvoices, setAllInvoices] = useState<InvoiceDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Remove unused setSuccess or use it if needed
-  // const [success, setSuccess] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<
     "all" | "ready" | "invoiced" | "paid" | "unpaid"
   >("all");
+  const [viewMode, setViewMode] = useState<"work-orders" | "invoices">(
+    "invoices"
+  );
 
-  const fetchCompletedWorkOrders = useCallback(async () => {
+  const fetchInvoiceData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch all work orders with details
+      // Fetch all invoices with their work details
+      const { data: invoiceData, error: invoiceError } = await supabase
+        .from("invoice_details")
+        .select(
+          `
+          *,
+          invoice_work_details (
+            id,
+            work_details_id,
+            work_details (
+              id,
+              description,
+              location,
+              pic
+            )
+          ),
+          work_order (
+            *,
+            vessel (
+              id,
+              name,
+              type,
+              company
+            )
+          )
+        `
+        )
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+
+      if (invoiceError) throw invoiceError;
+
+      // Fetch all work orders with details (for partial invoicing tracking)
       const { data: workOrderData, error: woError } = await supabase
         .from("work_order")
         .select(
@@ -121,6 +171,10 @@ export default function InvoiceList() {
             work_verification (
               work_verification,
               verification_date
+            ),
+            invoice_work_details (
+              id,
+              invoice_details_id
             )
           ),
           vessel (
@@ -136,22 +190,24 @@ export default function InvoiceList() {
 
       if (woError) throw woError;
 
-      // Get existing invoices
-      const { data: existingInvoices, error: invoiceError } = await supabase
-        .from("invoice_details")
-        .select("*")
-        .is("deleted_at", null);
+      setAllInvoices(invoiceData || []);
 
-      if (invoiceError) throw invoiceError;
-
-      const invoiceMap = new Map<number, InvoiceDetails>();
-      (existingInvoices || []).forEach((invoice) => {
-        invoiceMap.set(invoice.work_order_id, invoice);
-      });
-
-      // Process work orders with progress data
+      // Process work orders with invoice information
       const processedWorkOrders = (workOrderData || []).map((wo) => {
         const workDetails: RawWorkDetail[] = wo.work_details || [];
+
+        // Get invoices for this work order
+        const workOrderInvoices = (invoiceData || []).filter(
+          (invoice: InvoiceDetails) => invoice.work_order_id === wo.id
+        );
+
+        // Get invoiced work detail IDs
+        const invoicedWorkDetailIds = new Set<number>();
+        workOrderInvoices.forEach((invoice: InvoiceDetails) => {
+          invoice.invoice_work_details?.forEach((iwd) => {
+            invoicedWorkDetailIds.add(iwd.work_details_id);
+          });
+        });
 
         const workDetailsWithProgress: WorkDetailsWithProgress[] =
           workDetails.map((detail: RawWorkDetail) => {
@@ -172,6 +228,7 @@ export default function InvoiceList() {
                 verification_date: verificationRecords.find(
                   (v: WorkVerificationItem) => v.work_verification === true
                 )?.verification_date,
+                is_invoiced: invoicedWorkDetailIds.has(detail.id),
               };
             }
 
@@ -195,6 +252,7 @@ export default function InvoiceList() {
               verification_date: verificationRecords.find(
                 (v: WorkVerificationItem) => v.work_verification === true
               )?.verification_date,
+              is_invoiced: invoicedWorkDetailIds.has(detail.id),
             };
           });
 
@@ -225,9 +283,6 @@ export default function InvoiceList() {
           (detail: WorkDetailsWithProgress) => detail.verification_status
         );
 
-        const invoiceDetails = invoiceMap.get(wo.id);
-        const hasExistingInvoice = !!invoiceDetails;
-
         let completionDate: string | undefined;
         if (isFullyCompleted) {
           const completedDetails = workDetailsWithProgress.filter(
@@ -244,6 +299,20 @@ export default function InvoiceList() {
           completionDate = latestCompletionDates[0];
         }
 
+        // Calculate invoice statistics
+        const totalInvoicedAmount = workOrderInvoices.reduce(
+          (sum, invoice) => sum + (invoice.payment_price || 0),
+          0
+        );
+
+        const totalWorkDetails = workDetailsWithProgress.length;
+        const invoicedWorkDetails = workDetailsWithProgress.filter(
+          (detail) => detail.is_invoiced
+        ).length;
+        const availableWorkDetails = workDetailsWithProgress.filter(
+          (detail) => detail.current_progress === 100 && !detail.is_invoiced
+        ).length;
+
         return {
           ...wo,
           work_details: workDetailsWithProgress,
@@ -251,24 +320,26 @@ export default function InvoiceList() {
           has_progress_data: hasProgressData,
           verification_status: verificationStatus,
           is_fully_completed: isFullyCompleted,
-          has_existing_invoice: hasExistingInvoice,
           completion_date: completionDate,
-          invoice_details: invoiceDetails,
+          invoices: workOrderInvoices,
+          has_invoices: workOrderInvoices.length > 0,
+          total_invoiced_amount: totalInvoicedAmount,
+          total_work_details: totalWorkDetails,
+          invoiced_work_details: invoicedWorkDetails,
+          available_work_details: availableWorkDetails,
         };
       });
 
-      // Filter to only show completed work orders
-      const completedWorkOrders = processedWorkOrders.filter(
-        (wo) => wo.is_fully_completed
+      // Filter to show work orders with some progress or invoices
+      const relevantWorkOrders = processedWorkOrders.filter(
+        (wo) => wo.has_progress_data || wo.has_invoices
       );
 
-      setWorkOrders(completedWorkOrders);
+      setWorkOrders(relevantWorkOrders);
     } catch (err) {
-      console.error("Error fetching completed work orders:", err);
+      console.error("Error fetching invoice data:", err);
       setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to load completed work orders"
+        err instanceof Error ? err.message : "Failed to load invoice data"
       );
     } finally {
       setLoading(false);
@@ -276,8 +347,8 @@ export default function InvoiceList() {
   }, []);
 
   useEffect(() => {
-    fetchCompletedWorkOrders();
-  }, [fetchCompletedWorkOrders]);
+    fetchInvoiceData();
+  }, [fetchInvoiceData]);
 
   const handleCreateInvoice = (workOrderId: number) => {
     navigate(`/invoices/add?work_order_id=${workOrderId}`);
@@ -345,7 +416,52 @@ export default function InvoiceList() {
     };
   };
 
-  // Filtering logic
+  // Filtering logic for invoices view
+  const filteredInvoices = allInvoices.filter((invoice) => {
+    // Search filter
+    const matchesSearch =
+      searchTerm === "" ||
+      invoice.invoice_number
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      invoice.faktur_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      invoice.receiver_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      invoice.work_order?.customer_wo_number
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      invoice.work_order?.shipyard_wo_number
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      invoice.work_order?.vessel?.name
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      invoice.work_order?.vessel?.company
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase());
+
+    // Status filter
+    let matchesStatus = false;
+    switch (statusFilter) {
+      case "all":
+        matchesStatus = true;
+        break;
+      case "paid":
+        matchesStatus = invoice.payment_status === true;
+        break;
+      case "unpaid":
+        matchesStatus = invoice.payment_status === false;
+        break;
+      case "invoiced":
+        matchesStatus = true; // All items in this view are invoiced
+        break;
+      default:
+        matchesStatus = true;
+    }
+
+    return matchesSearch && matchesStatus;
+  });
+
+  // Filtering logic for work orders view
   const filteredWorkOrders = workOrders.filter((wo) => {
     // Search filter
     const matchesSearch =
@@ -353,39 +469,29 @@ export default function InvoiceList() {
       wo.customer_wo_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       wo.shipyard_wo_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       wo.vessel?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      wo.vessel?.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      wo.invoice_details?.invoice_number
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      wo.invoice_details?.faktur_number
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      wo.invoice_details?.receiver_name
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase());
+      wo.vessel?.company?.toLowerCase().includes(searchTerm.toLowerCase());
 
     // Status filter
     let matchesStatus = false;
-
     switch (statusFilter) {
       case "all":
         matchesStatus = true;
         break;
       case "ready":
-        matchesStatus = !wo.has_existing_invoice;
+        matchesStatus = wo.available_work_details > 0;
         break;
       case "invoiced":
-        matchesStatus = wo.has_existing_invoice;
+        matchesStatus = wo.has_invoices;
         break;
       case "paid":
-        matchesStatus =
-          wo.has_existing_invoice &&
-          wo.invoice_details?.payment_status === true;
+        matchesStatus = wo.invoices.some(
+          (invoice) => invoice.payment_status === true
+        );
         break;
       case "unpaid":
-        matchesStatus =
-          wo.has_existing_invoice &&
-          wo.invoice_details?.payment_status === false;
+        matchesStatus = wo.invoices.some(
+          (invoice) => invoice.payment_status === false
+        );
         break;
       default:
         matchesStatus = true;
@@ -395,18 +501,15 @@ export default function InvoiceList() {
   });
 
   // Calculate stats
-  const totalCompleted = workOrders.length;
+  const totalInvoices = allInvoices.length;
+  const paidInvoices = allInvoices.filter(
+    (invoice) => invoice.payment_status === true
+  ).length;
+  const unpaidInvoices = allInvoices.filter(
+    (invoice) => invoice.payment_status === false
+  ).length;
   const readyForInvoicing = workOrders.filter(
-    (wo) => !wo.has_existing_invoice
-  ).length;
-  const alreadyInvoiced = workOrders.filter(
-    (wo) => wo.has_existing_invoice
-  ).length;
-  const paidInvoices = workOrders.filter(
-    (wo) => wo.invoice_details?.payment_status === true
-  ).length;
-  const unpaidInvoices = workOrders.filter(
-    (wo) => wo.invoice_details?.payment_status === false
+    (wo) => wo.available_work_details > 0
   ).length;
 
   if (loading) {
@@ -426,16 +529,17 @@ export default function InvoiceList() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
-            Finance Dashboard
+            Invoice Management
           </h1>
           <p className="text-gray-600 mt-2">
-            Manage invoice payments and track financial status
+            Manage invoices and track financial status with partial invoicing
+            support
           </p>
         </div>
 
         <div className="flex gap-3">
           <button
-            onClick={fetchCompletedWorkOrders}
+            onClick={fetchInvoiceData}
             className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"
             disabled={loading}
           >
@@ -455,7 +559,7 @@ export default function InvoiceList() {
         </div>
       </div>
 
-      {/* Messages */}
+      {/* Error Message */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center">
@@ -465,10 +569,8 @@ export default function InvoiceList() {
         </div>
       )}
 
-      {/* Removed success message display since setSuccess is not used */}
-
-      {/* Finance Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
           <div className="flex items-center justify-between">
             <div>
@@ -476,7 +578,7 @@ export default function InvoiceList() {
                 Total Invoices
               </p>
               <p className="text-2xl font-bold text-gray-900">
-                {alreadyInvoiced}
+                {totalInvoices}
               </p>
             </div>
             <span className="text-blue-500 text-2xl">📄</span>
@@ -486,10 +588,24 @@ export default function InvoiceList() {
         <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Paid</p>
+              <p className="text-sm font-medium text-gray-600">Paid Invoices</p>
               <p className="text-2xl font-bold text-gray-900">{paidInvoices}</p>
             </div>
             <span className="text-green-500 text-2xl">✅</span>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">
+                Unpaid Invoices
+              </p>
+              <p className="text-2xl font-bold text-gray-900">
+                {unpaidInvoices}
+              </p>
+            </div>
+            <span className="text-red-500 text-2xl">⏳</span>
           </div>
         </div>
 
@@ -508,21 +624,59 @@ export default function InvoiceList() {
         </div>
       </div>
 
-      {/* Finance Table */}
+      {/* View Mode Toggle and Filters */}
       <div className="bg-white rounded-lg shadow">
         <div className="p-6 border-b border-gray-200">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex space-x-4">
+          {/* View Mode Toggle */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex bg-gray-100 rounded-lg p-1">
               <button
-                onClick={() => setStatusFilter("all")}
-                className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                  statusFilter === "all"
-                    ? "bg-blue-100 text-blue-700"
+                onClick={() => setViewMode("invoices")}
+                className={`px-4 py-2 rounded-md font-medium text-sm transition-colors ${
+                  viewMode === "invoices"
+                    ? "bg-white text-blue-700 shadow-sm"
                     : "text-gray-500 hover:text-gray-700"
                 }`}
               >
-                All ({totalCompleted})
+                📄 All Invoices ({totalInvoices})
               </button>
+              <button
+                onClick={() => setViewMode("work-orders")}
+                className={`px-4 py-2 rounded-md font-medium text-sm transition-colors ${
+                  viewMode === "work-orders"
+                    ? "bg-white text-blue-700 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                🚢 By Work Order ({workOrders.length})
+              </button>
+            </div>
+
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
+            </div>
+          </div>
+
+          {/* Status Filters */}
+          <div className="flex space-x-4">
+            <button
+              onClick={() => setStatusFilter("all")}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                statusFilter === "all"
+                  ? "bg-blue-100 text-blue-700"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              All
+            </button>
+            {viewMode === "work-orders" && (
               <button
                 onClick={() => setStatusFilter("ready")}
                 className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
@@ -533,374 +687,343 @@ export default function InvoiceList() {
               >
                 Ready ({readyForInvoicing})
               </button>
-              <button
-                onClick={() => setStatusFilter("unpaid")}
-                className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                  statusFilter === "unpaid"
-                    ? "bg-red-100 text-red-700"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                Unpaid ({unpaidInvoices})
-              </button>
-              <button
-                onClick={() => setStatusFilter("paid")}
-                className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                  statusFilter === "paid"
-                    ? "bg-green-100 text-green-700"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                Paid ({paidInvoices})
-              </button>
-            </div>
-
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search invoices, vessels, companies..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
-            </div>
+            )}
+            <button
+              onClick={() => setStatusFilter("unpaid")}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                statusFilter === "unpaid"
+                  ? "bg-red-100 text-red-700"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Unpaid ({unpaidInvoices})
+            </button>
+            <button
+              onClick={() => setStatusFilter("paid")}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                statusFilter === "paid"
+                  ? "bg-green-100 text-green-700"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Paid ({paidInvoices})
+            </button>
           </div>
         </div>
 
+        {/* Content */}
         <div className="p-6">
-          {filteredWorkOrders.length > 0 ? (
+          {viewMode === "invoices" ? (
+            // Individual Invoices View
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Work Order & Vessel
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Invoice Details
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Important Dates
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Payment Info
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status & Due
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredWorkOrders.map((wo) => (
-                    <tr key={wo.id} className="hover:bg-gray-50">
-                      {/* Work Order & Vessel */}
-                      <td className="px-4 py-4">
-                        <div className="space-y-1">
-                          <div className="text-sm font-medium text-gray-900">
-                            WO:{" "}
-                            {wo.customer_wo_number ||
-                              wo.shipyard_wo_number ||
-                              `WO-${wo.id}`}
-                          </div>
-                          <div className="text-sm font-semibold text-blue-900">
-                            {wo.vessel?.name || "-"}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {wo.vessel?.type} • {wo.vessel?.company}
-                          </div>
-                          {wo.completion_date && (
-                            <div className="text-xs text-green-600">
-                              ✅ Completed: {formatDate(wo.completion_date)}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Invoice Details */}
-                      <td className="px-4 py-4">
-                        {wo.invoice_details ? (
+              {filteredInvoices.length > 0 ? (
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Invoice Details
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Work Order & Vessel
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Work Details Covered
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Payment Info
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status & Due
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredInvoices.map((invoice) => (
+                      <tr key={invoice.id} className="hover:bg-gray-50">
+                        {/* Invoice Details */}
+                        <td className="px-4 py-4">
                           <div className="space-y-1">
                             <div className="text-sm font-medium text-gray-900">
-                              Invoice:{" "}
-                              {wo.invoice_details.invoice_number || "-"}
+                              {invoice.invoice_number || `INV-${invoice.id}`}
                             </div>
                             <div className="text-sm text-gray-600">
-                              Faktur: {wo.invoice_details.faktur_number || "-"}
+                              Faktur: {invoice.faktur_number || "-"}
                             </div>
-                            {wo.invoice_details.receiver_name && (
+                            {invoice.receiver_name && (
                               <div className="text-xs text-gray-500">
-                                To: {wo.invoice_details.receiver_name}
+                                To: {invoice.receiver_name}
                               </div>
                             )}
                             <div className="text-xs text-gray-400">
-                              ID: {wo.invoice_details.id}
+                              Created: {formatDate(invoice.created_at)}
                             </div>
                           </div>
-                        ) : (
-                          <div className="text-sm font-medium text-orange-600">
-                            📋 Ready for invoicing
-                          </div>
-                        )}
-                      </td>
+                        </td>
 
-                      {/* Important Dates */}
-                      <td className="px-4 py-4">
-                        {wo.invoice_details ? (
+                        {/* Work Order & Vessel */}
+                        <td className="px-4 py-4">
                           <div className="space-y-1">
-                            {wo.invoice_details.wo_document_collection_date && (
-                              <div className="text-xs">
-                                <span className="text-gray-500">
-                                  Doc Collection:
-                                </span>
-                                <br />
-                                <span className="text-gray-900">
-                                  {formatDate(
-                                    wo.invoice_details
-                                      .wo_document_collection_date
-                                  )}
-                                </span>
-                              </div>
-                            )}
-                            {wo.invoice_details.delivery_date && (
-                              <div className="text-xs">
-                                <span className="text-gray-500">Delivery:</span>
-                                <br />
-                                <span className="text-gray-900">
-                                  {formatDate(wo.invoice_details.delivery_date)}
-                                </span>
-                              </div>
-                            )}
-                            {wo.invoice_details.collection_date && (
-                              <div className="text-xs">
-                                <span className="text-gray-500">
-                                  Collection:
-                                </span>
-                                <br />
-                                <span className="text-gray-900">
-                                  {formatDate(
-                                    wo.invoice_details.collection_date
-                                  )}
-                                </span>
-                              </div>
-                            )}
-                            <div className="text-xs">
-                              <span className="text-gray-500">Created:</span>
-                              <br />
-                              <span className="text-gray-900">
-                                {formatDate(wo.invoice_details.created_at)}
-                              </span>
+                            <div className="text-sm font-medium text-gray-900">
+                              WO:{" "}
+                              {invoice.work_order?.customer_wo_number ||
+                                invoice.work_order?.shipyard_wo_number ||
+                                `WO-${invoice.work_order_id}`}
+                            </div>
+                            <div className="text-sm font-semibold text-blue-900">
+                              {invoice.work_order?.vessel?.name || "-"}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {invoice.work_order?.vessel?.type} •{" "}
+                              {invoice.work_order?.vessel?.company}
                             </div>
                           </div>
-                        ) : (
-                          <div className="text-xs text-gray-400">
-                            No invoice created yet
-                          </div>
-                        )}
-                      </td>
+                        </td>
 
-                      {/* Payment Info */}
-                      <td className="px-4 py-4">
-                        {wo.invoice_details ? (
+                        {/* Work Details Covered */}
+                        <td className="px-4 py-4">
+                          <div className="space-y-1">
+                            <div className="text-sm font-medium text-gray-900">
+                              {invoice.invoice_work_details?.length || 0} work
+                              details
+                            </div>
+                            {invoice.invoice_work_details &&
+                              invoice.invoice_work_details.length > 0 && (
+                                <div className="text-xs text-gray-600 space-y-1">
+                                  {invoice.invoice_work_details
+                                    .slice(0, 2)
+                                    .map((iwd) => (
+                                      <div
+                                        key={iwd.id}
+                                        className="truncate max-w-48"
+                                      >
+                                        • {iwd.work_details?.description}
+                                      </div>
+                                    ))}
+                                  {invoice.invoice_work_details.length > 2 && (
+                                    <div className="text-xs text-gray-500">
+                                      +{invoice.invoice_work_details.length - 2}{" "}
+                                      more...
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                          </div>
+                        </td>
+
+                        {/* Payment Info */}
+                        <td className="px-4 py-4">
                           <div className="space-y-2">
                             <div className="text-base font-bold text-gray-900">
-                              {formatCurrency(wo.invoice_details.payment_price)}
+                              {formatCurrency(invoice.payment_price)}
                             </div>
                             <span
                               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                wo.invoice_details.payment_status === true
+                                invoice.payment_status === true
                                   ? "bg-green-100 text-green-800"
                                   : "bg-red-100 text-red-800"
                               }`}
                             >
-                              {wo.invoice_details.payment_status === true
+                              {invoice.payment_status === true
                                 ? "✅ Paid"
                                 : "⏳ Unpaid"}
                             </span>
-                            {wo.invoice_details.payment_date && (
+                            {invoice.payment_date && (
                               <div className="text-xs text-green-600">
-                                💰 Paid:{" "}
-                                {formatDate(wo.invoice_details.payment_date)}
-                              </div>
-                            )}
-                            {wo.invoice_details.remarks && (
-                              <div className="text-xs text-gray-500 italic">
-                                📝 {wo.invoice_details.remarks.substring(0, 50)}
-                                {wo.invoice_details.remarks.length > 50
-                                  ? "..."
-                                  : ""}
+                                💰 Paid: {formatDate(invoice.payment_date)}
                               </div>
                             )}
                           </div>
-                        ) : (
-                          <div className="text-sm text-gray-500 italic">
-                            Create invoice first
-                          </div>
-                        )}
-                      </td>
+                        </td>
 
-                      {/* Status & Due */}
-                      <td className="px-4 py-4">
-                        {wo.invoice_details ? (
+                        {/* Status & Due */}
+                        <td className="px-4 py-4">
                           <div className="space-y-2">
                             <div className="text-sm font-medium text-gray-900">
-                              Due: {formatDate(wo.invoice_details.due_date)}
+                              Due: {formatDate(invoice.due_date)}
                             </div>
                             <div
                               className={`text-xs font-medium ${
                                 getDueDateStatus(
-                                  wo.invoice_details.due_date,
-                                  wo.invoice_details.payment_status === true
+                                  invoice.due_date,
+                                  invoice.payment_status === true
                                 ).color
                               }`}
                             >
                               {
                                 getDueDateStatus(
-                                  wo.invoice_details.due_date,
-                                  wo.invoice_details.payment_status === true
+                                  invoice.due_date,
+                                  invoice.payment_status === true
                                 ).text
                               }
                             </div>
-                            {/* Progress indicator */}
-                            <div className="flex items-center space-x-1">
-                              <div className="w-16 bg-gray-200 rounded-full h-1.5">
-                                <div
-                                  className="bg-blue-600 h-1.5 rounded-full"
-                                  style={{ width: `${wo.overall_progress}%` }}
-                                ></div>
-                              </div>
-                              <span className="text-xs text-gray-500">
-                                {wo.overall_progress}%
-                              </span>
-                            </div>
-                            {wo.verification_status && (
-                              <div className="text-xs text-green-600">
-                                ✓ Verified
-                              </div>
-                            )}
                           </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              🏁 Work Complete
-                            </span>
-                            <div className="flex items-center space-x-1">
-                              <div className="w-16 bg-gray-200 rounded-full h-1.5">
-                                <div
-                                  className="bg-green-600 h-1.5 rounded-full"
-                                  style={{ width: `${wo.overall_progress}%` }}
-                                ></div>
-                              </div>
-                              <span className="text-xs text-gray-500">
-                                {wo.overall_progress}%
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </td>
+                        </td>
 
-                      {/* Actions */}
-                      <td className="px-4 py-4 whitespace-nowrap">
-                        <div className="flex flex-col gap-1">
-                          {!wo.has_existing_invoice ? (
-                            <>
-                              <button
-                                onClick={() => handleCreateInvoice(wo.id)}
-                                className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition-colors text-center"
-                                title="Create Invoice"
-                              >
-                                📄 Create Invoice
-                              </button>
-                              <button
-                                onClick={() =>
-                                  navigate(
-                                    `/vessel/${wo.vessel?.id}/work-orders`
-                                  )
-                                }
-                                className="text-blue-600 hover:text-blue-900 transition-colors text-xs text-center"
-                                title="View Work Details"
-                              >
-                                📋 View Work
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                onClick={() =>
-                                  navigate(
-                                    `/invoices/${wo.invoice_details?.id}/edit`
-                                  )
-                                }
-                                className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 transition-colors text-center"
-                                title="Edit Invoice"
-                              >
-                                ✏️ Edit Invoice
-                              </button>
-                              <button
-                                onClick={() =>
-                                  navigate(
-                                    `/vessel/${wo.vessel?.id}/work-orders`
-                                  )
-                                }
-                                className="text-gray-600 hover:text-gray-900 transition-colors text-xs text-center"
-                                title="View Work Details"
-                              >
-                                📋 View Work
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <span className="text-gray-400 text-4xl mb-4 block">💰</span>
-              {searchTerm || statusFilter !== "all" ? (
-                <>
-                  <p className="text-gray-500 text-lg mb-2">
-                    No invoices found matching your filters
-                  </p>
-                  <button
-                    onClick={() => {
-                      setSearchTerm("");
-                      setStatusFilter("all");
-                    }}
-                    className="text-blue-600 hover:text-blue-800 transition-colors"
-                  >
-                    Clear filters
-                  </button>
-                </>
+                        {/* Actions */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <div className="flex flex-col gap-1">
+                            <button
+                              onClick={() =>
+                                navigate(`/invoices/${invoice.id}/edit`)
+                              }
+                              className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 transition-colors text-center"
+                              title="Edit Invoice"
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button
+                              onClick={() =>
+                                navigate(
+                                  `/vessel/${invoice.work_order?.vessel?.id}/work-orders`
+                                )
+                              }
+                              className="text-gray-600 hover:text-gray-900 transition-colors text-xs text-center"
+                              title="View Work Details"
+                            >
+                              📋 View Work
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               ) : (
-                <>
+                <div className="text-center py-12">
+                  <span className="text-gray-400 text-4xl mb-4 block">📄</span>
                   <p className="text-gray-500 text-lg mb-2">
-                    No invoices to manage yet
+                    No invoices found
                   </p>
                   <p className="text-gray-400 text-sm mb-4">
-                    Complete work orders will appear here for invoicing and
-                    payment tracking.
+                    {searchTerm || statusFilter !== "all"
+                      ? "Try adjusting your search or filters."
+                      : "Create your first invoice to get started."}
                   </p>
-                  <div className="space-x-3">
-                    <button
-                      onClick={() => navigate("/vessels")}
-                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      🚢 View Vessels
-                    </button>
-                    <button
-                      onClick={() => navigate("/invoices/add")}
-                      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-                    >
-                      📄 Create Invoice
-                    </button>
+                  <button
+                    onClick={() => navigate("/invoices/add")}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    📄 Create Invoice
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            // Work Orders View (existing logic but updated)
+            <div className="space-y-4">
+              {filteredWorkOrders.length > 0 ? (
+                filteredWorkOrders.map((wo) => (
+                  <div key={wo.id} className="bg-gray-50 rounded-lg p-6">
+                    {/* Work Order Header */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-4 mb-2">
+                          <h3 className="text-lg font-semibold text-gray-900">
+                            WO:{" "}
+                            {wo.customer_wo_number ||
+                              wo.shipyard_wo_number ||
+                              `WO-${wo.id}`}
+                          </h3>
+                          <span className="text-sm font-medium text-blue-900">
+                            {wo.vessel?.name} ({wo.vessel?.company})
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          Progress: {wo.overall_progress}% • Total Work Details:{" "}
+                          {wo.total_work_details} • Invoiced:{" "}
+                          {wo.invoiced_work_details} • Available:{" "}
+                          {wo.available_work_details}
+                        </div>
+                      </div>
+
+                      {wo.available_work_details > 0 && (
+                        <button
+                          onClick={() => handleCreateInvoice(wo.id)}
+                          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                        >
+                          ➕ Create Invoice
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Invoices for this Work Order */}
+                    {wo.invoices.length > 0 ? (
+                      <div className="space-y-3">
+                        <h4 className="font-medium text-gray-900">
+                          Invoices ({wo.invoices.length}):
+                        </h4>
+                        <div className="grid gap-3">
+                          {wo.invoices.map((invoice) => (
+                            <div
+                              key={invoice.id}
+                              className="bg-white rounded-lg p-4 border"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-4 mb-2">
+                                    <span className="font-medium text-gray-900">
+                                      {invoice.invoice_number ||
+                                        `INV-${invoice.id}`}
+                                    </span>
+                                    <span className="text-lg font-bold text-gray-900">
+                                      {formatCurrency(invoice.payment_price)}
+                                    </span>
+                                    <span
+                                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                        invoice.payment_status === true
+                                          ? "bg-green-100 text-green-800"
+                                          : "bg-red-100 text-red-800"
+                                      }`}
+                                    >
+                                      {invoice.payment_status === true
+                                        ? "✅ Paid"
+                                        : "⏳ Unpaid"}
+                                    </span>
+                                  </div>
+                                  <div className="text-sm text-gray-600">
+                                    Created: {formatDate(invoice.created_at)} •
+                                    Due: {formatDate(invoice.due_date)} • Work
+                                    Details:{" "}
+                                    {invoice.invoice_work_details?.length || 0}
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() =>
+                                      navigate(`/invoices/${invoice.id}/edit`)
+                                    }
+                                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors"
+                                  >
+                                    ✏️ Edit
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 text-gray-500">
+                        <p>No invoices created for this work order yet.</p>
+                      </div>
+                    )}
                   </div>
-                </>
+                ))
+              ) : (
+                <div className="text-center py-12">
+                  <span className="text-gray-400 text-4xl mb-4 block">🚢</span>
+                  <p className="text-gray-500 text-lg mb-2">
+                    No work orders found
+                  </p>
+                  <p className="text-gray-400 text-sm mb-4">
+                    {searchTerm || statusFilter !== "all"
+                      ? "Try adjusting your search or filters."
+                      : "Work orders with progress will appear here."}
+                  </p>
+                </div>
               )}
             </div>
           )}
