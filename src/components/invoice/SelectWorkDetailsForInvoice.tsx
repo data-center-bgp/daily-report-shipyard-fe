@@ -81,9 +81,6 @@ export default function SelectWorkDetailsForInvoice({
   };
 
   const availableDetails = workDetails.filter((detail) => !detail.is_invoiced);
-  const completedAvailableDetails = availableDetails.filter(
-    (detail) => detail.is_completed
-  );
 
   if (loading) {
     return <div>Loading work details...</div>;

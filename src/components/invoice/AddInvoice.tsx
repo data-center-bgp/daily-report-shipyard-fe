@@ -332,10 +332,11 @@ export default function AddInvoice() {
         // Calculate invoice statistics
         const totalWorkDetails = workDetailsWithProgress.length;
         const invoicedWorkDetails = workDetailsWithProgress.filter(
-          (detail) => detail.is_invoiced
+          (detail: WorkDetailsWithProgress) => detail.is_invoiced
         ).length;
         const availableWorkDetails = workDetailsWithProgress.filter(
-          (detail) => detail.current_progress === 100 && !detail.is_invoiced
+          (detail: WorkDetailsWithProgress) =>
+            detail.current_progress === 100 && !detail.is_invoiced
         ).length;
 
         const hasAvailableWorkDetails = availableWorkDetails > 0;
@@ -755,18 +756,14 @@ export default function AddInvoice() {
               className={`flex items-center space-x-2 ${
                 step === "select-work-order"
                   ? "text-blue-600"
-                  : step !== "select-work-order"
-                  ? "text-green-600"
-                  : "text-gray-400"
+                  : "text-green-600"
               }`}
             >
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                   step === "select-work-order"
                     ? "bg-blue-600 text-white"
-                    : step !== "select-work-order"
-                    ? "bg-green-600 text-white"
-                    : "bg-gray-200"
+                    : "bg-green-600 text-white"
                 }`}
               >
                 1

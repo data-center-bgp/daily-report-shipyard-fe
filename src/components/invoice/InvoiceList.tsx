@@ -20,7 +20,17 @@ interface InvoiceDetails {
   remarks?: string;
   work_order_id: number;
   user_id: number;
-  // Add work details info for partial invoicing
+  work_order?: {
+    id: number;
+    customer_wo_number?: string;
+    shipyard_wo_number?: string;
+    vessel?: {
+      id: number;
+      name: string;
+      type: string;
+      company: string;
+    };
+  };
   invoice_work_details?: Array<{
     id: number;
     work_details_id: number;

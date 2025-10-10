@@ -387,7 +387,7 @@ export default function AddWorkDetails() {
         user_id: userId,
       };
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("work_details")
         .insert([workDetailsData])
         .select()
