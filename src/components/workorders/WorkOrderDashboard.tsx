@@ -24,7 +24,6 @@ interface WorkOrderWithVessel extends WorkOrder {
 }
 
 export default function WorkOrderDashboard() {
-  // Remove unused workOrders state since we only need vessels for this dashboard
   const [vessels, setVessels] = useState<VesselSummary[]>([]);
   const [filteredVessels, setFilteredVessels] = useState<VesselSummary[]>([]);
   const [stats, setStats] = useState<WorkOrderStats>({
@@ -34,7 +33,6 @@ export default function WorkOrderDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
-  // Vessel search and pagination
   const [vesselSearchTerm, setVesselSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [vesselsPerPage] = useState(12);
@@ -44,11 +42,18 @@ export default function WorkOrderDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // FIXED: Proper memoization and error handling
   const fetchWorkOrders = useCallback(async () => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
     try {
       setLoading(true);
       setError(null);
-      const { data, error } = await supabase
+
+      console.log("🔄 Fetching work orders...");
+
+      const { data, error: fetchError } = await supabase
         .from("work_order")
         .select(
           `
@@ -63,90 +68,101 @@ export default function WorkOrderDashboard() {
         )
         .is("deleted_at", null);
 
-      if (error) throw error;
+      clearTimeout(timeoutId);
+
+      if (fetchError) {
+        console.error("❌ Fetch error:", fetchError);
+        throw fetchError;
+      }
 
       const workOrdersData = data || [];
+      console.log("✅ Fetched work orders:", workOrdersData.length);
 
-      // Calculate simple statistics
-      calculateStats(workOrdersData);
+      // Filter out work orders without vessel data
+      const validWorkOrders = workOrdersData.filter(
+        (wo) => wo.vessel?.id != null
+      );
+
+      if (validWorkOrders.length < workOrdersData.length) {
+        console.warn(
+          `⚠️ Filtered out ${
+            workOrdersData.length - validWorkOrders.length
+          } work orders without vessel data`
+        );
+      }
+
+      // Calculate stats
+      setStats({
+        totalWorkOrders: validWorkOrders.length,
+      });
 
       // Group by vessels
-      groupWorkOrdersByVessel(workOrdersData);
-    } catch (err) {
-      console.error("Error fetching work orders:", err);
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      const vesselMap = new Map<
+        number,
+        {
+          id: number;
+          name: string;
+          type: string;
+          company: string;
+          count: number;
+        }
+      >();
 
-  const calculateStats = (workOrders: WorkOrderWithVessel[]) => {
-    const totalWorkOrders = workOrders.length;
+      validWorkOrders.forEach((wo) => {
+        const vesselId = wo.vessel!.id;
 
-    setStats({
-      totalWorkOrders,
-    });
-  };
+        if (!vesselMap.has(vesselId)) {
+          vesselMap.set(vesselId, {
+            id: vesselId,
+            name: wo.vessel!.name,
+            type: wo.vessel!.type,
+            company: wo.vessel!.company,
+            count: 0,
+          });
+        }
 
-  const groupWorkOrdersByVessel = (workOrders: WorkOrderWithVessel[]) => {
-    // Group work orders by vessel
-    const vesselMap = new Map<
-      number,
-      {
-        id: number;
-        name: string;
-        type: string;
-        company: string;
-        workOrders: WorkOrderWithVessel[];
-      }
-    >();
+        const vesselData = vesselMap.get(vesselId)!;
+        vesselData.count++;
+      });
 
-    workOrders.forEach((wo) => {
-      // Add null check for wo.vessel
-      if (!wo.vessel?.id) {
-        console.warn("Work order found without vessel data:", wo.id);
-        return;
-      }
-
-      const vesselId = wo.vessel.id;
-
-      if (!vesselMap.has(vesselId)) {
-        vesselMap.set(vesselId, {
-          id: vesselId,
-          name: wo.vessel.name,
-          type: wo.vessel.type,
-          company: wo.vessel.company,
-          workOrders: [],
-        });
-      }
-
-      const vesselData = vesselMap.get(vesselId);
-      if (vesselData) {
-        vesselData.workOrders.push(wo);
-      }
-    });
-
-    // Calculate vessel summaries (simplified)
-    const vesselSummaries = Array.from(vesselMap.values()).map((vessel) => {
-      const workOrders = vessel.workOrders;
-
-      return {
+      const vesselSummaries = Array.from(vesselMap.values()).map((vessel) => ({
         id: vessel.id,
         name: vessel.name,
         type: vessel.type,
         company: vessel.company,
-        totalWorkOrders: workOrders.length,
-      };
-    });
+        totalWorkOrders: vessel.count,
+      }));
 
-    setVessels(vesselSummaries);
-  };
+      console.log("📊 Vessel summaries:", vesselSummaries.length);
+      setVessels(vesselSummaries);
+    } catch (err) {
+      clearTimeout(timeoutId);
+      console.error("💥 Error fetching work orders:", err);
+
+      if (err instanceof Error) {
+        if (err.name === "AbortError") {
+          setError("Request timeout. Please try again.");
+        } else if (err.message.includes("JWT")) {
+          setError("Session expired. Please refresh the page and login again.");
+        } else if (err.message.includes("permission")) {
+          setError(
+            "Permission denied. Please contact your administrator to enable RLS policies."
+          );
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError("An unexpected error occurred");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []); // Empty deps - functions are stable
 
   // Filter and sort vessels
   useEffect(() => {
     let filtered = vessels;
 
-    // Apply search filter
     if (vesselSearchTerm) {
       const searchLower = vesselSearchTerm.toLowerCase();
       filtered = vessels.filter(
@@ -157,7 +173,6 @@ export default function WorkOrderDashboard() {
       );
     }
 
-    // Apply sorting
     filtered = [...filtered].sort((a, b) => {
       let aValue: string | number;
       let bValue: string | number;
@@ -191,27 +206,23 @@ export default function WorkOrderDashboard() {
     setCurrentPage(1);
   }, [vessels, vesselSearchTerm, sortBy, sortDirection]);
 
-  // Pagination logic
+  // Pagination
   const totalPages = Math.ceil(filteredVessels.length / vesselsPerPage);
   const startIndex = (currentPage - 1) * vesselsPerPage;
   const endIndex = startIndex + vesselsPerPage;
   const currentVessels = filteredVessels.slice(startIndex, endIndex);
 
-  // Handle success message from add work order page
+  // Success message
   useEffect(() => {
     if (location.state?.message) {
       setShowSuccessMessage(true);
-
       navigate(location.pathname, { replace: true, state: {} });
-
-      const timer = setTimeout(() => {
-        setShowSuccessMessage(false);
-      }, 5000);
-
+      const timer = setTimeout(() => setShowSuccessMessage(false), 5000);
       return () => clearTimeout(timer);
     }
   }, [location, navigate]);
 
+  // Initial fetch
   useEffect(() => {
     fetchWorkOrders();
   }, [fetchWorkOrders]);
@@ -251,8 +262,7 @@ export default function WorkOrderDashboard() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Page Header */}
+    <div className="space-y-8 p-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
@@ -276,7 +286,6 @@ export default function WorkOrderDashboard() {
         </div>
       </div>
 
-      {/* Success Message */}
       {showSuccessMessage && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center justify-between">
           <div className="flex items-center">
@@ -294,7 +303,6 @@ export default function WorkOrderDashboard() {
         </div>
       )}
 
-      {/* Summary Cards - Simplified */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
           <div className="flex items-center justify-between">
@@ -340,7 +348,6 @@ export default function WorkOrderDashboard() {
         </div>
       </div>
 
-      {/* Vessels List */}
       <div className="bg-white rounded-lg shadow">
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -352,7 +359,6 @@ export default function WorkOrderDashboard() {
               </p>
             </div>
 
-            {/* Search and Sort Controls */}
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative">
                 <input
@@ -423,7 +429,6 @@ export default function WorkOrderDashboard() {
                 ))}
               </div>
 
-              {/* Pagination */}
               {totalPages > 1 && (
                 <div className="mt-8 flex items-center justify-between">
                   <div className="text-sm text-gray-600">

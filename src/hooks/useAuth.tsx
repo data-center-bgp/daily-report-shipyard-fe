@@ -6,6 +6,7 @@ import {
   createContext,
   useContext,
   useCallback,
+  useRef,
 } from "react";
 import { supabase } from "../lib/supabase";
 import type { User, Session } from "@supabase/supabase-js";
@@ -46,7 +47,6 @@ export function useAuth() {
   return context;
 }
 
-// Role → feature mapping
 const FEATURE_ACCESS = {
   dashboard: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "FINANCE"],
   workOrders: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"],
@@ -67,25 +67,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [initialized, setInitialized] = useState(false);
+  
+  // FIXED: Use ref to track if initial load is complete
+  const isInitializing = useRef(true);
+  const isMounted = useRef(true);
 
-  // Simplified profile fetch without the heavy debugging (for production use)
+  // FIXED: Stable fetchProfile with proper timeout
   const fetchProfile = useCallback(
     async (userId: string, retryCount = 0): Promise<UserProfile | null> => {
       const MAX_RETRIES = 3;
+      const TIMEOUT_MS = 10000;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
       try {
+        console.log(`🔄 Fetching profile for user: ${userId} (attempt ${retryCount + 1})`);
+
         const { data, error } = await supabase
           .from("profiles")
           .select("*")
           .eq("auth_user_id", userId)
           .is("deleted_at", null)
+          .abortSignal(controller.signal)
           .single();
+
+        clearTimeout(timeoutId);
 
         if (error) {
           console.error("❌ Profile fetch error:", error.message);
 
-          // If it's a connection/auth error and we haven't exceeded retries
           if (
             retryCount < MAX_RETRIES &&
             (error.message.includes("JWT") ||
@@ -93,20 +104,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               error.message.includes("network") ||
               error.code === "PGRST301")
           ) {
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
             return fetchProfile(userId, retryCount + 1);
           }
 
           return null;
         }
 
+        console.log("✅ Profile fetched successfully:", data?.email);
         return data;
       } catch (err) {
+        clearTimeout(timeoutId);
         console.error("💥 Profile fetch exception:", err);
 
-        // Retry on exceptions too
+        if (err instanceof Error && err.name === "AbortError") {
+          console.error("⏱️ Profile fetch timed out");
+        }
+
         if (retryCount < MAX_RETRIES) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return fetchProfile(userId, retryCount + 1);
         }
 
@@ -175,12 +191,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return allowedRoles?.includes(profile.role) ?? false;
   };
 
-  // Enhanced initialization with proper session waiting
+  // FIXED: Simplified initialization without race conditions
   useEffect(() => {
-    let mounted = true;
+    isMounted.current = true;
 
     const initAuth = async () => {
       try {
+        console.log("🔐 Initializing auth...");
+
         const {
           data: { session },
           error,
@@ -188,26 +206,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (error) {
           console.error("❌ Session fetch error:", error);
-          if (mounted) {
+          if (isMounted.current) {
             setLoading(false);
-            setInitialized(true);
+            isInitializing.current = false;
           }
           return;
         }
 
-        if (!mounted) return;
+        if (!isMounted.current) return;
+
+        console.log("📋 Session status:", session ? "Active" : "None");
 
         setSession(session);
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-
           const userProfile = await fetchProfile(session.user.id);
 
-          if (!mounted) return;
+          if (!isMounted.current) return;
 
           if (!userProfile) {
+            console.warn("⚠️ No profile found, signing out");
             await supabase.auth.signOut();
             setSession(null);
             setUser(null);
@@ -217,63 +236,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        if (mounted) {
+        if (isMounted.current) {
           setLoading(false);
-          setInitialized(true);
+          isInitializing.current = false;
+          console.log("✅ Auth initialization complete");
         }
       } catch (err) {
         console.error("💥 Auth init error:", err);
-        if (mounted) {
+        if (isMounted.current) {
           setLoading(false);
-          setInitialized(true);
+          isInitializing.current = false;
         }
       }
     };
 
     initAuth();
 
-    // Enhanced auth state listener
+    // FIXED: Simplified auth listener
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-
-      // Only process events after initial load is complete
-      if (!initialized) {
+      if (!isMounted.current) return;
+      
+      // Skip during initialization
+      if (isInitializing.current) {
+        console.log("⏭️ Skipping auth change during init:", event);
         return;
       }
+
+      console.log("🔔 Auth state changed:", event);
 
       setSession(session);
       setUser(session?.user ?? null);
 
-      if (session?.user && event === "SIGNED_IN") {
+      if (event === "SIGNED_IN" && session?.user) {
         const userProfile = await fetchProfile(session.user.id);
 
-        if (!mounted) return;
+        if (!isMounted.current) return;
 
         if (!userProfile) {
+          console.warn("⚠️ No profile found after sign in");
           await supabase.auth.signOut();
+          setProfile(null);
           return;
         }
 
         setProfile(userProfile);
-      } else if (!session?.user) {
+      } else if (event === "SIGNED_OUT" || !session?.user) {
         setProfile(null);
       }
 
-      if (mounted) {
+      if (isMounted.current) {
         setLoading(false);
       }
     });
 
     return () => {
-      mounted = false;
+      isMounted.current = false;
       subscription.unsubscribe();
+      console.log("🧹 Auth cleanup");
     };
-  }, [initialized, fetchProfile]);
-
-  // Debug logging
-  useEffect(() => {}, [loading, initialized, user, profile]);
+  }, [fetchProfile]);
 
   return (
     <AuthContext.Provider
