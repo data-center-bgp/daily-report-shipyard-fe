@@ -23,6 +23,8 @@ export default function AddWorkDetails() {
     planned_start_date: "",
     target_close_date: "",
     period_close_target: "",
+    actual_start_date: "",
+    actual_close_date: "",
     pic: "",
     work_permit_url: "",
     storage_path: "",
@@ -208,7 +210,9 @@ export default function AddWorkDetails() {
   }, [workOrderId]);
 
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -248,6 +252,14 @@ export default function AddWorkDetails() {
       const endDate = new Date(formData.target_close_date);
       if (startDate >= endDate) {
         errors.push("Target close date must be after planned start date");
+      }
+    }
+
+    if (formData.actual_start_date && formData.actual_close_date) {
+      const actualStartDate = new Date(formData.actual_start_date);
+      const actualCloseDate = new Date(formData.actual_close_date);
+      if (actualStartDate >= actualCloseDate) {
+        errors.push("Actual close date must be after actual start date");
       }
     }
 
@@ -381,6 +393,8 @@ export default function AddWorkDetails() {
         planned_start_date: formData.planned_start_date,
         target_close_date: formData.target_close_date,
         period_close_target: formData.period_close_target.trim(),
+        actual_start_date: formData.actual_start_date || null,
+        actual_close_date: formData.actual_close_date || null,
         pic: formData.pic.trim(),
         work_permit_url: workPermitUrl,
         storage_path: storagePath,
@@ -719,15 +733,63 @@ export default function AddWorkDetails() {
                   >
                     Period Close Target *
                   </label>
-                  <input
-                    type="text"
+                  <select
                     id="period_close_target"
                     name="period_close_target"
                     value={formData.period_close_target}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., 2 weeks, 1 month, End of Q1, etc."
                     required
+                  >
+                    <option value="">Select target month</option>
+                    <option value="January">January</option>
+                    <option value="February">February</option>
+                    <option value="March">March</option>
+                    <option value="April">April</option>
+                    <option value="May">May</option>
+                    <option value="June">June</option>
+                    <option value="July">July</option>
+                    <option value="August">August</option>
+                    <option value="September">September</option>
+                    <option value="October">October</option>
+                    <option value="November">November</option>
+                    <option value="December">December</option>
+                  </select>
+                </div>
+
+                {/* Actual Start Date */}
+                <div>
+                  <label
+                    htmlFor="actual_start_date"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Actual Start Date (Optional)
+                  </label>
+                  <input
+                    type="date"
+                    id="actual_start_date"
+                    name="actual_start_date"
+                    value={formData.actual_start_date}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Actual Close Date */}
+                <div>
+                  <label
+                    htmlFor="actual_close_date"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Actual Close Date (Optional)
+                  </label>
+                  <input
+                    type="date"
+                    id="actual_close_date"
+                    name="actual_close_date"
+                    value={formData.actual_close_date}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
 
