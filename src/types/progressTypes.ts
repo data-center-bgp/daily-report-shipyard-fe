@@ -1,35 +1,3 @@
-// ============ PROJECT LEVEL PROGRESS (Work Order Level) ============
-export interface ProjectProgress {
-  id: number;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string | null;
-  progress: number; // Overall project progress (0-100)
-  report_date: string;
-  work_order_id: number;
-  user_id: number;
-}
-
-export interface ProjectProgressWithDetails extends ProjectProgress {
-  work_order: {
-    id: number;
-    customer_wo_number: string;
-    shipyard_wo_number: string;
-    wo_location: string;
-    wo_description: string;
-    vessel: {
-      name: string;
-      type: string;
-      company: string;
-    };
-  };
-  user: {
-    id: number;
-    name: string;
-    email: string;
-  };
-}
-
 // ============ WORK DETAILS PROGRESS (Granular Level) ============
 export interface WorkProgress {
   id: number;
@@ -38,7 +6,7 @@ export interface WorkProgress {
   evidence_url?: string;
   storage_path?: string;
   work_details_id: number;
-  user_id: number;
+  user_id?: number;
   created_at: string;
   updated_at?: string;
   deleted_at?: string | null;

@@ -15,9 +15,9 @@ export type ExportableEntity =
   | "invoices"
   | "permits";
 
-export interface ExportData {
+export interface ExportData<T = Record<string, unknown>> {
   entity: ExportableEntity;
-  data: any[];
+  data: T[];
   filename: string;
   totalRecords: number;
 }

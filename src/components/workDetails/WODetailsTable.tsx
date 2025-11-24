@@ -247,7 +247,6 @@ export default function WODetailsTable({
     selectedVesselId,
     selectedWorkOrderId,
     workOrderId,
-    currentPage,
     sortField,
     sortDirection,
     startIndex,
@@ -320,7 +319,6 @@ export default function WODetailsTable({
         .eq("id", detail.id);
 
       if (error) throw error;
-      // Adjust current page if we're on the last page and it becomes empty
       const newTotalItems = totalItems - 1;
       const newTotalPages = Math.ceil(newTotalItems / itemsPerPage);
       if (currentPage > newTotalPages && newTotalPages > 0) {

@@ -57,6 +57,7 @@ export interface WorkDetails {
 }
 
 export interface WorkProgress {
+  progress_percentage: number;
   id: number;
   created_at: string;
   updated_at: string;
