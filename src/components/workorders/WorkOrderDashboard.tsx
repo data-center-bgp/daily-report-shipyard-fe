@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { supabase, type WorkOrder } from "../../lib/supabase";
+import { supabase } from "../../lib/supabase";
 
 interface WorkOrderStats {
   totalWorkOrders: number;
@@ -12,15 +12,6 @@ interface VesselSummary {
   type: string;
   company: string;
   totalWorkOrders: number;
-}
-
-interface WorkOrderWithVessel extends WorkOrder {
-  vessel?: {
-    id: number;
-    name: string;
-    type: string;
-    company: string;
-  };
 }
 
 export default function WorkOrderDashboard() {
