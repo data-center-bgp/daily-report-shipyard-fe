@@ -47,14 +47,14 @@ export default function Layout({ children, onLogout }: LayoutProps) {
     {
       name: "Dashboard",
       href: "/",
-      icon: "📊",
+      icon: "",
       current: location.pathname === "/",
       show: true, // Always show dashboard
     },
     {
       name: "Work Orders",
       href: "/work-orders",
-      icon: "📋",
+      icon: "",
       current:
         location.pathname === "/work-orders" ||
         location.pathname.startsWith("/vessel/") ||
@@ -66,7 +66,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
     {
       name: "Work Details",
       href: "/work-details",
-      icon: "🔧",
+      icon: "",
       current:
         location.pathname === "/work-details" ||
         location.pathname.startsWith("/work-details/") ||
@@ -77,7 +77,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
     {
       name: "Work Progress",
       href: "/work-progress",
-      icon: "📈",
+      icon: "",
       current:
         location.pathname === "/work-progress" ||
         location.pathname.startsWith("/work-progress/") ||
@@ -88,7 +88,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
     {
       name: "Work Verification",
       href: "/work-verification",
-      icon: "✅",
+      icon: "",
       current:
         location.pathname === "/work-verification" ||
         location.pathname.startsWith("/work-verification/"),
@@ -97,7 +97,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
     {
       name: "Invoices",
       href: "/invoices",
-      icon: "💰",
+      icon: "",
       current:
         location.pathname === "/invoices" ||
         location.pathname.startsWith("/invoices/") ||
@@ -107,7 +107,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
     {
       name: "Export Data",
       href: "/export-data",
-      icon: "📤",
+      icon: "",
       current: location.pathname === "/export-data",
       show: canAccess("exportData"), // Check access
     },
@@ -129,7 +129,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           <div className="flex items-center justify-between h-16 px-4 bg-blue-800 border-b border-blue-700">
             <div className="flex items-center space-x-3 min-w-0">
               <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
-                <span className="text-blue-800 text-lg font-bold">🚢</span>
+                <span className="text-blue-800 text-lg font-bold"></span>
               </div>
               {!sidebarCollapsed && (
                 <h1 className="text-lg font-bold text-white transition-opacity duration-200 truncate">
@@ -205,7 +205,6 @@ export default function Layout({ children, onLogout }: LayoutProps) {
                   onClick={onLogout}
                   className="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium flex items-center justify-center space-x-2 shadow-md hover:shadow-lg"
                 >
-                  <span>🚪</span>
                   <span>Logout</span>
                 </button>
               </>
@@ -256,7 +255,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
             <div className="flex items-center justify-between h-16 px-6 bg-blue-800 border-b border-blue-700">
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-                  <span className="text-blue-800 text-lg font-bold">🚢</span>
+                  <span className="text-blue-800 text-lg font-bold"></span>
                 </div>
                 <h1 className="text-xl font-bold text-white">
                   Shipyard System
@@ -266,7 +265,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
                 onClick={() => setSidebarOpen(false)}
                 className="text-white hover:text-blue-200 transition-colors p-1"
               >
-                <span className="text-xl">✕</span>
+                <span className="text-xl"></span>
               </button>
             </div>
 
@@ -310,7 +309,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
                 onClick={onLogout}
                 className="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium flex items-center justify-center space-x-2 shadow-md hover:shadow-lg"
               >
-                <span>🚪</span>
+                <span></span>
                 <span>Logout</span>
               </button>
             </div>
@@ -327,11 +326,11 @@ export default function Layout({ children, onLogout }: LayoutProps) {
               onClick={() => setSidebarOpen(true)}
               className="text-gray-600 hover:text-gray-900 p-2 rounded-lg hover:bg-gray-100 transition-colors"
             >
-              <span className="text-xl">☰</span>
+              <span className="text-xl"></span>
             </button>
             <div className="flex items-center space-x-2">
               <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center">
-                <span className="text-white text-sm">🚢</span>
+                <span className="text-white text-sm"></span>
               </div>
               <h1 className="text-lg font-medium text-gray-900">
                 Shipyard System

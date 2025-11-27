@@ -598,7 +598,7 @@ export default function WODetailsTable({
               onClick={fetchWorkDetails}
               className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-all duration-200 flex items-center gap-2 shadow-sm"
             >
-              🔄 Refresh
+              Refresh
             </button>
             <button
               onClick={handleAddWorkDetails}
@@ -617,7 +617,7 @@ export default function WODetailsTable({
             {/* Vessel Filter */}
             <div className="flex-1">
               <label className="block text-xs font-medium text-gray-600 mb-1">
-                🚢 Vessel
+                Vessel
               </label>
               <select
                 value={selectedVesselId}
@@ -639,7 +639,7 @@ export default function WODetailsTable({
             {/* Work Order Filter */}
             <div className="flex-1">
               <label className="block text-xs font-medium text-gray-600 mb-1">
-                🏗️ Work Order
+                Work Order
               </label>
               <select
                 value={selectedWorkOrderId}
