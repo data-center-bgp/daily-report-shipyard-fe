@@ -224,10 +224,6 @@ export default function VesselWorkOrders() {
     });
   };
 
-  const handleViewWorkOrder = (workOrder: WorkOrderWithProgress) => {
-    navigate(`/work-order/${workOrder.id}`);
-  };
-
   const handleEditWorkOrder = (workOrder: WorkOrderWithProgress) => {
     navigate(`/edit-work-order/${workOrder.id}`);
   };
@@ -565,13 +561,6 @@ export default function VesselWorkOrders() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <div className="flex space-x-2">
-                          <button
-                            onClick={() => handleViewWorkOrder(wo)}
-                            className="text-blue-600 hover:text-blue-900 transition-colors p-1 rounded hover:bg-blue-50"
-                            title="View Details"
-                          >
-                            👁️
-                          </button>
                           <button
                             onClick={() => handleEditWorkOrder(wo)}
                             className="text-green-600 hover:text-green-900 transition-colors p-1 rounded hover:bg-green-50"
