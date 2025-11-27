@@ -165,15 +165,15 @@ export default function Dashboard() {
     let filtered = vesselSummaries;
 
     // Apply search filter
-    if (vesselSearchTerm) {
-      const searchLower = vesselSearchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (vessel) =>
-          vessel.name.toLowerCase().includes(searchLower) ||
-          vessel.type.toLowerCase().includes(searchLower) ||
-          vessel.company.toLowerCase().includes(searchLower)
-      );
-    }
+  if (vesselSearchTerm) {
+    const searchLower = vesselSearchTerm.toLowerCase();
+    filtered = filtered.filter(
+      (vessel) =>
+        (vessel.name?.toLowerCase() || '').includes(searchLower) ||
+        (vessel.type?.toLowerCase() || '').includes(searchLower) ||
+        (vessel.company?.toLowerCase() || '').includes(searchLower)
+    );
+  }
 
     // Apply status filter
     switch (vesselFilter) {
