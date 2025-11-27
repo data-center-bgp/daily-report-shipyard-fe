@@ -463,19 +463,9 @@ export default function WorkProgressTable({
     }
   }, [selectedWorkOrderId, workDetailsId, fetchWorkDetails]);
 
-  useEffect(() => {
-    fetchWorkProgress();
+    useEffect(() => {
     setCurrentPage(1);
-  }, [
-    selectedVesselId,
-    selectedWorkOrderId,
-    selectedWorkDetailsIdFilter,
-    fetchWorkProgress,
-  ]);
-
-  useEffect(() => {
-    fetchWorkProgress();
-  }, [currentPage, fetchWorkProgress]);
+  }, [selectedVesselId, selectedWorkOrderId, selectedWorkDetailsIdFilter]);
 
   const handleVesselChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const vesselId = parseInt(e.target.value);

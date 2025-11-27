@@ -810,7 +810,6 @@ export default function Dashboard() {
                   {stats.totalWorkOrders}
                 </p>
               </div>
-              <span className="text-blue-500 text-2xl">📋</span>
             </div>
           </div>
 
@@ -823,7 +822,6 @@ export default function Dashboard() {
                   {stats.inProgress}
                 </p>
               </div>
-              <span className="text-blue-500 text-2xl">🔄</span>
             </div>
           </div>
 
@@ -836,7 +834,6 @@ export default function Dashboard() {
                   {stats.completed}
                 </p>
               </div>
-              <span className="text-green-500 text-2xl">✅</span>
             </div>
           </div>
 
@@ -849,7 +846,6 @@ export default function Dashboard() {
                   {stats.planned}
                 </p>
               </div>
-              <span className="text-gray-500 text-2xl">📅</span>
             </div>
           </div>
         </div>
@@ -870,7 +866,6 @@ export default function Dashboard() {
                   {stats.overdue}
                 </p>
               </div>
-              <span className="text-red-500 text-2xl">🚨</span>
             </div>
           </div>
 
@@ -885,7 +880,6 @@ export default function Dashboard() {
                   {stats.verificationPending}
                 </p>
               </div>
-              <span className="text-orange-500 text-2xl">🔍</span>
             </div>
           </div>
 
@@ -900,7 +894,6 @@ export default function Dashboard() {
                   {stats.readyToStart}
                 </p>
               </div>
-              <span className="text-yellow-500 text-2xl">🏁</span>
             </div>
           </div>
 
@@ -915,7 +908,6 @@ export default function Dashboard() {
                   {stats.upcomingDeadlines}
                 </p>
               </div>
-              <span className="text-purple-500 text-2xl">⏰</span>
             </div>
           </div>
         </div>
@@ -938,7 +930,6 @@ export default function Dashboard() {
                   {stats.totalInvoices}
                 </p>
               </div>
-              <span className="text-blue-500 text-2xl">📄</span>
             </div>
           </div>
 
@@ -953,7 +944,6 @@ export default function Dashboard() {
                   {stats.paidInvoices}
                 </p>
               </div>
-              <span className="text-green-500 text-2xl">✅</span>
             </div>
           </div>
 
@@ -968,7 +958,6 @@ export default function Dashboard() {
                   {stats.unpaidInvoices}
                 </p>
               </div>
-              <span className="text-red-500 text-2xl">⏳</span>
             </div>
           </div>
 
@@ -983,7 +972,6 @@ export default function Dashboard() {
                   {stats.readyForInvoicing}
                 </p>
               </div>
-              <span className="text-orange-500 text-2xl">💰</span>
             </div>
           </div>
         </div>
@@ -1013,7 +1001,7 @@ export default function Dashboard() {
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                📋 Grid
+                Grid
               </button>
               <button
                 onClick={() => setVesselViewMode("list")}
@@ -1023,7 +1011,7 @@ export default function Dashboard() {
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                📄 List
+                List
               </button>
             </div>
           </div>
@@ -1088,12 +1076,12 @@ export default function Dashboard() {
 
             {/* Quick Stats */}
             <div className="mt-3 flex flex-wrap gap-4 text-sm text-gray-600">
-              <span>🚨 Overdue: {vesselQuickStats.overdue}</span>
-              <span>⏰ Due Soon: {vesselQuickStats.dueSoon}</span>
+              <span>Overdue: {vesselQuickStats.overdue}</span>
+              <span>Due Soon: {vesselQuickStats.dueSoon}</span>
               <span>
-                💰 Ready to Invoice: {vesselQuickStats.readyToInvoice}
+                Ready to Invoice: {vesselQuickStats.readyToInvoice}
               </span>
-              <span>✅ Avg Progress: {vesselQuickStats.avgProgress}%</span>
+              <span>Avg Progress: {vesselQuickStats.avgProgress}%</span>
             </div>
           </div>
 
