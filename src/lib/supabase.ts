@@ -54,7 +54,7 @@ export interface WorkDetails {
   deleted_at?: string;
   work_order_id: number;
   description: string;
-  location: string;
+  location_id: number;
   planned_start_date: string;
   target_close_date: string;
   period_close_target: string;
@@ -64,6 +64,14 @@ export interface WorkDetails {
   work_permit_url?: string;
   storage_path?: string;
   user_id: number;
+  work_scope_id: number;
+  work_type: string;
+  quantity: number;
+  uom: string;
+  is_additional_wo_details: boolean;
+  spk_number?: string;
+  spkk_number?: string;
+  notes?: string;
 }
 
 export interface WorkProgress {

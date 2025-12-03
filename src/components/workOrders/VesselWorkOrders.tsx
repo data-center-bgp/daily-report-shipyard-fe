@@ -18,6 +18,14 @@ interface WorkDetailWithProgress extends WorkDetailsWithProgress {
   current_progress: number;
   latest_progress_date?: string;
   progress_count: number;
+  location?: {
+    id: number;
+    location: string;
+  };
+  work_scope?: {
+    id: number;
+    work_scope: string;
+  };
 }
 
 // Define the work order type with progress properties
@@ -72,6 +80,14 @@ export default function VesselWorkOrders() {
                 evidence_url,
                 storage_path,
                 created_at
+              ),
+              location:location_id (
+                id,
+                location
+              ),
+              work_scope:work_scope_id (
+                id,
+                work_scope
               )
             ),
             vessel (
@@ -118,7 +134,8 @@ export default function VesselWorkOrders() {
                   new Date(a.report_date).getTime()
               );
 
-              const latestProgress = sortedProgress[0]?.progress || 0;
+              const latestProgress =
+                sortedProgress[0]?.progress_percentage || 0;
               const latestProgressDate = sortedProgress[0]?.report_date;
 
               return {
@@ -183,7 +200,7 @@ export default function VesselWorkOrders() {
           wo.work_details.some(
             (detail) =>
               safeIncludes(detail.description) ||
-              safeIncludes(detail.location) ||
+              safeIncludes(detail.location?.location) ||
               safeIncludes(detail.pic)
           )
         );
@@ -618,7 +635,44 @@ export default function VesselWorkOrders() {
                                                       Location:
                                                     </span>
                                                     <span>
-                                                      {detail.location}
+                                                      {detail.location.location}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                                {detail.work_scope && (
+                                                  <div className="flex items-center gap-1">
+                                                    <span>🔧</span>
+                                                    <span className="font-medium">
+                                                      Work Scope:
+                                                    </span>
+                                                    <span>
+                                                      {
+                                                        detail.work_scope
+                                                          .work_scope
+                                                      }
+                                                    </span>
+                                                  </div>
+                                                )}
+                                                {detail.work_type && (
+                                                  <div className="flex items-center gap-1">
+                                                    <span>⚙️</span>
+                                                    <span className="font-medium">
+                                                      Type:
+                                                    </span>
+                                                    <span>
+                                                      {detail.work_type}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                                {detail.quantity && (
+                                                  <div className="flex items-center gap-1">
+                                                    <span>📦</span>
+                                                    <span className="font-medium">
+                                                      Quantity:
+                                                    </span>
+                                                    <span>
+                                                      {detail.quantity}{" "}
+                                                      {detail.uom || ""}
                                                     </span>
                                                   </div>
                                                 )}

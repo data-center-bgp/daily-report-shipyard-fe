@@ -10,6 +10,22 @@ interface WorkOrderWithVessel extends WorkOrder {
   vessel?: Vessel;
 }
 
+interface Location {
+  id: number;
+  location: string;
+  created_at?: string;
+  updated_at?: string;
+  deleted_at?: string | null;
+}
+
+interface WorkScope {
+  id: number;
+  work_scope: string;
+  created_at?: string;
+  updated_at?: string;
+  deleted_at?: string | null;
+}
+
 export default function AddWorkDetails() {
   const navigate = useNavigate();
   const { workOrderId } = useParams<{ workOrderId: string }>();
@@ -19,7 +35,7 @@ export default function AddWorkDetails() {
   const [formData, setFormData] = useState({
     work_order_id: workOrderId ? parseInt(workOrderId) : 0,
     description: "",
-    location: "",
+    location_id: 0,
     planned_start_date: "",
     target_close_date: "",
     period_close_target: "",
@@ -28,6 +44,14 @@ export default function AddWorkDetails() {
     pic: "",
     work_permit_url: "",
     storage_path: "",
+    work_scope_id: 0,
+    work_type: "",
+    quantity: "",
+    uom: "",
+    is_additional_wo_details: false,
+    spk_number: "",
+    spkk_number: "",
+    notes: "",
   });
 
   // UI state
@@ -50,6 +74,195 @@ export default function AddWorkDetails() {
   const [loadingVessels, setLoadingVessels] = useState(false);
   const [loadingWorkOrders, setLoadingWorkOrders] = useState(false);
 
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [workScopes, setWorkScopes] = useState<WorkScope[]>([]);
+  const [loadingLocations, setLoadingLocations] = useState(false);
+  const [loadingWorkScopes, setLoadingWorkScopes] = useState(false);
+
+  // Search dropdown states
+  const [vesselSearchTerm, setVesselSearchTerm] = useState("");
+  const [showVesselDropdown, setShowVesselDropdown] = useState(false);
+  const vesselDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [workOrderSearchTerm, setWorkOrderSearchTerm] = useState("");
+  const [showWorkOrderDropdown, setShowWorkOrderDropdown] = useState(false);
+  const workOrderDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [locationSearchTerm, setLocationSearchTerm] = useState("");
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+  const locationDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [workScopeSearchTerm, setWorkScopeSearchTerm] = useState("");
+  const [showWorkScopeDropdown, setShowWorkScopeDropdown] = useState(false);
+  const workScopeDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Handle click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        vesselDropdownRef.current &&
+        !vesselDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowVesselDropdown(false);
+      }
+      if (
+        workOrderDropdownRef.current &&
+        !workOrderDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowWorkOrderDropdown(false);
+      }
+      if (
+        locationDropdownRef.current &&
+        !locationDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowLocationDropdown(false);
+      }
+      if (
+        workScopeDropdownRef.current &&
+        !workScopeDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowWorkScopeDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Filter vessels for search dropdown
+  const filteredVesselsForSearch = vessels.filter((vessel) => {
+    const searchLower = vesselSearchTerm.toLowerCase();
+    return (
+      vessel.name?.toLowerCase().includes(searchLower) ||
+      vessel.type?.toLowerCase().includes(searchLower) ||
+      vessel.company?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  // Filter work orders for search dropdown
+  const filteredWorkOrdersForSearch = workOrders.filter((wo) => {
+    const searchLower = workOrderSearchTerm.toLowerCase();
+    return (
+      wo.shipyard_wo_number?.toLowerCase().includes(searchLower) ||
+      wo.customer_wo_number?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  // Filter locations for search dropdown
+  const filteredLocationsForSearch = locations.filter((location) => {
+    const searchLower = locationSearchTerm.toLowerCase();
+    return location.location?.toLowerCase().includes(searchLower);
+  });
+
+  // Filter work scopes for search dropdown
+  const filteredWorkScopesForSearch = workScopes.filter((scope) => {
+    const searchLower = workScopeSearchTerm.toLowerCase();
+    return scope.work_scope?.toLowerCase().includes(searchLower);
+  });
+
+  // Vessel search handlers
+  const handleVesselSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVesselSearchTerm(e.target.value);
+    setShowVesselDropdown(true);
+    if (selectedVesselId) {
+      setSelectedVesselId(0);
+      setWorkOrders([]);
+      setSelectedWorkOrder(null);
+      setFormData((prev) => ({ ...prev, work_order_id: 0 }));
+    }
+  };
+
+  const handleVesselSelectFromDropdown = (vessel: Vessel) => {
+    setSelectedVesselId(vessel.id);
+    setVesselSearchTerm(`${vessel.name} - ${vessel.type} (${vessel.company})`);
+    setShowVesselDropdown(false);
+    setWorkOrders([]);
+    setSelectedWorkOrder(null);
+    setWorkOrderSearchTerm("");
+    setFormData((prev) => ({ ...prev, work_order_id: 0 }));
+    fetchWorkOrdersForVessel(vessel.id);
+  };
+
+  const handleClearVesselSearch = () => {
+    setVesselSearchTerm("");
+    setSelectedVesselId(0);
+    setShowVesselDropdown(false);
+    setWorkOrders([]);
+    setSelectedWorkOrder(null);
+    setWorkOrderSearchTerm("");
+    setFormData((prev) => ({ ...prev, work_order_id: 0 }));
+  };
+
+  // Work Order search handlers
+  const handleWorkOrderSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setWorkOrderSearchTerm(e.target.value);
+    setShowWorkOrderDropdown(true);
+    if (formData.work_order_id) {
+      setFormData((prev) => ({ ...prev, work_order_id: 0 }));
+      setSelectedWorkOrder(null);
+    }
+  };
+
+  const handleWorkOrderSelectFromDropdown = (
+    workOrder: WorkOrderWithVessel
+  ) => {
+    setFormData((prev) => ({ ...prev, work_order_id: workOrder.id }));
+    setWorkOrderSearchTerm(workOrder.shipyard_wo_number || "");
+    setShowWorkOrderDropdown(false);
+    setSelectedWorkOrder(workOrder);
+  };
+
+  const handleClearWorkOrderSearch = () => {
+    setWorkOrderSearchTerm("");
+    setFormData((prev) => ({ ...prev, work_order_id: 0 }));
+    setShowWorkOrderDropdown(false);
+    setSelectedWorkOrder(null);
+  };
+
+  // Location search handlers
+  const handleLocationSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLocationSearchTerm(e.target.value);
+    setShowLocationDropdown(true);
+    if (formData.location_id) {
+      setFormData((prev) => ({ ...prev, location_id: 0 }));
+    }
+  };
+
+  const handleLocationSelectFromDropdown = (location: Location) => {
+    setFormData((prev) => ({ ...prev, location_id: location.id }));
+    setLocationSearchTerm(location.location);
+    setShowLocationDropdown(false);
+  };
+
+  const handleClearLocationSearch = () => {
+    setLocationSearchTerm("");
+    setFormData((prev) => ({ ...prev, location_id: 0 }));
+    setShowLocationDropdown(false);
+  };
+
+  // Work Scope search handlers
+  const handleWorkScopeSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setWorkScopeSearchTerm(e.target.value);
+    setShowWorkScopeDropdown(true);
+    if (formData.work_scope_id) {
+      setFormData((prev) => ({ ...prev, work_scope_id: 0 }));
+    }
+  };
+
+  const handleWorkScopeSelectFromDropdown = (scope: WorkScope) => {
+    setFormData((prev) => ({ ...prev, work_scope_id: scope.id }));
+    setWorkScopeSearchTerm(scope.work_scope);
+    setShowWorkScopeDropdown(false);
+  };
+
+  const handleClearWorkScopeSearch = () => {
+    setWorkScopeSearchTerm("");
+    setFormData((prev) => ({ ...prev, work_scope_id: 0 }));
+    setShowWorkScopeDropdown(false);
+  };
+
   // Fetch all vessels
   const fetchVessels = async () => {
     try {
@@ -69,6 +282,52 @@ export default function AddWorkDetails() {
       setError(err instanceof Error ? err.message : "Failed to load vessels");
     } finally {
       setLoadingVessels(false);
+    }
+  };
+
+  // Fetch all locations
+  const fetchLocations = async () => {
+    try {
+      setLoadingLocations(true);
+
+      const { data, error } = await supabase
+        .from("location")
+        .select("*")
+        .is("deleted_at", null)
+        .order("location", { ascending: true });
+
+      if (error) throw error;
+
+      setLocations(data || []);
+    } catch (err) {
+      console.error("Error fetching locations:", err);
+      setError(err instanceof Error ? err.message : "Failed to load locations");
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  // Fetch all work scopes
+  const fetchWorkScopes = async () => {
+    try {
+      setLoadingWorkScopes(true);
+
+      const { data, error } = await supabase
+        .from("work_scope")
+        .select("*")
+        .is("deleted_at", null)
+        .order("work_scope", { ascending: true });
+
+      if (error) throw error;
+
+      setWorkScopes(data || []);
+    } catch (err) {
+      console.error("Error fetching work scopes:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to load work scopes"
+      );
+    } finally {
+      setLoadingWorkScopes(false);
     }
   };
 
@@ -168,6 +427,8 @@ export default function AddWorkDetails() {
   // Initialize component
   useEffect(() => {
     fetchVessels();
+    fetchLocations();
+    fetchWorkScopes();
 
     // If we have a specific work order ID, find its vessel and set selections
     if (workOrderId) {
@@ -230,7 +491,7 @@ export default function AddWorkDetails() {
     if (!formData.description.trim()) {
       errors.push("Description is required");
     }
-    if (!formData.location.trim()) {
+    if (!formData.location_id || formData.location_id === 0) {
       errors.push("Location is required");
     }
     if (!formData.planned_start_date) {
@@ -244,6 +505,20 @@ export default function AddWorkDetails() {
     }
     if (!formData.pic.trim()) {
       errors.push("Person in charge (PIC) is required");
+    }
+
+    // New field validations
+    if (!formData.work_scope_id || formData.work_scope_id === 0) {
+      errors.push("Work scope is required");
+    }
+    if (!formData.work_type.trim()) {
+      errors.push("Work type is required");
+    }
+    if (!formData.quantity || parseFloat(formData.quantity) <= 0) {
+      errors.push("Quantity must be greater than 0");
+    }
+    if (!formData.uom.trim()) {
+      errors.push("Unit of measure (UOM) is required");
     }
 
     // Date validation
@@ -389,7 +664,7 @@ export default function AddWorkDetails() {
       const workDetailsData = {
         work_order_id: formData.work_order_id,
         description: formData.description.trim(),
-        location: formData.location.trim(),
+        location_id: formData.location_id,
         planned_start_date: formData.planned_start_date,
         target_close_date: formData.target_close_date,
         period_close_target: formData.period_close_target.trim(),
@@ -399,6 +674,15 @@ export default function AddWorkDetails() {
         work_permit_url: workPermitUrl,
         storage_path: storagePath,
         user_id: userId,
+        // New fields
+        work_scope_id: formData.work_scope_id,
+        work_type: formData.work_type.trim(),
+        quantity: parseFloat(formData.quantity),
+        uom: formData.uom.trim(),
+        is_additional_wo_details: formData.is_additional_wo_details,
+        spk_number: formData.spk_number.trim() || null,
+        spkk_number: formData.spkk_number.trim() || null,
+        notes: formData.notes.trim() || null,
       };
 
       const { error } = await supabase
@@ -525,31 +809,62 @@ export default function AddWorkDetails() {
                   </div>
                 </div>
               ) : (
-                <select
-                  id="vessel_id"
-                  value={selectedVesselId}
-                  onChange={handleVesselChange}
-                  disabled={loadingVessels}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
-                  required
-                >
-                  <option value={0}>
-                    {loadingVessels ? "Loading vessels..." : "Select a vessel"}
-                  </option>
-                  {vessels.map((vessel) => (
-                    <option key={vessel.id} value={vessel.id}>
-                      {vessel.name} ({vessel.type}) - {vessel.company}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative" ref={vesselDropdownRef}>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={vesselSearchTerm}
+                      onChange={handleVesselSearch}
+                      onFocus={() => setShowVesselDropdown(true)}
+                      placeholder="Search vessel..."
+                      disabled={loadingVessels}
+                      className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                    />
+                    {vesselSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={handleClearVesselSearch}
+                        className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Vessel Dropdown */}
+                  {showVesselDropdown &&
+                    filteredVesselsForSearch.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {filteredVesselsForSearch.map((vessel) => (
+                          <div
+                            key={vessel.id}
+                            onClick={() =>
+                              handleVesselSelectFromDropdown(vessel)
+                            }
+                            className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                              selectedVesselId === vessel.id
+                                ? "bg-blue-100"
+                                : ""
+                            }`}
+                          >
+                            <div className="font-medium text-gray-900 text-sm">
+                              {vessel.name}
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              {vessel.type} • {vessel.company}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                </div>
               )}
 
-              {selectedVessel && !workOrderId && (
+              {selectedVesselId > 0 && !workOrderId && (
                 <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="text-sm text-blue-800 flex items-center">
                     <span className="mr-2">🚢</span>
-                    <strong>Selected Vessel:</strong> {selectedVessel.name} (
-                    {selectedVessel.type}) - {selectedVessel.company}
+                    <strong>Selected Vessel:</strong> {vesselSearchTerm}
                   </div>
                 </div>
               )}
@@ -580,32 +895,62 @@ export default function AddWorkDetails() {
                 </div>
               ) : (
                 <div>
-                  <select
-                    id="work_order_id"
-                    name="work_order_id"
-                    value={formData.work_order_id}
-                    onChange={handleWorkOrderChange}
-                    disabled={loadingWorkOrders || selectedVesselId === 0}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
-                    required
-                  >
-                    <option value={0}>
-                      {selectedVesselId === 0
-                        ? "First select a vessel"
-                        : loadingWorkOrders
-                        ? "Loading work orders..."
-                        : workOrders.length === 0
-                        ? "No work orders found for this vessel"
-                        : "Select a work order"}
-                    </option>
-                    {workOrders.map((workOrder) => (
-                      <option key={workOrder.id} value={workOrder.id}>
-                        {workOrder.shipyard_wo_number}
-                        {workOrder.customer_wo_number &&
-                          ` (Customer: ${workOrder.customer_wo_number})`}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative" ref={workOrderDropdownRef}>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={workOrderSearchTerm}
+                        onChange={handleWorkOrderSearch}
+                        onFocus={() => setShowWorkOrderDropdown(true)}
+                        placeholder={
+                          selectedVesselId === 0
+                            ? "Select vessel first"
+                            : "Search work order..."
+                        }
+                        disabled={loadingWorkOrders || selectedVesselId === 0}
+                        className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                      />
+                      {workOrderSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={handleClearWorkOrderSearch}
+                          className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Work Order Dropdown */}
+                    {showWorkOrderDropdown &&
+                      selectedVesselId > 0 &&
+                      filteredWorkOrdersForSearch.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {filteredWorkOrdersForSearch.map((workOrder) => (
+                            <div
+                              key={workOrder.id}
+                              onClick={() =>
+                                handleWorkOrderSelectFromDropdown(workOrder)
+                              }
+                              className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                                formData.work_order_id === workOrder.id
+                                  ? "bg-blue-100"
+                                  : ""
+                              }`}
+                            >
+                              <div className="font-medium text-gray-900 text-sm">
+                                {workOrder.shipyard_wo_number}
+                              </div>
+                              {workOrder.customer_wo_number && (
+                                <div className="text-xs text-gray-600">
+                                  Customer: {workOrder.customer_wo_number}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                  </div>
 
                   {selectedWorkOrder && (
                     <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
@@ -647,24 +992,201 @@ export default function AddWorkDetails() {
                   />
                 </div>
 
+                {/* Work Scope */}
+                <div className="md:col-span-2">
+                  <label
+                    htmlFor="work_scope_id"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Work Scope *
+                  </label>
+                  <div className="relative" ref={workScopeDropdownRef}>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={workScopeSearchTerm}
+                        onChange={handleWorkScopeSearch}
+                        onFocus={() => setShowWorkScopeDropdown(true)}
+                        placeholder="Search work scope..."
+                        disabled={loadingWorkScopes}
+                        className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                      />
+                      {workScopeSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={handleClearWorkScopeSearch}
+                          className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Work Scope Dropdown */}
+                    {showWorkScopeDropdown &&
+                      filteredWorkScopesForSearch.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {filteredWorkScopesForSearch.map((scope) => (
+                            <div
+                              key={scope.id}
+                              onClick={() =>
+                                handleWorkScopeSelectFromDropdown(scope)
+                              }
+                              className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                                formData.work_scope_id === scope.id
+                                  ? "bg-blue-100"
+                                  : ""
+                              }`}
+                            >
+                              <div className="font-medium text-gray-900 text-sm">
+                                {scope.work_scope}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                  </div>
+
+                  {formData.work_scope_id > 0 && (
+                    <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="text-sm text-blue-800">
+                        <strong>Selected Work Scope:</strong>{" "}
+                        {workScopeSearchTerm}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Work Type */}
+                <div>
+                  <label
+                    htmlFor="work_type"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Work Type *
+                  </label>
+                  <select
+                    id="work_type"
+                    name="work_type"
+                    value={formData.work_type}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="">Select work type</option>
+                    <option value="Docking">Docking</option>
+                    <option value="Repair">Repair</option>
+                  </select>
+                </div>
+
+                {/* Quantity */}
+                <div>
+                  <label
+                    htmlFor="quantity"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Quantity *
+                  </label>
+                  <input
+                    type="number"
+                    id="quantity"
+                    name="quantity"
+                    value={formData.quantity}
+                    onChange={handleInputChange}
+                    min="0"
+                    step="0.01"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter quantity"
+                    required
+                  />
+                </div>
+
+                {/* Unit of Measure (UOM) */}
+                <div>
+                  <label
+                    htmlFor="uom"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Unit of Measure (UOM) *
+                  </label>
+                  <select
+                    id="uom"
+                    name="uom"
+                    value={formData.uom}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="">Select UOM</option>
+                    <option value="Ls">Ls</option>
+                    <option value="Unit">Unit</option>
+                    <option value="Pcs">Pcs</option>
+                    <option value="Lbr">Lbr</option>
+                  </select>
+                </div>
+
                 {/* Location */}
                 <div>
                   <label
-                    htmlFor="location"
+                    htmlFor="location_id"
                     className="block text-sm font-medium text-gray-700 mb-2"
                   >
                     Location *
                   </label>
-                  <input
-                    type="text"
-                    id="location"
-                    name="location"
-                    value={formData.location}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., Engine Room, Deck, Bridge, etc."
-                    required
-                  />
+                  <div className="relative" ref={locationDropdownRef}>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={locationSearchTerm}
+                        onChange={handleLocationSearch}
+                        onFocus={() => setShowLocationDropdown(true)}
+                        placeholder="Search location..."
+                        disabled={loadingLocations}
+                        className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                      />
+                      {locationSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={handleClearLocationSearch}
+                          className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Location Dropdown */}
+                    {showLocationDropdown &&
+                      filteredLocationsForSearch.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {filteredLocationsForSearch.map((location) => (
+                            <div
+                              key={location.id}
+                              onClick={() =>
+                                handleLocationSelectFromDropdown(location)
+                              }
+                              className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                                formData.location_id === location.id
+                                  ? "bg-blue-100"
+                                  : ""
+                              }`}
+                            >
+                              <div className="font-medium text-gray-900 text-sm">
+                                {location.location}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                  </div>
+
+                  {formData.location_id > 0 && (
+                    <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="text-sm text-blue-800">
+                        <strong>Selected Location:</strong> {locationSearchTerm}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Person in Charge */}
@@ -684,6 +1206,44 @@ export default function AddWorkDetails() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Name of responsible person"
                     required
+                  />
+                </div>
+
+                {/* SPK Number */}
+                <div>
+                  <label
+                    htmlFor="spk_number"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    SPK Number (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    id="spk_number"
+                    name="spk_number"
+                    value={formData.spk_number}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter SPK number"
+                  />
+                </div>
+
+                {/* SPKK Number */}
+                <div>
+                  <label
+                    htmlFor="spkk_number"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    SPKK Number (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    id="spkk_number"
+                    name="spkk_number"
+                    value={formData.spkk_number}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter SPKK number"
                   />
                 </div>
 
@@ -790,6 +1350,54 @@ export default function AddWorkDetails() {
                     value={formData.actual_close_date}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Is Additional WO Details Checkbox */}
+                <div className="md:col-span-2">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="is_additional_wo_details"
+                      name="is_additional_wo_details"
+                      checked={formData.is_additional_wo_details}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          is_additional_wo_details: e.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label
+                      htmlFor="is_additional_wo_details"
+                      className="ml-2 block text-sm font-medium text-gray-700"
+                    >
+                      Is Additional Work Order Details
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1 ml-6">
+                    Check this if these details are additional to the original
+                    work order
+                  </p>
+                </div>
+
+                {/* Notes */}
+                <div className="md:col-span-2">
+                  <label
+                    htmlFor="notes"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Notes (Optional)
+                  </label>
+                  <textarea
+                    id="notes"
+                    name="notes"
+                    value={formData.notes}
+                    onChange={handleInputChange}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Additional notes or comments..."
                   />
                 </div>
 

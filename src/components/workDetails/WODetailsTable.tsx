@@ -26,6 +26,14 @@ interface WorkDetailsWithWorkOrder extends WorkDetails {
   current_progress?: number;
   latest_progress_date?: string;
   progress_count?: number;
+  work_scope?: {
+    id: number;
+    work_scope: string;
+  };
+  location?: {
+    id: number;
+    location: string;
+  };
 }
 
 interface WorkDetailsTableProps {
@@ -48,6 +56,9 @@ export default function WODetailsTable({
     "planned_start_date" | "target_close_date" | "created_at" | "description"
   >("planned_start_date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  // Expandable rows state
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -78,6 +89,19 @@ export default function WODetailsTable({
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
+
+  // Toggle row expansion
+  const toggleRowExpansion = (detailId: number) => {
+    setExpandedRows((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(detailId)) {
+        newSet.delete(detailId);
+      } else {
+        newSet.add(detailId);
+      }
+      return newSet;
+    });
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -240,29 +264,37 @@ export default function WODetailsTable({
         .from("work_details")
         .select(
           `
-          *,
-          work_order (
-            id,
-            shipyard_wo_number,
-            vessel (
-              id,
-              name,
-              type,
-              company
-            )
-          ),
-          profiles (
-            id,
-            name,
-            email
-          ),
-          work_progress (
-            id,
-            progress_percentage,
-            report_date,
-            created_at
-          )
-        `,
+    *,
+    work_order (
+      id,
+      shipyard_wo_number,
+      vessel (
+        id,
+        name,
+        type,
+        company
+      )
+    ),
+    profiles (
+      id,
+      name,
+      email
+    ),
+    work_progress (
+      id,
+      progress_percentage,
+      report_date,
+      created_at
+    ),
+    location:location_id (
+      id,
+      location
+    ),
+    work_scope:work_scope_id (
+      id,
+      work_scope
+    )
+  `,
           { count: "exact" }
         )
         .is("deleted_at", null);
@@ -537,7 +569,7 @@ export default function WODetailsTable({
     const maxVisiblePages = 5;
 
     let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-    const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1); // Fixed: use const instead of let
+    const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
 
     if (endPage - startPage + 1 < maxVisiblePages) {
       startPage = Math.max(1, endPage - maxVisiblePages + 1);
@@ -694,7 +726,7 @@ export default function WODetailsTable({
               onClick={fetchWorkDetails}
               className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-all duration-200 flex items-center gap-2 shadow-sm"
             >
-              Refresh
+              🔄 Refresh
             </button>
             <button
               onClick={handleAddWorkDetails}
@@ -881,36 +913,37 @@ export default function WODetailsTable({
         <div className="overflow-x-auto">
           {workDetails.length > 0 ? (
             <>
-              <table className="w-full">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
                   <tr>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      <div className="flex items-center gap-1">Details</div>
+                    </th>
                     {!workOrderId && (
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Work Order
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Work Order / Vessel
                       </th>
                     )}
                     <th
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
                       onClick={() => handleSort("description")}
+                      className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
                     >
-                      Description {getSortIcon("description")}
+                      <div className="flex items-center gap-1">
+                        Description {getSortIcon("description")}
+                      </div>
                     </th>
                     <th
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                      onClick={() => handleSort("planned_start_date")}
+                      onClick={() => handleSort("target_close_date")}
+                      className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
                     >
-                      Dates {getSortIcon("planned_start_date")}
+                      <div className="flex items-center gap-1">
+                        Target Date {getSortIcon("target_close_date")}
+                      </div>
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Location & PIC
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status & Permit
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                       Progress
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -918,188 +951,423 @@ export default function WODetailsTable({
                 <tbody className="bg-white divide-y divide-gray-200">
                   {workDetails.map((detail) => {
                     const status = getStatus(detail);
+                    const isExpanded = expandedRows.has(detail.id);
 
                     return (
-                      <tr
-                        key={detail.id}
-                        className="hover:bg-gray-50 transition-colors"
-                      >
-                        {/* Work Order Column - Only show when not filtering by specific work order */}
-                        {!workOrderId && (
-                          <td className="px-4 py-4 whitespace-nowrap">
-                            {detail.work_order && (
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">
-                                  {detail.work_order.shipyard_wo_number}
-                                </div>
-                                {detail.work_order.vessel && (
-                                  <div className="text-xs text-gray-500">
-                                    {detail.work_order.vessel.name}
-                                  </div>
-                                )}
-                              </div>
-                            )}
+                      <>
+                        {/* Main Row */}
+                        <tr key={detail.id} className="hover:bg-gray-50">
+                          {/* Expand Button */}
+                          <td className="px-6 py-4">
+                            <button
+                              onClick={() => toggleRowExpansion(detail.id)}
+                              className="flex items-center gap-2 text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                            >
+                              <span
+                                className={`transform transition-transform duration-200 ${
+                                  isExpanded ? "rotate-90" : ""
+                                }`}
+                              >
+                                ▶️
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                {isExpanded ? "Hide" : "Show"}
+                              </span>
+                            </button>
                           </td>
-                        )}
 
-                        {/* Description */}
-                        <td className="px-4 py-4">
-                          <div className="text-sm text-gray-900 max-w-xs">
-                            <div
-                              className="font-medium"
-                              title={detail.description}
-                            >
-                              {detail.description.length > 60
-                                ? `${detail.description.substring(0, 60)}...`
-                                : detail.description}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              Target: {detail.period_close_target}
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Dates */}
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="text-xs space-y-1">
-                            <div>
-                              <span className="text-gray-500">Plan:</span>{" "}
-                              {formatDate(detail.planned_start_date)} →{" "}
-                              {formatDate(detail.target_close_date)}
-                            </div>
-                            {detail.actual_start_date && (
-                              <div className="text-blue-600">
-                                <span className="text-gray-500">Start:</span>{" "}
-                                {formatDate(detail.actual_start_date)}
-                              </div>
-                            )}
-                            {detail.actual_close_date && (
-                              <div className="text-green-600">
-                                <span className="text-gray-500">Done:</span>{" "}
-                                {formatDate(detail.actual_close_date)}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Location & PIC */}
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="text-sm">
-                            <div className="text-gray-900 font-medium">
-                              📍 {detail.location}
-                            </div>
-                            <div className="text-gray-600 text-xs">
-                              👤 {detail.pic}
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Status & Permit */}
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="space-y-2">
-                            <span
-                              className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${status.color}`}
-                            >
-                              {status.icon} {status.text}
-                            </span>
-                            {detail.storage_path ? (
-                              <div>
-                                <button
-                                  onClick={() => handleViewPermit(detail)}
-                                  className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded hover:bg-blue-100 transition-colors"
-                                  title="View Work Permit"
-                                >
-                                  📄 Permit
-                                </button>
-                              </div>
-                            ) : (
-                              <div>
-                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-50 text-red-600 text-xs rounded">
-                                  ❌ No Permit
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Progress Column */}
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-3">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-sm font-medium text-gray-900">
-                                  {getProgressIcon(
-                                    detail.current_progress || 0
+                          {/* Work Order & Vessel */}
+                          {!workOrderId && (
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {detail.work_order && (
+                                <div className="space-y-1">
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {detail.work_order.shipyard_wo_number}
+                                  </div>
+                                  {detail.work_order.vessel && (
+                                    <div className="text-xs text-gray-500">
+                                      🚢 {detail.work_order.vessel.name}
+                                    </div>
                                   )}
-                                </span>
-                                <span className="text-xs font-medium text-gray-700">
-                                  {detail.current_progress || 0}%
-                                </span>
+                                </div>
+                              )}
+                            </td>
+                          )}
+
+                          {/* Description */}
+                          <td className="px-6 py-4">
+                            <div className="max-w-md">
+                              <div
+                                className="text-sm font-medium text-gray-900 mb-1"
+                                title={detail.description}
+                              >
+                                {detail.description.length > 60
+                                  ? `${detail.description.substring(0, 60)}...`
+                                  : detail.description}
                               </div>
-                              <div className="w-full bg-gray-200 rounded-full h-2">
-                                <div
-                                  className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(
-                                    detail.current_progress || 0
-                                  )}`}
-                                  style={{
-                                    width: `${detail.current_progress || 0}%`,
-                                  }}
-                                ></div>
-                              </div>
-                              <div className="flex items-center justify-between mt-1">
-                                <span className="text-xs text-gray-500">
-                                  {detail.progress_count || 0} report
-                                  {(detail.progress_count || 0) !== 1
-                                    ? "s"
-                                    : ""}
+                              <div className="flex flex-wrap gap-1">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                  👤 {detail.pic}
                                 </span>
-                                {detail.latest_progress_date && (
-                                  <span className="text-xs text-blue-600">
-                                    {formatDate(detail.latest_progress_date)}
-                                  </span>
-                                )}
-                              </div>
-                              {/* Quick Progress Actions */}
-                              <div className="flex gap-1 mt-2">
-                                <button
-                                  onClick={() => handleViewProgress(detail.id)}
-                                  className="text-xs px-2 py-1 bg-purple-50 text-purple-600 rounded hover:bg-purple-100 transition-colors"
-                                  title="View Progress"
+                                <span
+                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${status.color}`}
                                 >
-                                  📊 View
-                                </button>
-                                <button
-                                  onClick={() => handleAddProgress(detail.id)}
-                                  className="text-xs px-2 py-1 bg-orange-50 text-orange-600 rounded hover:bg-orange-100 transition-colors"
-                                  title="Add Progress"
-                                >
-                                  ➕ Add
-                                </button>
+                                  {status.icon} {status.text}
+                                </span>
                               </div>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        {/* Actions - Simplified to just Edit and Delete */}
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleEditWorkDetails(detail.id)}
-                              className="inline-flex items-center px-3 py-1 bg-blue-50 text-blue-700 text-sm rounded-md hover:bg-blue-100 transition-colors border border-blue-200"
-                              title="Edit Work Details"
+                          {/* Target Date */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">
+                              🎯 {formatDate(detail.target_close_date)}
+                            </div>
+                          </td>
+
+                          {/* Progress */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-xs font-medium text-gray-700">
+                                    {detail.current_progress || 0}%
+                                  </span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div
+                                    className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(
+                                      detail.current_progress || 0
+                                    )}`}
+                                    style={{
+                                      width: `${detail.current_progress || 0}%`,
+                                    }}
+                                  ></div>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <div className="flex justify-center gap-2">
+                              <button
+                                onClick={() => handleEditWorkDetails(detail.id)}
+                                className="text-blue-600 hover:text-blue-900 transition-colors p-1 rounded hover:bg-blue-50"
+                                title="Edit"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                onClick={() => handleDeleteWorkDetails(detail)}
+                                className="text-red-600 hover:text-red-900 transition-colors p-1 rounded hover:bg-red-50"
+                                title="Delete"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* Expandable Details Row */}
+                        {isExpanded && (
+                          <tr>
+                            <td
+                              colSpan={workOrderId ? 5 : 6}
+                              className="px-0 py-0"
                             >
-                              ✏️ Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteWorkDetails(detail)}
-                              className="inline-flex items-center px-3 py-1 bg-red-50 text-red-700 text-sm rounded-md hover:bg-red-100 transition-colors border border-red-200"
-                              title="Delete Work Details"
-                            >
-                              🗑️ Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                              <div className="bg-gray-50 border-l-4 border-blue-400">
+                                <div className="px-6 py-4">
+                                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    {/* Left Column - Work Details */}
+                                    <div className="space-y-4">
+                                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                        🔧 Work Details
+                                      </h4>
+
+                                      {/* Work Scope & Type */}
+                                      <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                          <div>
+                                            <span className="text-gray-500 text-xs">
+                                              Work Scope:
+                                            </span>
+                                            <div className="font-medium text-gray-900 mt-0.5">
+                                              {detail.work_scope?.work_scope ||
+                                                "N/A"}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-500 text-xs">
+                                              Type:
+                                            </span>
+                                            <div className="font-medium text-gray-900 mt-0.5">
+                                              {detail.work_type || "N/A"}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Quantity & Location */}
+                                      <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                          <div>
+                                            <span className="text-gray-500 text-xs">
+                                              Quantity:
+                                            </span>
+                                            <div className="font-bold text-blue-900 text-lg mt-0.5">
+                                              {detail.quantity || 0}{" "}
+                                              <span className="text-sm text-blue-700 font-medium">
+                                                {detail.uom || ""}
+                                              </span>
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-500 text-xs">
+                                              Location:
+                                            </span>
+                                            <div className="font-medium text-green-900 mt-0.5">
+                                              📍{" "}
+                                              {detail.location?.location ||
+                                                "N/A"}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* SPK/SPKK Numbers */}
+                                      {(detail.spk_number ||
+                                        detail.spkk_number) && (
+                                        <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                          <div className="space-y-2 text-sm">
+                                            {detail.spk_number && (
+                                              <div>
+                                                <span className="text-gray-500 text-xs">
+                                                  SPK Number:
+                                                </span>
+                                                <div className="font-medium text-gray-900 mt-0.5">
+                                                  {detail.spk_number}
+                                                </div>
+                                              </div>
+                                            )}
+                                            {detail.spkk_number && (
+                                              <div>
+                                                <span className="text-gray-500 text-xs">
+                                                  SPKK Number:
+                                                </span>
+                                                <div className="font-medium text-gray-900 mt-0.5">
+                                                  {detail.spkk_number}
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Additional Info */}
+                                      <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                        <div className="space-y-2 text-sm">
+                                          <div>
+                                            <span className="text-gray-500 text-xs">
+                                              Period Close Target:
+                                            </span>
+                                            <div className="font-medium text-gray-900 mt-0.5">
+                                              {detail.period_close_target}
+                                            </div>
+                                          </div>
+                                          {detail.is_additional_wo_details && (
+                                            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                                              ➕ Additional Work
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Notes */}
+                                      {detail.notes && (
+                                        <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                          <span className="text-gray-500 text-xs">
+                                            📝 Notes:
+                                          </span>
+                                          <div className="text-sm text-gray-900 mt-1 whitespace-pre-wrap">
+                                            {detail.notes}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Right Column - Timeline & Progress */}
+                                    <div className="space-y-4">
+                                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                        📊 Timeline & Progress
+                                      </h4>
+
+                                      {/* Timeline */}
+                                      <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                        <div className="space-y-3">
+                                          {/* Planned */}
+                                          <div className="bg-gray-50 p-2 rounded">
+                                            <div className="font-semibold text-gray-700 text-xs mb-1.5">
+                                              📋 Planned
+                                            </div>
+                                            <div className="space-y-1 text-sm">
+                                              <div className="flex justify-between">
+                                                <span className="text-gray-500">
+                                                  Start:
+                                                </span>
+                                                <span className="font-medium text-gray-900">
+                                                  {formatDate(
+                                                    detail.planned_start_date
+                                                  )}
+                                                </span>
+                                              </div>
+                                              <div className="flex justify-between">
+                                                <span className="text-gray-500">
+                                                  Target:
+                                                </span>
+                                                <span className="font-medium text-gray-900">
+                                                  {formatDate(
+                                                    detail.target_close_date
+                                                  )}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          {/* Actual */}
+                                          <div className="bg-blue-50 p-2 rounded border border-blue-200">
+                                            <div className="font-semibold text-blue-700 text-xs mb-1.5">
+                                              ✅ Actual
+                                            </div>
+                                            <div className="space-y-1 text-sm">
+                                              <div className="flex justify-between">
+                                                <span className="text-blue-600">
+                                                  Started:
+                                                </span>
+                                                <span className="font-medium text-blue-900">
+                                                  {formatDate(
+                                                    detail.actual_start_date ||
+                                                      null
+                                                  )}
+                                                </span>
+                                              </div>
+                                              <div className="flex justify-between">
+                                                <span className="text-green-600">
+                                                  Closed:
+                                                </span>
+                                                <span className="font-medium text-green-900">
+                                                  {formatDate(
+                                                    detail.actual_close_date ||
+                                                      null
+                                                  )}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Work Permit Status */}
+                                      <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                        <div className="text-xs text-gray-500 mb-2">
+                                          Work Permit Status
+                                        </div>
+                                        {detail.storage_path ? (
+                                          <button
+                                            onClick={() =>
+                                              handleViewPermit(detail)
+                                            }
+                                            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                                          >
+                                            📄 View Work Permit
+                                          </button>
+                                        ) : (
+                                          <div className="text-center py-2 px-3 bg-red-50 text-red-700 text-sm font-medium rounded-lg border border-red-200">
+                                            ❌ No permit uploaded
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Progress Section */}
+                                      <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                        <div className="flex items-center justify-between mb-3">
+                                          <span className="text-xs text-gray-500">
+                                            Work Progress
+                                          </span>
+                                          <span className="text-2xl">
+                                            {getProgressIcon(
+                                              detail.current_progress || 0
+                                            )}
+                                          </span>
+                                        </div>
+
+                                        {/* Progress Bar */}
+                                        <div className="relative mb-3">
+                                          <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                                            <div
+                                              className={`h-4 rounded-full transition-all duration-500 ${getProgressColor(
+                                                detail.current_progress || 0
+                                              )} flex items-center justify-center`}
+                                              style={{
+                                                width: `${Math.max(
+                                                  detail.current_progress || 0,
+                                                  10
+                                                )}%`,
+                                              }}
+                                            >
+                                              <span className="text-white text-xs font-bold drop-shadow">
+                                                {detail.current_progress || 0}%
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {/* Progress Info */}
+                                        <div className="flex items-center justify-between mb-3 text-xs text-gray-600">
+                                          <span>
+                                            {detail.progress_count || 0} report
+                                            {(detail.progress_count || 0) !== 1
+                                              ? "s"
+                                              : ""}
+                                          </span>
+                                          {detail.latest_progress_date && (
+                                            <span>
+                                              Last:{" "}
+                                              {formatDate(
+                                                detail.latest_progress_date
+                                              )}
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {/* Progress Actions */}
+                                        <div className="grid grid-cols-2 gap-2">
+                                          <button
+                                            onClick={() =>
+                                              handleViewProgress(detail.id)
+                                            }
+                                            className="px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                                          >
+                                            📊 View Progress
+                                          </button>
+                                          <button
+                                            onClick={() =>
+                                              handleAddProgress(detail.id)
+                                            }
+                                            className="px-3 py-2 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 transition-colors font-medium"
+                                          >
+                                            ➕ Add Progress
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     );
                   })}
                 </tbody>
