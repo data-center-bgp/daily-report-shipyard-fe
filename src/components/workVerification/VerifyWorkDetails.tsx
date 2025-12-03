@@ -435,9 +435,9 @@ export default function VerifyWorkDetails() {
                     </label>
                     <p className="mt-1 text-sm text-slate-700 bg-gradient-to-r from-slate-50 to-slate-100 p-2 rounded-lg border">
                       📍{" "}
-                      {workDetails.location?.location ||
-                        workDetails.location ||
-                        "-"}
+                      {typeof workDetails.location === "object"
+                        ? workDetails.location?.location || "-"
+                        : workDetails.location || "-"}
                     </p>
                   </div>
                   <div>

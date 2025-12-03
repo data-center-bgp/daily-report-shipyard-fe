@@ -320,7 +320,7 @@ export default function WorkVerification() {
 
     return (
       safeIncludes(wd.description) ||
-      safeIncludes(wd.location) ||
+      safeIncludes(wd.location?.location) ||
       safeIncludes(wd.pic) ||
       safeIncludes(wd.work_order?.customer_wo_number) ||
       safeIncludes(wd.work_order?.shipyard_wo_number) ||
@@ -345,7 +345,7 @@ export default function WorkVerification() {
 
     return (
       safeIncludes(verification.work_details?.description) ||
-      safeIncludes(verification.work_details?.location) ||
+      safeIncludes(verification.work_details?.location?.location) ||
       safeIncludes(verification.work_details?.pic) ||
       safeIncludes(verification.work_details?.work_order?.customer_wo_number) ||
       safeIncludes(verification.work_details?.work_order?.shipyard_wo_number) ||
@@ -584,7 +584,10 @@ export default function WorkVerification() {
                                 : wd.description}
                             </div>
                             <div className="text-sm text-gray-500">
-                              📍 {wd.location?.location || wd.location || "-"}
+                              📍{" "}
+                              {typeof wd.location === "object"
+                                ? wd.location?.location || "-"
+                                : wd.location || "-"}{" "}
                             </div>
                             <div className="text-xs text-gray-400">
                               👤 {wd.pic}
@@ -713,9 +716,11 @@ export default function WorkVerification() {
                           </div>
                           <div className="text-sm text-gray-500">
                             📍{" "}
-                            {verification.work_details?.location?.location ||
-                              verification.work_details?.location ||
-                              "-"}
+                            {typeof verification.work_details?.location ===
+                            "object"
+                              ? verification.work_details?.location?.location ||
+                                "-"
+                              : verification.work_details?.location || "-"}
                           </div>
                           <div className="text-xs text-gray-400">
                             👤 {verification.work_details?.pic}
