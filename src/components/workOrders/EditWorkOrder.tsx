@@ -1,9 +1,15 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { supabase, type WorkOrder, type Vessel } from "../../lib/supabase";
+import {
+  supabase,
+  type WorkOrder,
+  type Vessel,
+  type Kapro,
+} from "../../lib/supabase";
 
 interface WorkOrderWithVessel extends WorkOrder {
   vessel?: Vessel;
+  kapro?: Kapro;
 }
 
 export default function EditWorkOrder() {
@@ -12,6 +18,8 @@ export default function EditWorkOrder() {
 
   const [workOrder, setWorkOrder] = useState<WorkOrderWithVessel | null>(null);
   const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [kapros, setKapros] = useState<Kapro[]>([]);
+  const [loadingKapros, setLoadingKapros] = useState(true);
   const [loadingVessels, setLoadingVessels] = useState(true);
   const [loadingWorkOrder, setLoadingWorkOrder] = useState(true);
 
@@ -26,6 +34,8 @@ export default function EditWorkOrder() {
     customer_wo_number: "",
     customer_wo_date: "",
     wo_document_delivery_date: "",
+    is_additional_wo: false,
+    kapro_id: "",
   });
 
   const [loading, setLoading] = useState(false);
@@ -54,6 +64,10 @@ export default function EditWorkOrder() {
               name,
               type,
               company
+            ),
+            kapro (
+              id,
+              kapro_name
             )
           `
           )
@@ -76,6 +90,8 @@ export default function EditWorkOrder() {
           customer_wo_number: data.customer_wo_number || "",
           customer_wo_date: data.customer_wo_date || "",
           wo_document_delivery_date: data.wo_document_delivery_date || "",
+          is_additional_wo: data.is_additional_wo || false,
+          kapro_id: data.kapro_id?.toString() || "",
         });
       } catch (err) {
         console.error("Error fetching work order:", err);
@@ -114,14 +130,49 @@ export default function EditWorkOrder() {
     fetchVessels();
   }, []);
 
+  useEffect(() => {
+    const fetchKapros = async () => {
+      try {
+        setLoadingKapros(true);
+        const { data, error } = await supabase
+          .from("kapro")
+          .select("*")
+          .is("deleted_at", null)
+          .order("kapro_name");
+
+        if (error) throw error;
+        setKapros(data || []);
+      } catch (err) {
+        console.error("Error fetching kapros:", err);
+        setError("Failed to load kapros. Please refresh the page.");
+      } finally {
+        setLoadingKapros(false);
+      }
+    };
+
+    fetchKapros();
+  }, []);
+
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: name === "vessel_id" ? parseInt(value) || "" : value,
-    }));
+    const { name, value, type } = e.target;
+
+    if (type === "checkbox") {
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormData((prev) => ({
+        ...prev,
+        [name]: checked,
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [name]:
+          name === "vessel_id" || name === "kapro_id"
+            ? parseInt(value) || ""
+            : value,
+      }));
+    }
   };
 
   const validateForm = () => {
@@ -169,6 +220,10 @@ export default function EditWorkOrder() {
         customer_wo_number: formData.customer_wo_number.trim() || null,
         customer_wo_date: formData.customer_wo_date || null,
         wo_document_delivery_date: formData.wo_document_delivery_date || null,
+        is_additional_wo: formData.is_additional_wo,
+        kapro_id: formData.kapro_id
+          ? parseInt(formData.kapro_id.toString())
+          : null,
         updated_at: new Date().toISOString(),
       };
 
@@ -227,13 +282,17 @@ export default function EditWorkOrder() {
     });
   };
 
-  if (loadingWorkOrder || loadingVessels) {
+  if (loadingWorkOrder || loadingVessels || loadingKapros) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-slate-600 font-medium">
-            {loadingWorkOrder ? "Loading work order..." : "Loading vessels..."}
+            {loadingWorkOrder
+              ? "Loading work order..."
+              : loadingVessels
+              ? "Loading vessels..."
+              : "Loading kapros..."}
           </p>
         </div>
       </div>
@@ -438,6 +497,50 @@ export default function EditWorkOrder() {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Additional WO Checkbox */}
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                name="is_additional_wo"
+                id="is_additional_wo"
+                checked={formData.is_additional_wo}
+                onChange={handleInputChange}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
+              />
+              <label
+                htmlFor="is_additional_wo"
+                className="ml-2 block text-sm text-slate-700"
+              >
+                This is an additional work order
+              </label>
+            </div>
+
+            {/* Kapro Selection */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Kapro
+                <span className="text-slate-500 font-normal"> (Optional)</span>
+              </label>
+              <select
+                name="kapro_id"
+                value={formData.kapro_id}
+                onChange={handleInputChange}
+                className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors"
+              >
+                <option value="">Select Kapro</option>
+                {kapros.map((kapro) => (
+                  <option key={kapro.id} value={kapro.id}>
+                    {kapro.kapro_name}
+                  </option>
+                ))}
+              </select>
+              {kapros.length === 0 && (
+                <p className="text-sm text-amber-600 mt-1">
+                  No kapros available.
+                </p>
+              )}
             </div>
 
             {/* Optional Fields */}

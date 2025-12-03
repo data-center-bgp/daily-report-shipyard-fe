@@ -1,16 +1,17 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { supabase, type Vessel } from "../../lib/supabase";
+import { supabase, type Vessel, type Kapro } from "../../lib/supabase";
 
 export default function AddWorkOrder() {
   const navigate = useNavigate();
   const location = useLocation();
   const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [kapros, setKapros] = useState<Kapro[]>([]);
   const [loadingVessels, setLoadingVessels] = useState(true);
+  const [loadingKapros, setLoadingKapros] = useState(true);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [currentUser, setCurrentUser] = useState<any>(null);
 
-  // Simplified form data - only essential fields
   const [formData, setFormData] = useState({
     // Required fields
     vessel_id: "",
@@ -21,6 +22,8 @@ export default function AddWorkOrder() {
     customer_wo_number: "",
     customer_wo_date: "",
     wo_document_delivery_date: "",
+    is_additional_wo: false,
+    kapro_id: "",
   });
 
   const [loading, setLoading] = useState(false);
@@ -80,14 +83,51 @@ export default function AddWorkOrder() {
     fetchVessels();
   }, []);
 
+  // Fetch kapros on component mount
+  useEffect(() => {
+    const fetchKapros = async () => {
+      try {
+        setLoadingKapros(true);
+        const { data, error } = await supabase
+          .from("kapro")
+          .select("*")
+          .is("deleted_at", null)
+          .order("kapro_name");
+
+        if (error) throw error;
+
+        setKapros(data || []);
+      } catch (err) {
+        console.error("Error fetching kapros:", err);
+        setError("Failed to load kapros. Please refresh the page.");
+      } finally {
+        setLoadingKapros(false);
+      }
+    };
+
+    fetchKapros();
+  }, []);
+
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: name === "vessel_id" ? parseInt(value) || "" : value,
-    }));
+    const { name, value, type } = e.target;
+
+    if (type === "checkbox") {
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormData((prev) => ({
+        ...prev,
+        [name]: checked,
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [name]:
+          name === "vessel_id" || name === "kapro_id"
+            ? parseInt(value) || ""
+            : value,
+      }));
+    }
   };
 
   const validateForm = () => {
@@ -195,6 +235,10 @@ export default function AddWorkOrder() {
         customer_wo_number: formData.customer_wo_number.trim() || null,
         customer_wo_date: formData.customer_wo_date || null,
         wo_document_delivery_date: formData.wo_document_delivery_date || null,
+        is_additional_wo: formData.is_additional_wo,
+        kapro_id: formData.kapro_id
+          ? parseInt(formData.kapro_id.toString())
+          : null,
         user_id: userId,
       };
       const { data, error } = await supabase
@@ -225,7 +269,7 @@ export default function AddWorkOrder() {
     navigate("/work-orders");
   };
 
-  if (loadingVessels || !currentUser) {
+  if (loadingVessels || loadingKapros || !currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -233,6 +277,8 @@ export default function AddWorkOrder() {
           <p className="text-gray-600">
             {loadingVessels
               ? "Loading vessels..."
+              : loadingKapros
+              ? "Loading kapros..."
               : "Loading user information..."}
           </p>
         </div>
@@ -419,6 +465,49 @@ export default function AddWorkOrder() {
                   This date is typically filled when the work order process is
                   completed
                 </p>
+              </div>
+
+              {/* Additional WO Checkbox */}
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="is_additional_wo"
+                  id="is_additional_wo"
+                  checked={formData.is_additional_wo}
+                  onChange={handleInputChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label
+                  htmlFor="is_additional_wo"
+                  className="ml-2 block text-sm text-gray-700"
+                >
+                  This is an additional work order
+                </label>
+              </div>
+
+              {/* Kapro Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Kapro <span className="text-gray-500">(Optional)</span>
+                </label>
+                <select
+                  name="kapro_id"
+                  value={formData.kapro_id}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select Kapro</option>
+                  {kapros.map((kapro) => (
+                    <option key={kapro.id} value={kapro.id}>
+                      {kapro.kapro_name}
+                    </option>
+                  ))}
+                </select>
+                {kapros.length === 0 && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    No kapros available.
+                  </p>
+                )}
               </div>
             </div>
 

@@ -755,14 +755,14 @@ export default function WODetailsTable({
                     >
                       Description {getSortIcon("description")}
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Location & PIC
-                    </th>
                     <th
                       className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
                       onClick={() => handleSort("planned_start_date")}
                     >
                       Dates {getSortIcon("planned_start_date")}
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Location & PIC
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status & Permit
@@ -819,18 +819,6 @@ export default function WODetailsTable({
                           </div>
                         </td>
 
-                        {/* Location & PIC */}
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="text-sm">
-                            <div className="text-gray-900 font-medium">
-                              📍 {detail.location}
-                            </div>
-                            <div className="text-gray-600 text-xs">
-                              👤 {detail.pic}
-                            </div>
-                          </div>
-                        </td>
-
                         {/* Dates */}
                         <td className="px-4 py-4 whitespace-nowrap">
                           <div className="text-xs space-y-1">
@@ -851,6 +839,18 @@ export default function WODetailsTable({
                                 {formatDate(detail.actual_close_date)}
                               </div>
                             )}
+                          </div>
+                        </td>
+
+                        {/* Location & PIC */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <div className="text-sm">
+                            <div className="text-gray-900 font-medium">
+                              📍 {detail.location}
+                            </div>
+                            <div className="text-gray-600 text-xs">
+                              👤 {detail.pic}
+                            </div>
                           </div>
                         </td>
 

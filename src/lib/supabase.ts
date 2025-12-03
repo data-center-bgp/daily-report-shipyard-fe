@@ -23,6 +23,14 @@ export interface Vessel {
   company: string;
 }
 
+export interface Kapro {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  kapro_name: string;
+}
+
 export interface WorkOrder {
   id: number;
   created_at: string;
@@ -35,6 +43,8 @@ export interface WorkOrder {
   customer_wo_date?: string;
   wo_document_delivery_date?: string;
   user_id: number;
+  is_additional_wo?: boolean;
+  kapro_id?: number;
 }
 
 export interface WorkDetails {
