@@ -3,6 +3,7 @@ export interface WorkProgress {
   id: number;
   progress_percentage: number;
   report_date: string;
+  notes?: string;
   evidence_url?: string;
   storage_path?: string;
   work_details_id: number;

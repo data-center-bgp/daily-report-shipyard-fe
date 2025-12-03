@@ -86,6 +86,7 @@ export interface WorkProgress {
   photo_evidence?: string;
   storage_path?: string;
   user_id: number;
+  notes?: string;
 }
 
 export interface WorkDetailsWithProgress extends WorkDetails {

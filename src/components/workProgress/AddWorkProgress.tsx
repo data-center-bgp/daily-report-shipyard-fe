@@ -23,7 +23,10 @@ interface WorkOrderFormData {
 interface WorkDetailsFormData {
   id: number;
   description: string;
-  location: string;
+  location?: {
+    id: number;
+    location: string;
+  };
   pic: string;
 }
 
@@ -66,6 +69,7 @@ export default function AddWorkProgress({
   const [formData, setFormData] = useState({
     progress_percentage: "",
     report_date: new Date().toISOString().split("T")[0],
+    notes: "",
     evidence_file: null as File | null,
   });
 
@@ -160,7 +164,17 @@ export default function AddWorkProgress({
       setLoadingWorkDetails(true);
       const { data, error } = await supabase
         .from("work_details")
-        .select("id, description, location, pic")
+        .select(
+          `
+        id, 
+        description, 
+        location:location_id (
+          id,
+          location
+        ), 
+        pic
+      `
+        )
         .eq("work_order_id", workOrderId)
         .is("deleted_at", null)
         .order("description", { ascending: true });
@@ -168,10 +182,12 @@ export default function AddWorkProgress({
       if (error) throw error;
 
       const workDetailsData: WorkDetailsFormData[] = (data || []).map(
-        (item) => ({
+        (item: any) => ({
           id: item.id,
           description: item.description,
-          location: item.location,
+          location: Array.isArray(item.location)
+            ? item.location[0]
+            : item.location,
           pic: item.pic,
         })
       );
@@ -244,12 +260,12 @@ export default function AddWorkProgress({
     setSelectedWorkDetailsId(workDetailsId);
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, files } = e.target;
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
 
-    if (name === "evidence_file" && files) {
-      setFormData((prev) => ({ ...prev, evidence_file: files[0] || null }));
-    } else if (name === "progress_percentage") {
+    if (name === "progress_percentage") {
       const numericValue = value.replace(/[^0-9]/g, "");
       if (
         numericValue === "" ||
@@ -259,6 +275,13 @@ export default function AddWorkProgress({
       }
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { files } = e.target;
+    if (files && files[0]) {
+      setFormData((prev) => ({ ...prev, evidence_file: files[0] }));
     }
   };
 
@@ -383,8 +406,9 @@ export default function AddWorkProgress({
           work_details_id: selectedWorkDetailsId,
           progress_percentage: progressValue,
           report_date: formData.report_date,
-          evidence_url: evidenceUrl,
-          storage_path: storagePath,
+          notes: formData.notes.trim() || null,
+          evidence_url: evidenceUrl || null,
+          storage_path: storagePath || null,
           user_id: userId,
         })
         .select()
@@ -584,7 +608,10 @@ export default function AddWorkProgress({
                         <div>{selectedWorkDetails.description}</div>
                         {selectedWorkDetails.location && (
                           <div className="text-xs text-gray-500">
-                            📍 {selectedWorkDetails.location}
+                            📍{" "}
+                            {typeof selectedWorkDetails.location === "string"
+                              ? selectedWorkDetails.location
+                              : selectedWorkDetails.location.location}
                           </div>
                         )}
                         {selectedWorkDetails.pic && (
@@ -683,28 +710,47 @@ export default function AddWorkProgress({
                   </span>
                 </div>
               </div>
+
+              {/* Notes */}
+              <div className="mt-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  📝 Notes (Optional)
+                </label>
+                <textarea
+                  name="notes"
+                  value={formData.notes}
+                  onChange={handleInputChange}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  placeholder="Add any additional notes or comments about this progress update..."
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Optional field to provide additional context or details about
+                  the progress
+                </p>
+              </div>
             </div>
 
             {/* Evidence Upload */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-6">
-                🖼️ Progress Evidence
+                🖼️ Progress Evidence (Optional)
               </h3>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Evidence Photo (Optional)
+                  Evidence Photo
                 </label>
                 <input
                   type="file"
                   name="evidence_file"
-                  onChange={handleInputChange}
+                  onChange={handleFileChange}
                   accept="image/*"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Upload an image to document the current progress (max 10MB,
-                  formats: JPEG, PNG, GIF, WebP)
+                  Upload an image to document the current progress (optional,
+                  max 10MB, formats: JPEG, PNG, GIF, WebP)
                 </p>
               </div>
 

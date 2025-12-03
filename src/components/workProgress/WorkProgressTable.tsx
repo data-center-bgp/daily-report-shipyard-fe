@@ -52,7 +52,15 @@ interface SupabaseWorkOrderData {
 interface SupabaseWorkDetailsData {
   id: number;
   description: string;
-  location: string;
+  location?:
+    | {
+        id: number;
+        location: string;
+      }
+    | Array<{
+        id: number;
+        location: string;
+      }>;
   pic: string;
   planned_start_date: string;
   target_close_date: string;
@@ -64,6 +72,7 @@ interface SupabaseWorkProgressResponse {
   id: number;
   progress_percentage: number;
   report_date: string;
+  notes?: string;
   evidence_url?: string;
   storage_path?: string;
   created_at: string;
@@ -72,7 +81,10 @@ interface SupabaseWorkProgressResponse {
   work_details: {
     id: number;
     description: string;
-    location: string;
+    location?: {
+      id: number;
+      location: string;
+    };
     work_order: {
       id: number;
       shipyard_wo_number: string;
@@ -100,10 +112,16 @@ const transformSupabaseWorkOrder = (
 const transformSupabaseWorkDetails = (
   data: SupabaseWorkDetailsData
 ): WorkDetailsInfo => {
+  const locationValue = data.location
+    ? Array.isArray(data.location)
+      ? data.location[0]?.location || ""
+      : data.location.location || ""
+    : "";
+
   return {
     id: data.id,
     description: data.description,
-    location: data.location,
+    location: locationValue,
     pic: data.pic,
     planned_start_date: data.planned_start_date,
     target_close_date: data.target_close_date,
@@ -128,6 +146,7 @@ const transformSupabaseWorkProgress = (
     id: data.id,
     progress_percentage: data.progress_percentage,
     report_date: data.report_date,
+    notes: data.notes,
     evidence_url: data.evidence_url,
     storage_path: data.storage_path,
     created_at: data.created_at,
@@ -136,7 +155,11 @@ const transformSupabaseWorkProgress = (
     work_details: {
       id: workDetails.id,
       description: workDetails.description,
-      location: workDetails.location,
+      location: workDetails.location
+        ? Array.isArray(workDetails.location)
+          ? workDetails.location[0]
+          : workDetails.location
+        : undefined,
       work_order: {
         id: workDetails.work_order.id,
         shipyard_wo_number: workDetails.work_order.shipyard_wo_number,
@@ -148,7 +171,6 @@ const transformSupabaseWorkProgress = (
     profiles: profiles,
   };
 };
-
 export default function WorkProgressTable({
   workDetailsId,
   embedded = false,
@@ -344,25 +366,28 @@ export default function WorkProgressTable({
         .from("work_details")
         .select(
           `
-          id, 
-          description, 
-          location, 
-          pic,
-          planned_start_date,
-          target_close_date,
-          period_close_target,
-          work_order!inner (
+        id, 
+        description, 
+        location:location_id (
+          id,
+          location
+        ),
+        pic,
+        planned_start_date,
+        target_close_date,
+        period_close_target,
+        work_order!inner (
+          id,
+          shipyard_wo_number,
+          shipyard_wo_date,
+          vessel!inner (
             id,
-            shipyard_wo_number,
-            shipyard_wo_date,
-            vessel!inner (
-              id,
-              name,
-              type,
-              company
-            )
+            name,
+            type,
+            company
           )
-        `
+        )
+      `
         )
         .eq("work_order_id", workOrderId)
         .is("deleted_at", null)
@@ -386,34 +411,38 @@ export default function WorkProgressTable({
 
       let query = supabase.from("work_progress").select(
         `
+    id,
+    progress_percentage,
+    report_date,
+    notes,
+    evidence_url,
+    storage_path,
+    created_at,
+    work_details_id,
+    user_id,
+    work_details!inner (
+      id,
+      description,
+      location:location_id (
+        id,
+        location
+      ),
+      work_order!inner (
+        id,
+        shipyard_wo_number,
+        vessel!inner (
           id,
-          progress_percentage,
-          report_date,
-          evidence_url,
-          storage_path,
-          created_at,
-          work_details_id,
-          user_id,
-          work_details!inner (
-            id,
-            description,
-            location,
-            work_order!inner (
-              id,
-              shipyard_wo_number,
-              vessel!inner (
-                id,
-                name,
-                type
-              )
-            )
-          ),
-          profiles (
-            id,
-            name,
-            email
-          )
-        `,
+          name,
+          type
+        )
+      )
+    ),
+    profiles (
+      id,
+      name,
+      email
+    )
+  `,
         { count: "exact" }
       );
 
@@ -1241,7 +1270,8 @@ export default function WorkProgressTable({
                           {workDetails.description.length > 50 ? "..." : ""}
                         </div>
                         <div className="text-xs text-gray-600">
-                          📍 {workDetails.location} • 👤 {workDetails.pic}
+                          📍 {workDetails.location || "No location"} • 👤{" "}
+                          {workDetails.pic}
                         </div>
                       </div>
                     ))}
@@ -1369,6 +1399,9 @@ export default function WorkProgressTable({
                       Report Date
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Notes
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Reported By
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1484,7 +1517,15 @@ export default function WorkProgressTable({
                           </div>
                           {item.work_details.location && (
                             <div className="text-sm text-gray-500">
-                              📍 {item.work_details.location}
+                              📍{" "}
+                              {typeof item.work_details.location === "string"
+                                ? item.work_details.location
+                                : (
+                                    item.work_details.location as {
+                                      id: number;
+                                      location: string;
+                                    }
+                                  ).location}
                             </div>
                           )}
                         </td>
@@ -1504,6 +1545,32 @@ export default function WorkProgressTable({
                         )}
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           📅 {formatDate(item.report_date)}
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          {item.notes ? (
+                            <div className="max-w-xs">
+                              <div
+                                className="text-gray-900 line-clamp-2"
+                                title={item.notes}
+                              >
+                                {item.notes}
+                              </div>
+                              {item.notes.length > 60 && (
+                                <button
+                                  onClick={() =>
+                                    alert(`Notes:\n\n${item.notes}`)
+                                  }
+                                  className="text-blue-600 hover:text-blue-800 text-xs mt-1"
+                                >
+                                  Read more
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 italic">
+                              No notes
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
@@ -1541,75 +1608,6 @@ export default function WorkProgressTable({
 
             {/* Pagination */}
             {renderPagination()}
-          </div>
-
-          {/* Summary Stats */}
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white p-4 rounded-lg shadow border">
-              <div className="flex items-center">
-                <div className="text-2xl mr-3">📊</div>
-                <div>
-                  <div className="text-lg font-semibold text-gray-900">
-                    {totalCount}
-                  </div>
-                  <div className="text-sm text-gray-500">Total Reports</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-lg shadow border">
-              <div className="flex items-center">
-                <div className="text-2xl mr-3">📈</div>
-                <div>
-                  <div className="text-lg font-semibold text-gray-900">
-                    {workProgress.length > 0
-                      ? Math.round(
-                          workProgress.reduce(
-                            (sum, item) => sum + item.progress_percentage,
-                            0
-                          ) / workProgress.length
-                        )
-                      : 0}
-                    %
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    Avg Progress (Current Page)
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-lg shadow border">
-              <div className="flex items-center">
-                <div className="text-2xl mr-3">✅</div>
-                <div>
-                  <div className="text-lg font-semibold text-gray-900">
-                    {
-                      Object.values(maxProgressByWorkDetail).filter(
-                        (maxProgress) => maxProgress >= 100
-                      ).length
-                    }
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    Completed Work Details
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-lg shadow border">
-              <div className="flex items-center">
-                <div className="text-2xl mr-3">📷</div>
-                <div>
-                  <div className="text-lg font-semibold text-gray-900">
-                    {workProgress.filter((item) => item.evidence_url).length}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    With Evidence (Current Page)
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         </>
       )}
