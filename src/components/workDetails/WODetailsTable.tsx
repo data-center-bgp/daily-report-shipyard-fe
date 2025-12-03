@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   supabase,
@@ -29,9 +29,9 @@ interface WorkDetailsWithWorkOrder extends WorkDetails {
 }
 
 interface WorkDetailsTableProps {
-  workOrderId?: number; // Optional - if provided, filter by work order
+  workOrderId?: number;
   onRefresh?: () => void;
-  embedded?: boolean; // If true, shows simplified header for embedding
+  embedded?: boolean;
 }
 
 export default function WODetailsTable({
@@ -64,12 +64,113 @@ export default function WODetailsTable({
   const [loadingVessels, setLoadingVessels] = useState(false);
   const [loadingWorkOrders, setLoadingWorkOrders] = useState(false);
 
+  const [vesselSearchTerm, setVesselSearchTerm] = useState("");
+  const [showVesselDropdown, setShowVesselDropdown] = useState(false);
+  const vesselDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [workOrderSearchTerm, setWorkOrderSearchTerm] = useState("");
+  const [showWorkOrderDropdown, setShowWorkOrderDropdown] = useState(false);
+  const workOrderDropdownRef = useRef<HTMLDivElement>(null);
+
   const navigate = useNavigate();
 
   // Calculate pagination
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        vesselDropdownRef.current &&
+        !vesselDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowVesselDropdown(false);
+      }
+      if (
+        workOrderDropdownRef.current &&
+        !workOrderDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowWorkOrderDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Filter vessels for search dropdown
+  const filteredVesselsForSearch = vessels.filter((vessel) => {
+    const searchLower = vesselSearchTerm.toLowerCase();
+    return (
+      vessel.name?.toLowerCase().includes(searchLower) ||
+      vessel.type?.toLowerCase().includes(searchLower) ||
+      vessel.company?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  // Filter work orders for search dropdown
+  const filteredWorkOrdersForSearch = workOrders.filter((wo) => {
+    const searchLower = workOrderSearchTerm.toLowerCase();
+    return (
+      wo.shipyard_wo_number?.toLowerCase().includes(searchLower) ||
+      wo.customer_wo_number?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  const handleVesselSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVesselSearchTerm(e.target.value);
+    setShowVesselDropdown(true);
+    if (selectedVesselId) {
+      setSelectedVesselId(0);
+      setSelectedWorkOrderId(0);
+      setWorkOrders([]);
+    }
+  };
+
+  const handleVesselSelectFromDropdown = (vessel: Vessel) => {
+    setSelectedVesselId(vessel.id);
+    setVesselSearchTerm(`${vessel.name} - ${vessel.type} (${vessel.company})`);
+    setShowVesselDropdown(false);
+    setSelectedWorkOrderId(0);
+    setWorkOrderSearchTerm("");
+    setCurrentPage(1);
+    fetchWorkOrdersForVessel(vessel.id);
+  };
+
+  const handleClearVesselSearch = () => {
+    setVesselSearchTerm("");
+    setSelectedVesselId(0);
+    setShowVesselDropdown(false);
+    setSelectedWorkOrderId(0);
+    setWorkOrderSearchTerm("");
+    setWorkOrders([]);
+    setCurrentPage(1);
+  };
+
+  const handleWorkOrderSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setWorkOrderSearchTerm(e.target.value);
+    setShowWorkOrderDropdown(true);
+    if (selectedWorkOrderId) {
+      setSelectedWorkOrderId(0);
+    }
+  };
+
+  const handleWorkOrderSelectFromDropdown = (workOrder: WorkOrder) => {
+    setSelectedWorkOrderId(workOrder.id);
+    setWorkOrderSearchTerm(workOrder.shipyard_wo_number || "");
+    setShowWorkOrderDropdown(false);
+    setCurrentPage(1);
+  };
+
+  const handleClearWorkOrderSearch = () => {
+    setWorkOrderSearchTerm("");
+    setSelectedWorkOrderId(0);
+    setShowWorkOrderDropdown(false);
+    setCurrentPage(1);
+  };
 
   // Fetch vessels for filter dropdown
   const fetchVessels = async () => {
@@ -428,11 +529,6 @@ export default function WODetailsTable({
     return `${totalItems} work ${itemText} across all work orders`;
   };
 
-  const selectedVessel = vessels.find((v) => v.id === selectedVesselId);
-  const selectedWorkOrder = workOrders.find(
-    (wo) => wo.id === selectedWorkOrderId
-  );
-
   // Pagination component
   const renderPagination = () => {
     if (totalPages <= 1) return null;
@@ -614,68 +710,112 @@ export default function WODetailsTable({
       {!workOrderId && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="flex flex-col sm:flex-row gap-4">
-            {/* Vessel Filter */}
-            <div className="flex-1">
+            {/* Vessel Filter with Search */}
+            <div className="flex-1 relative" ref={vesselDropdownRef}>
               <label className="block text-xs font-medium text-gray-600 mb-1">
                 Vessel
               </label>
-              <select
-                value={selectedVesselId}
-                onChange={handleVesselChange}
-                disabled={loadingVessels}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value={0}>
-                  {loadingVessels ? "Loading..." : "All Vessels"}
-                </option>
-                {vessels.map((vessel) => (
-                  <option key={vessel.id} value={vessel.id}>
-                    {vessel.name} ({vessel.type})
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={vesselSearchTerm}
+                  onChange={handleVesselSearch}
+                  onFocus={() => setShowVesselDropdown(true)}
+                  placeholder="Search vessel..."
+                  disabled={loadingVessels}
+                  className="w-full px-3 py-2 pr-8 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {vesselSearchTerm && (
+                  <button
+                    onClick={handleClearVesselSearch}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Vessel Dropdown */}
+              {showVesselDropdown && filteredVesselsForSearch.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {filteredVesselsForSearch.map((vessel) => (
+                    <div
+                      key={vessel.id}
+                      onClick={() => handleVesselSelectFromDropdown(vessel)}
+                      className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                        selectedVesselId === vessel.id ? "bg-blue-100" : ""
+                      }`}
+                    >
+                      <div className="font-medium text-gray-900 text-sm">
+                        {vessel.name}
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        {vessel.type} • {vessel.company}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Work Order Filter */}
-            <div className="flex-1">
+            {/* Work Order Filter with Search */}
+            <div className="flex-1 relative" ref={workOrderDropdownRef}>
               <label className="block text-xs font-medium text-gray-600 mb-1">
                 Work Order
               </label>
-              <select
-                value={selectedWorkOrderId}
-                onChange={handleWorkOrderChange}
-                disabled={loadingWorkOrders || selectedVesselId === 0}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value={0}>
-                  {selectedVesselId === 0
-                    ? "Select vessel first"
-                    : loadingWorkOrders
-                    ? "Loading..."
-                    : "All Work Orders"}
-                </option>
-                {workOrders.map((workOrder) => (
-                  <option key={workOrder.id} value={workOrder.id}>
-                    {workOrder.shipyard_wo_number}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Active Filter Display */}
-            <div className="flex items-end">
-              <div className="flex flex-wrap gap-1">
-                {selectedVessel && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                    🚢 {selectedVessel.name}
-                  </span>
-                )}
-                {selectedWorkOrder && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
-                    🏗️ {selectedWorkOrder.shipyard_wo_number}
-                  </span>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={workOrderSearchTerm}
+                  onChange={handleWorkOrderSearch}
+                  onFocus={() => setShowWorkOrderDropdown(true)}
+                  placeholder={
+                    selectedVesselId === 0
+                      ? "Select vessel first"
+                      : "Search work order..."
+                  }
+                  disabled={loadingWorkOrders || selectedVesselId === 0}
+                  className="w-full px-3 py-2 pr-8 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {workOrderSearchTerm && (
+                  <button
+                    onClick={handleClearWorkOrderSearch}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                  >
+                    ✕
+                  </button>
                 )}
               </div>
+
+              {/* Work Order Dropdown */}
+              {showWorkOrderDropdown &&
+                selectedVesselId > 0 &&
+                filteredWorkOrdersForSearch.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {filteredWorkOrdersForSearch.map((workOrder) => (
+                      <div
+                        key={workOrder.id}
+                        onClick={() =>
+                          handleWorkOrderSelectFromDropdown(workOrder)
+                        }
+                        className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                          selectedWorkOrderId === workOrder.id
+                            ? "bg-blue-100"
+                            : ""
+                        }`}
+                      >
+                        <div className="font-medium text-gray-900 text-sm">
+                          {workOrder.shipyard_wo_number}
+                        </div>
+                        {workOrder.customer_wo_number && (
+                          <div className="text-xs text-gray-600">
+                            Customer: {workOrder.customer_wo_number}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   supabase,
@@ -23,6 +23,11 @@ export default function EditWorkOrder() {
   const [loadingVessels, setLoadingVessels] = useState(true);
   const [loadingWorkOrder, setLoadingWorkOrder] = useState(true);
 
+  // Search state for vessel dropdown
+  const [vesselSearchTerm, setVesselSearchTerm] = useState("");
+  const [showVesselDropdown, setShowVesselDropdown] = useState(false);
+  const vesselDropdownRef = useRef<HTMLDivElement>(null);
+
   // Form data state
   const [formData, setFormData] = useState({
     // Required fields
@@ -40,6 +45,23 @@ export default function EditWorkOrder() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        vesselDropdownRef.current &&
+        !vesselDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowVesselDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Fetch work order data
   useEffect(() => {
@@ -93,6 +115,16 @@ export default function EditWorkOrder() {
           is_additional_wo: data.is_additional_wo || false,
           kapro_id: data.kapro_id?.toString() || "",
         });
+
+        // Set vessel search term
+        if (data.vessel) {
+          const vessel = Array.isArray(data.vessel)
+            ? data.vessel[0]
+            : data.vessel;
+          setVesselSearchTerm(
+            `${vessel.name} - ${vessel.type} (${vessel.company})`
+          );
+        }
       } catch (err) {
         console.error("Error fetching work order:", err);
         setError(
@@ -152,6 +184,31 @@ export default function EditWorkOrder() {
 
     fetchKapros();
   }, []);
+
+  // Filter vessels based on search term
+  const filteredVessels = vessels.filter((vessel) => {
+    const searchLower = vesselSearchTerm.toLowerCase();
+    return (
+      vessel.name?.toLowerCase().includes(searchLower) ||
+      vessel.type?.toLowerCase().includes(searchLower) ||
+      vessel.company?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  const handleVesselSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVesselSearchTerm(e.target.value);
+    setShowVesselDropdown(true);
+    // Clear selection when typing
+    if (formData.vessel_id) {
+      setFormData((prev) => ({ ...prev, vessel_id: "" }));
+    }
+  };
+
+  const handleVesselSelect = (vessel: Vessel) => {
+    setFormData((prev) => ({ ...prev, vessel_id: vessel.id.toString() }));
+    setVesselSearchTerm(`${vessel.name} - ${vessel.type} (${vessel.company})`);
+    setShowVesselDropdown(false);
+  };
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -431,25 +488,56 @@ export default function EditWorkOrder() {
               </div>
             </div>
 
-            {/* Vessel Selection */}
-            <div>
+            {/* Vessel Selection with Search */}
+            <div className="relative" ref={vesselDropdownRef}>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 Vessel <span className="text-red-500">*</span>
               </label>
-              <select
-                name="vessel_id"
-                value={formData.vessel_id}
-                onChange={handleInputChange}
+              <input
+                type="text"
+                value={vesselSearchTerm}
+                onChange={handleVesselSearch}
+                onFocus={() => setShowVesselDropdown(true)}
+                placeholder="Search vessel by name, type, or company..."
                 className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors"
-                required
-              >
-                <option value="">Select Vessel</option>
-                {vessels.map((vessel) => (
-                  <option key={vessel.id} value={vessel.id}>
-                    {vessel.name} - {vessel.type} ({vessel.company})
-                  </option>
-                ))}
-              </select>
+                required={!formData.vessel_id}
+              />
+              {!formData.vessel_id && vesselSearchTerm && (
+                <p className="text-xs text-amber-600 mt-1">
+                  Please select a vessel from the dropdown
+                </p>
+              )}
+
+              {/* Dropdown */}
+              {showVesselDropdown && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {filteredVessels.length > 0 ? (
+                    filteredVessels.map((vessel) => (
+                      <div
+                        key={vessel.id}
+                        onClick={() => handleVesselSelect(vessel)}
+                        className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                          formData.vessel_id === vessel.id.toString()
+                            ? "bg-blue-100"
+                            : ""
+                        }`}
+                      >
+                        <div className="font-medium text-slate-900">
+                          {vessel.name}
+                        </div>
+                        <div className="text-sm text-slate-600">
+                          {vessel.type} • {vessel.company}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-slate-500 text-sm">
+                      No vessels found
+                    </div>
+                  )}
+                </div>
+              )}
+
               {vessels.length === 0 && (
                 <p className="text-sm text-amber-600 mt-1">
                   No vessels available. Please add vessels first.

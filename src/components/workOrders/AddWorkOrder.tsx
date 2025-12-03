@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase, type Vessel, type Kapro } from "../../lib/supabase";
 
@@ -11,6 +11,11 @@ export default function AddWorkOrder() {
   const [loadingKapros, setLoadingKapros] = useState(true);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [currentUser, setCurrentUser] = useState<any>(null);
+
+  // Search state for vessel dropdown
+  const [vesselSearchTerm, setVesselSearchTerm] = useState("");
+  const [showVesselDropdown, setShowVesselDropdown] = useState(false);
+  const vesselDropdownRef = useRef<HTMLDivElement>(null);
 
   const [formData, setFormData] = useState({
     // Required fields
@@ -32,12 +37,37 @@ export default function AddWorkOrder() {
   // Check if there's a preselected vessel from the vessel page
   useEffect(() => {
     if (location.state?.preselectedVesselId) {
-      setFormData((prev) => ({
-        ...prev,
-        vessel_id: location.state.preselectedVesselId.toString(),
-      }));
+      const preselectedVessel = vessels.find(
+        (v) => v.id === location.state.preselectedVesselId
+      );
+      if (preselectedVessel) {
+        setFormData((prev) => ({
+          ...prev,
+          vessel_id: location.state.preselectedVesselId.toString(),
+        }));
+        setVesselSearchTerm(
+          `${preselectedVessel.name} - ${preselectedVessel.type} (${preselectedVessel.company})`
+        );
+      }
     }
-  }, [location.state]);
+  }, [location.state, vessels]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        vesselDropdownRef.current &&
+        !vesselDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowVesselDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Get current user on component mount
   useEffect(() => {
@@ -108,6 +138,31 @@ export default function AddWorkOrder() {
     fetchKapros();
   }, []);
 
+  // Filter vessels based on search term
+  const filteredVessels = vessels.filter((vessel) => {
+    const searchLower = vesselSearchTerm.toLowerCase();
+    return (
+      vessel.name?.toLowerCase().includes(searchLower) ||
+      vessel.type?.toLowerCase().includes(searchLower) ||
+      vessel.company?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  const handleVesselSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVesselSearchTerm(e.target.value);
+    setShowVesselDropdown(true);
+    // Clear selection when typing
+    if (formData.vessel_id) {
+      setFormData((prev) => ({ ...prev, vessel_id: "" }));
+    }
+  };
+
+  const handleVesselSelect = (vessel: Vessel) => {
+    setFormData((prev) => ({ ...prev, vessel_id: vessel.id.toString() }));
+    setVesselSearchTerm(`${vessel.name} - ${vessel.type} (${vessel.company})`);
+    setShowVesselDropdown(false);
+  };
+
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
@@ -167,7 +222,7 @@ export default function AddWorkOrder() {
         .from("profiles")
         .select("id")
         .eq("auth_user_id", currentUser.id)
-        .maybeSingle(); // Use maybeSingle instead of single to avoid error if no record
+        .maybeSingle();
 
       if (profileError) {
         console.error("Error querying user profile:", profileError);
@@ -179,7 +234,6 @@ export default function AddWorkOrder() {
       let userId;
 
       if (!userProfile) {
-        // Create user profile if it doesn't exist
         const { data: newProfile, error: createError } = await supabase
           .from("user_profile")
           .insert({
@@ -196,7 +250,6 @@ export default function AddWorkOrder() {
         if (createError) {
           console.error("Error creating user profile:", createError);
 
-          // Check if it's a duplicate key error (user profile might have been created by another process)
           if (createError.code === "23505") {
             const { data: existingProfile, error: fetchError } = await supabase
               .from("user_profile")
@@ -224,10 +277,10 @@ export default function AddWorkOrder() {
         userId = userProfile.id;
       }
 
-      // Ensure userId is a valid integer
       if (!userId || typeof userId !== "number") {
         throw new Error(`Invalid user ID: ${userId}`);
       }
+
       const submitData = {
         vessel_id: parseInt(formData.vessel_id.toString()),
         shipyard_wo_number: formData.shipyard_wo_number.trim(),
@@ -241,6 +294,7 @@ export default function AddWorkOrder() {
           : null,
         user_id: userId,
       };
+
       const { data, error } = await supabase
         .from("work_order")
         .insert([submitData])
@@ -254,6 +308,7 @@ export default function AddWorkOrder() {
       if (!data || data.length === 0) {
         throw new Error("No data returned from work order creation");
       }
+
       navigate("/work-orders", {
         state: { message: "Work order created successfully!" },
       });
@@ -345,25 +400,56 @@ export default function AddWorkOrder() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
-            {/* Vessel Selection */}
-            <div>
+            {/* Vessel Selection with Search */}
+            <div className="relative" ref={vesselDropdownRef}>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Vessel <span className="text-red-500">*</span>
               </label>
-              <select
-                name="vessel_id"
-                value={formData.vessel_id}
-                onChange={handleInputChange}
+              <input
+                type="text"
+                value={vesselSearchTerm}
+                onChange={handleVesselSearch}
+                onFocus={() => setShowVesselDropdown(true)}
+                placeholder="Search vessel by name, type, or company..."
                 className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              >
-                <option value="">Select Vessel</option>
-                {vessels.map((vessel) => (
-                  <option key={vessel.id} value={vessel.id}>
-                    {vessel.name} - {vessel.type} ({vessel.company})
-                  </option>
-                ))}
-              </select>
+                required={!formData.vessel_id}
+              />
+              {!formData.vessel_id && vesselSearchTerm && (
+                <p className="text-xs text-amber-600 mt-1">
+                  Please select a vessel from the dropdown
+                </p>
+              )}
+
+              {/* Dropdown */}
+              {showVesselDropdown && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {filteredVessels.length > 0 ? (
+                    filteredVessels.map((vessel) => (
+                      <div
+                        key={vessel.id}
+                        onClick={() => handleVesselSelect(vessel)}
+                        className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                          formData.vessel_id === vessel.id.toString()
+                            ? "bg-blue-100"
+                            : ""
+                        }`}
+                      >
+                        <div className="font-medium text-gray-900">
+                          {vessel.name}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {vessel.type} • {vessel.company}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-gray-500 text-sm">
+                      No vessels found
+                    </div>
+                  )}
+                </div>
+              )}
+
               {vessels.length === 0 && (
                 <p className="text-sm text-gray-500 mt-1">
                   No vessels available. Please add vessels first.
@@ -481,7 +567,7 @@ export default function AddWorkOrder() {
                   htmlFor="is_additional_wo"
                   className="ml-2 block text-sm text-gray-700"
                 >
-                  This is an additional work order
+                  Check this if this is an ADDITIONAL Work Order
                 </label>
               </div>
 

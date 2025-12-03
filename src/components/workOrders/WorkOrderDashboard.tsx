@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 
@@ -25,6 +25,10 @@ export default function WorkOrderDashboard() {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   const [vesselSearchTerm, setVesselSearchTerm] = useState("");
+  const [showVesselDropdown, setShowVesselDropdown] = useState(false);
+  const vesselDropdownRef = useRef<HTMLDivElement>(null);
+  const [selectedVesselId, setSelectedVesselId] = useState<number | null>(null);
+
   const [currentPage, setCurrentPage] = useState(1);
   const [vesselsPerPage] = useState(12);
   const [sortBy, setSortBy] = useState<"name" | "totalWorkOrders">("name");
@@ -32,6 +36,23 @@ export default function WorkOrderDashboard() {
 
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        vesselDropdownRef.current &&
+        !vesselDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowVesselDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // FIXED: Proper memoization and error handling
   const fetchWorkOrders = useCallback(async () => {
@@ -150,17 +171,49 @@ export default function WorkOrderDashboard() {
     }
   }, []); // Empty deps - functions are stable
 
-  // Filter and sort vessels
+  // Filter vessels for search dropdown
+  const searchFilteredVessels = vessels.filter((vessel) => {
+    const searchLower = vesselSearchTerm.toLowerCase();
+    return (
+      vessel.name?.toLowerCase().includes(searchLower) ||
+      vessel.type?.toLowerCase().includes(searchLower) ||
+      vessel.company?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  const handleVesselSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVesselSearchTerm(e.target.value);
+    setShowVesselDropdown(true);
+    setSelectedVesselId(null);
+  };
+
+  const handleVesselSelect = (vessel: VesselSummary) => {
+    setSelectedVesselId(vessel.id);
+    setVesselSearchTerm(`${vessel.name} - ${vessel.type} (${vessel.company})`);
+    setShowVesselDropdown(false);
+  };
+
+  const handleClearSearch = () => {
+    setVesselSearchTerm("");
+    setSelectedVesselId(null);
+    setShowVesselDropdown(false);
+  };
+
+  // Filter and sort vessels based on search
   useEffect(() => {
     let filtered = vessels;
 
-    if (vesselSearchTerm) {
+    // If a vessel is selected from dropdown, show only that vessel
+    if (selectedVesselId) {
+      filtered = vessels.filter((vessel) => vessel.id === selectedVesselId);
+    } else if (vesselSearchTerm && !showVesselDropdown) {
+      // If user typed but didn't select, filter by text
       const searchLower = vesselSearchTerm.toLowerCase();
       filtered = vessels.filter(
         (vessel) =>
-          vessel.name.toLowerCase().includes(searchLower) ||
-          vessel.type.toLowerCase().includes(searchLower) ||
-          vessel.company.toLowerCase().includes(searchLower)
+          vessel.name?.toLowerCase().includes(searchLower) ||
+          vessel.type?.toLowerCase().includes(searchLower) ||
+          vessel.company?.toLowerCase().includes(searchLower)
       );
     }
 
@@ -195,7 +248,14 @@ export default function WorkOrderDashboard() {
 
     setFilteredVessels(filtered);
     setCurrentPage(1);
-  }, [vessels, vesselSearchTerm, sortBy, sortDirection]);
+  }, [
+    vessels,
+    vesselSearchTerm,
+    selectedVesselId,
+    showVesselDropdown,
+    sortBy,
+    sortDirection,
+  ]);
 
   // Pagination
   const totalPages = Math.ceil(filteredVessels.length / vesselsPerPage);
@@ -351,17 +411,58 @@ export default function WorkOrderDashboard() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search vessels..."
-                  value={vesselSearchTerm}
-                  onChange={(e) => setVesselSearchTerm(e.target.value)}
-                  className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <span className="absolute left-3 top-2.5 text-gray-400">
-                  🔍
-                </span>
+              {/* Searchable Vessel Dropdown */}
+              <div className="relative" ref={vesselDropdownRef}>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search vessels..."
+                    value={vesselSearchTerm}
+                    onChange={handleVesselSearch}
+                    onFocus={() => setShowVesselDropdown(true)}
+                    className="w-full sm:w-64 pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <span className="absolute left-3 top-2.5 text-gray-400">
+                    🔍
+                  </span>
+                  {(vesselSearchTerm || selectedVesselId) && (
+                    <button
+                      onClick={handleClearSearch}
+                      className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Dropdown */}
+                {showVesselDropdown && searchFilteredVessels.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {searchFilteredVessels.map((vessel) => (
+                      <div
+                        key={vessel.id}
+                        onClick={() => handleVesselSelect(vessel)}
+                        className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                          selectedVesselId === vessel.id ? "bg-blue-100" : ""
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              {vessel.name}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {vessel.type} • {vessel.company}
+                            </div>
+                          </div>
+                          <div className="text-sm text-blue-600 font-medium">
+                            {vessel.totalWorkOrders} WO
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <select
@@ -487,13 +588,13 @@ export default function WorkOrderDashboard() {
           ) : (
             <div className="text-center py-12">
               <span className="text-gray-400 text-4xl mb-4 block">🚢</span>
-              {vesselSearchTerm ? (
+              {vesselSearchTerm || selectedVesselId ? (
                 <>
                   <p className="text-gray-500 text-lg mb-2">
-                    No vessels found matching "{vesselSearchTerm}"
+                    No vessels found matching your search
                   </p>
                   <button
-                    onClick={() => setVesselSearchTerm("")}
+                    onClick={handleClearSearch}
                     className="text-blue-600 hover:text-blue-800 transition-colors"
                   >
                     Clear search

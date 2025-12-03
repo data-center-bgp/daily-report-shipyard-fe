@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   supabase,
@@ -60,6 +60,59 @@ export default function WorkVerification() {
   // Filter states
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [selectedVesselId, setSelectedVesselId] = useState<number>(0);
+
+  // Search dropdown states
+  const [vesselSearchTerm, setVesselSearchTerm] = useState("");
+  const [showVesselDropdown, setShowVesselDropdown] = useState(false);
+  const vesselDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        vesselDropdownRef.current &&
+        !vesselDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowVesselDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Filter vessels for search dropdown
+  const filteredVesselsForSearch = vessels.filter((vessel) => {
+    const searchLower = vesselSearchTerm.toLowerCase();
+    return (
+      vessel.name?.toLowerCase().includes(searchLower) ||
+      vessel.type?.toLowerCase().includes(searchLower) ||
+      vessel.company?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  // Vessel search handlers
+  const handleVesselSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVesselSearchTerm(e.target.value);
+    setShowVesselDropdown(true);
+    if (selectedVesselId) {
+      setSelectedVesselId(0);
+    }
+  };
+
+  const handleVesselSelectFromDropdown = (vessel: Vessel) => {
+    setSelectedVesselId(vessel.id);
+    setVesselSearchTerm(`${vessel.name} - ${vessel.type} (${vessel.company})`);
+    setShowVesselDropdown(false);
+  };
+
+  const handleClearVesselSearch = () => {
+    setVesselSearchTerm("");
+    setSelectedVesselId(0);
+    setShowVesselDropdown(false);
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -391,23 +444,54 @@ export default function WorkVerification() {
         {/* Filters */}
         <div className="p-6 border-b border-gray-200">
           <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
+            {/* Vessel Filter with Search Dropdown */}
+            <div className="flex-1 relative" ref={vesselDropdownRef}>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 🚢 Filter by Vessel
               </label>
-              <select
-                value={selectedVesselId}
-                onChange={(e) => setSelectedVesselId(parseInt(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value={0}>All Vessels</option>
-                {vessels.map((vessel) => (
-                  <option key={vessel.id} value={vessel.id}>
-                    {vessel.name} ({vessel.type})
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={vesselSearchTerm}
+                  onChange={handleVesselSearch}
+                  onFocus={() => setShowVesselDropdown(true)}
+                  placeholder="Search vessel..."
+                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {vesselSearchTerm && (
+                  <button
+                    onClick={handleClearVesselSearch}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Vessel Dropdown */}
+              {showVesselDropdown && filteredVesselsForSearch.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {filteredVesselsForSearch.map((vessel) => (
+                    <div
+                      key={vessel.id}
+                      onClick={() => handleVesselSelectFromDropdown(vessel)}
+                      className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                        selectedVesselId === vessel.id ? "bg-blue-100" : ""
+                      }`}
+                    >
+                      <div className="font-medium text-gray-900 text-sm">
+                        {vessel.name}
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        {vessel.type} • {vessel.company}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
+
+            {/* Text Search */}
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 🔍 Search
