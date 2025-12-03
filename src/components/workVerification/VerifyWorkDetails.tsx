@@ -15,6 +15,10 @@ interface WorkDetailsWithProgress extends WorkDetails {
     vessel?: Vessel;
     customer_wo_date?: string;
   };
+  location?: {
+    id: number;
+    location: string;
+  };
   work_progress?: Array<{
     id: number;
     progress_percentage: number;
@@ -88,32 +92,36 @@ export default function VerifyWorkDetails() {
         .from("work_details")
         .select(
           `
-          *,
-          work_order (
-            id,
-            shipyard_wo_number,
-            customer_wo_number,
-            shipyard_wo_date,
-            customer_wo_date,
-            vessel (
-              id,
-              name,
-              type,
-              company
-            )
-          ),
-          work_progress (
-            id,
-            progress_percentage,
-            report_date,
-            created_at,
-            profiles (
-              id,
-              name,
-              email
-            )
-          )
-        `
+    *,
+    work_order (
+      id,
+      shipyard_wo_number,
+      customer_wo_number,
+      shipyard_wo_date,
+      customer_wo_date,
+      vessel (
+        id,
+        name,
+        type,
+        company
+      )
+    ),
+    location:location_id (
+      id,
+      location
+    ),
+    work_progress (
+      id,
+      progress_percentage,
+      report_date,
+      created_at,
+      profiles (
+        id,
+        name,
+        email
+      )
+    )
+  `
         )
         .eq("id", parseInt(workDetailsId))
         .single();
@@ -426,7 +434,10 @@ export default function VerifyWorkDetails() {
                       Location
                     </label>
                     <p className="mt-1 text-sm text-slate-700 bg-gradient-to-r from-slate-50 to-slate-100 p-2 rounded-lg border">
-                      📍 {workDetails.location}
+                      📍{" "}
+                      {workDetails.location?.location ||
+                        workDetails.location ||
+                        "-"}
                     </p>
                   </div>
                   <div>

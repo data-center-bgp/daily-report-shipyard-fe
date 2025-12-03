@@ -235,26 +235,6 @@ export default function WODetailsTable({
     }
   };
 
-  // Handle vessel selection
-  const handleVesselChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const vesselId = parseInt(e.target.value);
-    setSelectedVesselId(vesselId);
-    setSelectedWorkOrderId(0); // Reset work order selection
-    setWorkOrders([]); // Clear work orders
-    setCurrentPage(1); // Reset to first page
-
-    if (vesselId > 0) {
-      fetchWorkOrdersForVessel(vesselId);
-    }
-  };
-
-  // Handle work order selection
-  const handleWorkOrderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const workOrderId = parseInt(e.target.value);
-    setSelectedWorkOrderId(workOrderId);
-    setCurrentPage(1); // Reset to first page
-  };
-
   const fetchWorkDetails = useCallback(async () => {
     try {
       setLoading(true);

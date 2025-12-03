@@ -656,24 +656,6 @@ export default function WorkProgressTable({
     );
   });
 
-  const handleVesselChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const vesselId = parseInt(e.target.value);
-    setSelectedVesselId(vesselId);
-    setSelectedWorkOrderId(0);
-    setSelectedWorkDetailsIdFilter(0);
-  };
-
-  const handleWorkOrderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const workOrderId = parseInt(e.target.value);
-    setSelectedWorkOrderId(workOrderId);
-    setSelectedWorkDetailsIdFilter(0);
-  };
-
-  const handleWorkDetailsChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const workDetailsId = parseInt(e.target.value);
-    setSelectedWorkDetailsIdFilter(workDetailsId);
-  };
-
   const clearFilters = () => {
     setSelectedVesselId(0);
     setSelectedWorkOrderId(0);

@@ -14,6 +14,10 @@ interface WorkDetailsWithProgress extends WorkDetails {
   work_order?: WorkOrder & {
     vessel?: Vessel;
   };
+  location?: {
+    id: number;
+    location: string;
+  };
 }
 
 interface WorkVerification {
@@ -124,25 +128,29 @@ export default function WorkVerification() {
         .from("work_details")
         .select(
           `
-          *,
-          work_order (
-            id,
-            shipyard_wo_number,
-            customer_wo_number,
-            shipyard_wo_date,
-            customer_wo_date,
-            vessel (
-              id,
-              name,
-              type,
-              company
-            )
-          ),
-          work_progress (
-            progress_percentage,
-            report_date
-          )
-        `
+    *,
+    work_order (
+      id,
+      shipyard_wo_number,
+      customer_wo_number,
+      shipyard_wo_date,
+      customer_wo_date,
+      vessel (
+        id,
+        name,
+        type,
+        company
+      )
+    ),
+    work_progress (
+      progress_percentage,
+      report_date
+    ),
+    location:location_id (
+      id,
+      location
+    )
+  `
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
@@ -185,34 +193,37 @@ export default function WorkVerification() {
 
       setCompletedWorkDetails(completed);
 
-      // Fetch existing verifications
       const { data: verificationData, error: verError } = await supabase
         .from("work_verification")
         .select(
           `
-          *,
-          work_details (
-            *,
-            work_order (
-              id,
-              shipyard_wo_number,
-              customer_wo_number,
-              shipyard_wo_date,
-              customer_wo_date,
-              vessel (
-                id,
-                name,
-                type,
-                company
-              )
-            )
-          ),
-          profiles (
-            id,
-            name,
-            email
-          )
-        `
+    *,
+    work_details (
+      *,
+      location:location_id (
+        id,
+        location
+      ),
+      work_order (
+        id,
+        shipyard_wo_number,
+        customer_wo_number,
+        shipyard_wo_date,
+        customer_wo_date,
+        vessel (
+          id,
+          name,
+          type,
+          company
+        )
+      )
+    ),
+    profiles (
+      id,
+      name,
+      email
+    )
+  `
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
@@ -573,7 +584,7 @@ export default function WorkVerification() {
                                 : wd.description}
                             </div>
                             <div className="text-sm text-gray-500">
-                              📍 {wd.location}
+                              📍 {wd.location?.location || wd.location || "-"}
                             </div>
                             <div className="text-xs text-gray-400">
                               👤 {wd.pic}
@@ -701,7 +712,10 @@ export default function WorkVerification() {
                               : verification.work_details?.description}
                           </div>
                           <div className="text-sm text-gray-500">
-                            📍 {verification.work_details?.location}
+                            📍{" "}
+                            {verification.work_details?.location?.location ||
+                              verification.work_details?.location ||
+                              "-"}
                           </div>
                           <div className="text-xs text-gray-400">
                             👤 {verification.work_details?.pic}

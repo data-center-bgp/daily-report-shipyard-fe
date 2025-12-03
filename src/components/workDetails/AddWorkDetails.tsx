@@ -366,31 +366,6 @@ export default function AddWorkDetails() {
     }
   };
 
-  // Handle vessel selection
-  const handleVesselChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const vesselId = parseInt(e.target.value);
-    setSelectedVesselId(vesselId);
-
-    // Reset work order selection
-    setWorkOrders([]);
-    setSelectedWorkOrder(null);
-    setFormData((prev) => ({ ...prev, work_order_id: 0 }));
-
-    // Fetch work orders for selected vessel
-    if (vesselId > 0) {
-      fetchWorkOrdersForVessel(vesselId);
-    }
-  };
-
-  // Handle work order selection
-  const handleWorkOrderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const workOrderId = parseInt(e.target.value);
-    setFormData((prev) => ({ ...prev, work_order_id: workOrderId }));
-
-    const workOrder = workOrders.find((wo) => wo.id === workOrderId);
-    setSelectedWorkOrder(workOrder || null);
-  };
-
   // Handle file selection
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -738,8 +713,6 @@ export default function AddWorkDetails() {
     }
     return "Create detailed work breakdown with specific timelines and responsibilities";
   };
-
-  const selectedVessel = vessels.find((v) => v.id === selectedVesselId);
 
   return (
     <div className="p-8">
