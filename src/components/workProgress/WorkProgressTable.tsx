@@ -690,7 +690,10 @@ export default function WorkProgressTable({
           `
           id,
           description,
-          location,
+          location:location_id (
+          id,
+          location
+          ),
           pic,
           planned_start_date,
           target_close_date,
@@ -764,7 +767,10 @@ export default function WorkProgressTable({
               `
               id,
               description,
-              location,
+              location:location_id (
+                id,
+                location
+                ),
               pic,
               planned_start_date,
               target_close_date,

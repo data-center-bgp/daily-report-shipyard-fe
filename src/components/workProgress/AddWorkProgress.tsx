@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { uploadProgressEvidence } from "../../utils/progressEvidenceHandler";
@@ -79,6 +79,18 @@ export default function AddWorkProgress({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [vesselSearchTerm, setVesselSearchTerm] = useState("");
+  const [showVesselDropdown, setShowVesselDropdown] = useState(false);
+  const vesselDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [workOrderSearchTerm, setWorkOrderSearchTerm] = useState("");
+  const [showWorkOrderDropdown, setShowWorkOrderDropdown] = useState(false);
+  const workOrderDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [workDetailsSearchTerm, setWorkDetailsSearchTerm] = useState("");
+  const [showWorkDetailsDropdown, setShowWorkDetailsDropdown] = useState(false);
+  const workDetailsDropdownRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     fetchVessels();
 
@@ -104,6 +116,34 @@ export default function AddWorkProgress({
       setSelectedWorkDetailsId(effectiveWorkDetailsId || 0);
     }
   }, [selectedWorkOrderId, effectiveWorkDetailsId]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        vesselDropdownRef.current &&
+        !vesselDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowVesselDropdown(false);
+      }
+      if (
+        workOrderDropdownRef.current &&
+        !workOrderDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowWorkOrderDropdown(false);
+      }
+      if (
+        workDetailsDropdownRef.current &&
+        !workDetailsDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowWorkDetailsDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const fetchVessels = async () => {
     try {
@@ -242,22 +282,87 @@ export default function AddWorkProgress({
     }
   };
 
-  const handleVesselChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const vesselId = parseInt(e.target.value);
-    setSelectedVesselId(vesselId);
+  const handleVesselSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVesselSearchTerm(e.target.value);
+    setShowVesselDropdown(true);
+    if (selectedVesselId) {
+      setSelectedVesselId(0);
+      setSelectedWorkOrderId(0);
+      setSelectedWorkDetailsId(0);
+      setWorkOrders([]);
+      setWorkDetailsList([]);
+    }
+  };
+
+  const handleVesselSelectFromDropdown = (vessel: VesselFormData) => {
+    setSelectedVesselId(vessel.id);
+    setVesselSearchTerm(`${vessel.name} - ${vessel.type} (${vessel.company})`);
+    setShowVesselDropdown(false);
     setSelectedWorkOrderId(0);
     setSelectedWorkDetailsId(0);
+    setWorkOrderSearchTerm("");
+    setWorkDetailsSearchTerm("");
   };
 
-  const handleWorkOrderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const workOrderId = parseInt(e.target.value);
-    setSelectedWorkOrderId(workOrderId);
+  const handleClearVesselSearch = () => {
+    setVesselSearchTerm("");
+    setSelectedVesselId(0);
+    setShowVesselDropdown(false);
+    setSelectedWorkOrderId(0);
     setSelectedWorkDetailsId(0);
+    setWorkOrderSearchTerm("");
+    setWorkDetailsSearchTerm("");
+    setWorkOrders([]);
+    setWorkDetailsList([]);
   };
 
-  const handleWorkDetailsChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const workDetailsId = parseInt(e.target.value);
-    setSelectedWorkDetailsId(workDetailsId);
+  const handleWorkOrderSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setWorkOrderSearchTerm(e.target.value);
+    setShowWorkOrderDropdown(true);
+    if (selectedWorkOrderId) {
+      setSelectedWorkOrderId(0);
+      setSelectedWorkDetailsId(0);
+      setWorkDetailsList([]);
+    }
+  };
+
+  const handleWorkOrderSelectFromDropdown = (workOrder: WorkOrderFormData) => {
+    setSelectedWorkOrderId(workOrder.id);
+    setWorkOrderSearchTerm(workOrder.shipyard_wo_number || "");
+    setShowWorkOrderDropdown(false);
+    setSelectedWorkDetailsId(0);
+    setWorkDetailsSearchTerm("");
+  };
+
+  const handleClearWorkOrderSearch = () => {
+    setWorkOrderSearchTerm("");
+    setSelectedWorkOrderId(0);
+    setShowWorkOrderDropdown(false);
+    setSelectedWorkDetailsId(0);
+    setWorkDetailsSearchTerm("");
+    setWorkDetailsList([]);
+  };
+
+  const handleWorkDetailsSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setWorkDetailsSearchTerm(e.target.value);
+    setShowWorkDetailsDropdown(true);
+    if (selectedWorkDetailsId) {
+      setSelectedWorkDetailsId(0);
+    }
+  };
+
+  const handleWorkDetailsSelectFromDropdown = (
+    workDetails: WorkDetailsFormData
+  ) => {
+    setSelectedWorkDetailsId(workDetails.id);
+    setWorkDetailsSearchTerm(workDetails.description);
+    setShowWorkDetailsDropdown(false);
+  };
+
+  const handleClearWorkDetailsSearch = () => {
+    setWorkDetailsSearchTerm("");
+    setSelectedWorkDetailsId(effectiveWorkDetailsId || 0);
+    setShowWorkDetailsDropdown(false);
   };
 
   const handleInputChange = (
@@ -266,10 +371,17 @@ export default function AddWorkProgress({
     const { name, value } = e.target;
 
     if (name === "progress_percentage") {
-      const numericValue = value.replace(/[^0-9]/g, "");
+      const formattedValue = value.replace(/\./g, ",");
+      const numericValue = formattedValue.replace(/[^0-9,]/g, "");
+
+      const commaCount = (numericValue.match(/,/g) || []).length;
+      if (commaCount > 1) return;
+
+      const parsedValue =
+        numericValue === "" ? 0 : parseFloat(numericValue.replace(",", "."));
       if (
         numericValue === "" ||
-        (parseInt(numericValue) >= 0 && parseInt(numericValue) <= 100)
+        (!isNaN(parsedValue) && parsedValue >= 0 && parsedValue <= 100)
       ) {
         setFormData((prev) => ({ ...prev, progress_percentage: numericValue }));
       }
@@ -297,9 +409,13 @@ export default function AddWorkProgress({
       return;
     }
 
-    const progressValue = parseInt(formData.progress_percentage) || 0;
+    const progressValue = formData.progress_percentage
+      ? parseFloat(formData.progress_percentage.replace(",", ".")) || 0
+      : 0;
+
     if (
       formData.progress_percentage === "" ||
+      isNaN(progressValue) ||
       progressValue < 0 ||
       progressValue > 100
     ) {
@@ -439,11 +555,14 @@ export default function AddWorkProgress({
     (wd) => wd.id === selectedWorkDetailsId
   );
 
-  const progressValue = parseInt(formData.progress_percentage) || 0;
+  const progressValue = formData.progress_percentage
+    ? parseFloat(formData.progress_percentage.replace(",", ".")) || 0
+    : 0;
   const isFormValid =
     selectedWorkDetailsId > 0 &&
     formData.report_date &&
     formData.progress_percentage !== "" &&
+    !isNaN(progressValue) &&
     progressValue >= 0 &&
     progressValue <= 100;
 
@@ -454,6 +573,39 @@ export default function AddWorkProgress({
       day: "numeric",
     });
   };
+
+  // Add these filter functions:
+  const filteredVesselsForSearch = vessels.filter((vessel) => {
+    const searchLower = vesselSearchTerm.toLowerCase();
+    return (
+      vessel.name?.toLowerCase().includes(searchLower) ||
+      vessel.type?.toLowerCase().includes(searchLower) ||
+      vessel.company?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  const filteredWorkOrdersForSearch = workOrders.filter((wo) => {
+    const searchLower = workOrderSearchTerm.toLowerCase();
+    return wo.shipyard_wo_number?.toLowerCase().includes(searchLower);
+  });
+
+  const filteredWorkDetailsForSearch = workDetailsList.filter((wd) => {
+    const searchLower = workDetailsSearchTerm.toLowerCase();
+
+    // Handle location search
+    let locationMatch = false;
+    if (wd.location) {
+      locationMatch = (wd.location.location || "")
+        .toLowerCase()
+        .includes(searchLower);
+    }
+
+    return (
+      wd.description.toLowerCase().includes(searchLower) ||
+      locationMatch ||
+      wd.pic.toLowerCase().includes(searchLower)
+    );
+  });
 
   return (
     <div className="p-8">
@@ -483,91 +635,174 @@ export default function AddWorkProgress({
               📋 Work Selection
             </h3>
 
-            {/* Step 1: Vessel Selection */}
-            {!effectiveWorkDetailsId && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    🚢 Step 1: Select Vessel
-                  </label>
-                  <select
-                    value={selectedVesselId}
-                    onChange={handleVesselChange}
-                    disabled={loadingVessels}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            <div className="relative" ref={vesselDropdownRef}>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                🚢 Step 1: Select Vessel
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={vesselSearchTerm}
+                  onChange={handleVesselSearch}
+                  onFocus={() => setShowVesselDropdown(true)}
+                  placeholder="Search vessel..."
+                  disabled={loadingVessels}
+                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {vesselSearchTerm && (
+                  <button
+                    onClick={handleClearVesselSearch}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                   >
-                    <option value={0}>
-                      {loadingVessels
-                        ? "Loading vessels..."
-                        : "Select a vessel"}
-                    </option>
-                    {vessels.map((vessel) => (
-                      <option key={vessel.id} value={vessel.id}>
-                        {vessel.name} ({vessel.type})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Step 2: Work Order Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    📋 Step 2: Select Work Order
-                  </label>
-                  <select
-                    value={selectedWorkOrderId}
-                    onChange={handleWorkOrderChange}
-                    disabled={!selectedVesselId || loadingWorkOrders}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50"
-                  >
-                    <option value={0}>
-                      {loadingWorkOrders
-                        ? "Loading work orders..."
-                        : selectedVesselId
-                        ? "Select a work order"
-                        : "Select vessel first"}
-                    </option>
-                    {workOrders.map((workOrder) => (
-                      <option key={workOrder.id} value={workOrder.id}>
-                        {workOrder.shipyard_wo_number}
-                        {workOrder.shipyard_wo_date &&
-                          ` (${formatWorkOrderDate(
-                            workOrder.shipyard_wo_date
-                          )})`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Step 3: Work Details Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    🔧 Step 3: Select Work Details
-                  </label>
-                  <select
-                    value={selectedWorkDetailsId}
-                    onChange={handleWorkDetailsChange}
-                    disabled={!selectedWorkOrderId || loadingWorkDetails}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50"
-                  >
-                    <option value={0}>
-                      {loadingWorkDetails
-                        ? "Loading work details..."
-                        : selectedWorkOrderId
-                        ? "Select work details"
-                        : "Select work order first"}
-                    </option>
-                    {workDetailsList.map((workDetails) => (
-                      <option key={workDetails.id} value={workDetails.id}>
-                        {workDetails.description.substring(0, 40)}
-                        {workDetails.description.length > 40 ? "..." : ""}
-                        {workDetails.location && ` (${workDetails.location})`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    ✕
+                  </button>
+                )}
               </div>
-            )}
+
+              {/* Vessel Dropdown */}
+              {showVesselDropdown && filteredVesselsForSearch.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {filteredVesselsForSearch.map((vessel) => (
+                    <div
+                      key={vessel.id}
+                      onClick={() => handleVesselSelectFromDropdown(vessel)}
+                      className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                        selectedVesselId === vessel.id ? "bg-blue-100" : ""
+                      }`}
+                    >
+                      <div className="font-medium text-gray-900 text-sm">
+                        {vessel.name}
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        {vessel.type} • {vessel.company}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="relative" ref={workOrderDropdownRef}>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📋 Step 2: Select Work Order
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={workOrderSearchTerm}
+                  onChange={handleWorkOrderSearch}
+                  onFocus={() => setShowWorkOrderDropdown(true)}
+                  placeholder={
+                    selectedVesselId === 0
+                      ? "Select vessel first"
+                      : "Search work order..."
+                  }
+                  disabled={loadingWorkOrders || selectedVesselId === 0}
+                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50"
+                />
+                {workOrderSearchTerm && (
+                  <button
+                    onClick={handleClearWorkOrderSearch}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Work Order Dropdown */}
+              {showWorkOrderDropdown &&
+                selectedVesselId > 0 &&
+                filteredWorkOrdersForSearch.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {filteredWorkOrdersForSearch.map((workOrder) => (
+                      <div
+                        key={workOrder.id}
+                        onClick={() =>
+                          handleWorkOrderSelectFromDropdown(workOrder)
+                        }
+                        className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                          selectedWorkOrderId === workOrder.id
+                            ? "bg-blue-100"
+                            : ""
+                        }`}
+                      >
+                        <div className="font-medium text-gray-900 text-sm">
+                          {workOrder.shipyard_wo_number}
+                        </div>
+                        {workOrder.shipyard_wo_date && (
+                          <div className="text-xs text-gray-600">
+                            {formatWorkOrderDate(workOrder.shipyard_wo_date)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+            </div>
+
+            <div className="relative" ref={workDetailsDropdownRef}>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                🔧 Step 3: Select Work Details
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={workDetailsSearchTerm}
+                  onChange={handleWorkDetailsSearch}
+                  onFocus={() => setShowWorkDetailsDropdown(true)}
+                  placeholder={
+                    selectedWorkOrderId === 0
+                      ? "Select work order first"
+                      : "Search work details..."
+                  }
+                  disabled={loadingWorkDetails || selectedWorkOrderId === 0}
+                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50"
+                />
+                {workDetailsSearchTerm && (
+                  <button
+                    onClick={handleClearWorkDetailsSearch}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Work Details Dropdown */}
+              {showWorkDetailsDropdown &&
+                selectedWorkOrderId > 0 &&
+                filteredWorkDetailsForSearch.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {filteredWorkDetailsForSearch.map((workDetails) => (
+                      <div
+                        key={workDetails.id}
+                        onClick={() =>
+                          handleWorkDetailsSelectFromDropdown(workDetails)
+                        }
+                        className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                          selectedWorkDetailsId === workDetails.id
+                            ? "bg-blue-100"
+                            : ""
+                        }`}
+                      >
+                        <div className="font-medium text-gray-900 text-sm">
+                          {workDetails.description.substring(0, 50)}
+                          {workDetails.description.length > 50 ? "..." : ""}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          📍{" "}
+                          {typeof workDetails.location === "string"
+                            ? workDetails.location || "No location"
+                            : workDetails.location?.location ||
+                              "No location"}{" "}
+                          • 👤 {workDetails.pic}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+            </div>
 
             {/* Selection Summary */}
             {(selectedVessel || effectiveWorkDetailsId) && (
@@ -651,14 +886,15 @@ export default function AddWorkProgress({
                       onFocus={handleProgressFocus}
                       required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-8"
-                      placeholder="Enter percentage (0-100)"
+                      placeholder="Enter percentage (e.g., 10,5 or 100)"
                     />
                     <span className="absolute right-3 top-2 text-gray-500 text-sm">
                       %
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    Enter a value between 0 and 100 (numbers only)
+                    Enter a value between 0 and 100 (use comma for decimals,
+                    e.g., 10,5 or 50,75)
                   </p>
                   {formData.progress_percentage !== "" && (
                     <div className="mt-1">
