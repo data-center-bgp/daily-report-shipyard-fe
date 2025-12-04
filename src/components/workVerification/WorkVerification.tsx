@@ -56,7 +56,6 @@ export default function WorkVerification() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"pending" | "verified">("pending");
 
@@ -370,15 +369,6 @@ export default function WorkVerification() {
           <div className="flex items-center">
             <span className="text-red-600 mr-2">⚠️</span>
             <p className="text-red-700 font-medium">{error}</p>
-          </div>
-        </div>
-      )}
-
-      {success && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <span className="text-green-600 mr-2">✅</span>
-            <p className="text-green-700 font-medium">{success}</p>
           </div>
         </div>
       )}
