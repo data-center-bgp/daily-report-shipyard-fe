@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  
+
   // FIXED: Use ref to track if initial load is complete
   const isInitializing = useRef(true);
   const isMounted = useRef(true);
@@ -82,7 +82,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
       try {
-        console.log(`🔄 Fetching profile for user: ${userId} (attempt ${retryCount + 1})`);
+        console.log(
+          `🔄 Fetching profile for user: ${userId} (attempt ${retryCount + 1})`
+        );
 
         const { data, error } = await supabase
           .from("profiles")
@@ -104,7 +106,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               error.message.includes("network") ||
               error.code === "PGRST301")
           ) {
-            await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
+            await new Promise((resolve) =>
+              setTimeout(resolve, 1000 * (retryCount + 1))
+            );
             return fetchProfile(userId, retryCount + 1);
           }
 
@@ -122,7 +126,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (retryCount < MAX_RETRIES) {
-          await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
+          await new Promise((resolve) =>
+            setTimeout(resolve, 1000 * (retryCount + 1))
+          );
           return fetchProfile(userId, retryCount + 1);
         }
 
@@ -257,10 +263,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted.current) return;
-      
+
       // Skip during initialization
       if (isInitializing.current) {
         console.log("⏭️ Skipping auth change during init:", event);
+        return;
+      }
+
+      // ✅ Ignore token refresh - profile already loaded
+      if (event === "TOKEN_REFRESHED") {
+        console.log("⏭️ Token refreshed, keeping existing profile");
+        setSession(session);
+        setUser(session?.user ?? null);
         return;
       }
 
@@ -269,20 +283,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
 
-      if (event === "SIGNED_IN" && session?.user) {
-        const userProfile = await fetchProfile(session.user.id);
-
-        if (!isMounted.current) return;
-
-        if (!userProfile) {
-          console.warn("⚠️ No profile found after sign in");
-          await supabase.auth.signOut();
-          setProfile(null);
-          return;
-        }
-
-        setProfile(userProfile);
-      } else if (event === "SIGNED_OUT" || !session?.user) {
+      // Profile is already fetched during initAuth() and signIn()
+      // Only clear profile on sign out
+      if (event === "SIGNED_OUT" || !session?.user) {
         setProfile(null);
       }
 
