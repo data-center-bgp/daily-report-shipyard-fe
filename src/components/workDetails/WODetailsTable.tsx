@@ -7,6 +7,7 @@ import {
   type Vessel,
 } from "../../lib/supabase";
 import { openPermitFile } from "../../utils/urlHandler";
+import { useAuth } from "../../hooks/useAuth";
 
 interface WorkDetailsWithWorkOrder extends WorkDetails {
   work_order?: WorkOrder & {
@@ -47,6 +48,7 @@ export default function WODetailsTable({
   onRefresh,
   embedded = false,
 }: WorkDetailsTableProps) {
+  const { profile } = useAuth();
   const [workDetails, setWorkDetails] = useState<WorkDetailsWithWorkOrder[]>(
     []
   );
@@ -401,11 +403,11 @@ export default function WODetailsTable({
 
   const handleAddWorkDetails = () => {
     if (workOrderId) {
-      navigate(`/work-order/${workOrderId}/add-work-details`);
+      navigate(`/work-details/add/${workOrderId}`);
     } else if (selectedWorkOrderId > 0) {
-      navigate(`/work-order/${selectedWorkOrderId}/add-work-details`);
+      navigate(`/work-details/add/${selectedWorkOrderId}`);
     } else {
-      navigate("/add-work-details");
+      navigate("/work-details/add");
     }
   };
 
@@ -525,20 +527,6 @@ export default function WODetailsTable({
   const getSortIcon = (field: string) => {
     if (sortField !== field) return "↕️";
     return sortDirection === "asc" ? "↑" : "↓";
-  };
-
-  const getHeaderTitle = () => {
-    if (workOrderId) return "Work Details";
-    return "All Work Details";
-  };
-
-  const getHeaderDescription = () => {
-    const itemText = totalItems !== 1 ? "items" : "item";
-
-    if (workOrderId) {
-      return `${totalItems} work ${itemText} for work order #${workOrderId}`;
-    }
-    return `${totalItems} work ${itemText} across all work orders`;
   };
 
   // Pagination component
@@ -693,14 +681,6 @@ export default function WODetailsTable({
       {/* Page Header - Only show if not embedded */}
       {!embedded && (
         <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">
-              {getHeaderTitle()}
-            </h2>
-            <p className="text-gray-600 text-sm mt-1">
-              {getHeaderDescription()}
-            </p>
-          </div>
           <div className="flex gap-3">
             <button
               onClick={fetchWorkDetails}
@@ -708,12 +688,22 @@ export default function WODetailsTable({
             >
               🔄 Refresh
             </button>
-            <button
-              onClick={handleAddWorkDetails}
-              className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-2 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center gap-2 shadow-md"
-            >
-              ➕ Add Work Details
-            </button>
+            {(profile?.role === "PPIC" || profile?.role === "MASTER") && (
+              <button
+                onClick={() => {
+                  if (workOrderId) {
+                    navigate(`/work-details/add/${workOrderId}`);
+                  } else if (selectedWorkOrderId > 0) {
+                    navigate(`/work-details/add/${selectedWorkOrderId}`);
+                  } else {
+                    navigate("/work-details/add");
+                  }
+                }}
+                className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-2 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center gap-2 shadow-md"
+              >
+                ➕ Add Work Details
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -837,17 +827,6 @@ export default function WODetailsTable({
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">
-                {embedded ? getHeaderTitle() : "Work Details"}
-              </h3>
-              <p className="text-gray-600 text-sm">
-                {embedded
-                  ? getHeaderDescription()
-                  : "Track and manage work breakdown items"}
-              </p>
-            </div>
-
             <div className="flex flex-col sm:flex-row gap-3">
               {/* Sort Control */}
               <select
@@ -879,12 +858,22 @@ export default function WODetailsTable({
 
               {/* Add button for embedded view */}
               {embedded && (
-                <button
-                  onClick={handleAddWorkDetails}
-                  className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center gap-2 shadow-sm"
-                >
-                  ➕ Add
-                </button>
+                <div className="flex gap-2">
+                  {(profile?.role === "PPIC" || profile?.role === "MASTER") && (
+                    <button
+                      onClick={() => {
+                        if (workOrderId) {
+                          navigate(`/work-details/add/${workOrderId}`);
+                        } else {
+                          navigate("/work-details/add");
+                        }
+                      }}
+                      className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center gap-2 shadow-sm text-sm"
+                    >
+                      ➕ Add Work Details
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -1111,6 +1100,11 @@ export default function WODetailsTable({
                                               {detail.location?.location ||
                                                 "N/A"}
                                             </div>
+                                            {detail.work_location && (
+                                              <div className="text-md text-gray-600 mt-0.5">
+                                                {detail.work_location}
+                                              </div>
+                                            )}
                                           </div>
                                         </div>
                                       </div>

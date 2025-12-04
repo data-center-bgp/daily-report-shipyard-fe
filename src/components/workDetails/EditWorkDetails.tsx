@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
+import { useAuth } from "../../hooks/useAuth";
 import {
   uploadWorkPermitFile,
   validateWorkPermitFile,
@@ -29,6 +30,7 @@ interface WorkDetailsData {
   work_order_id: number;
   description: string;
   location_id: number;
+  work_location: string;
   planned_start_date: string;
   target_close_date: string;
   period_close_target: string;
@@ -62,12 +64,18 @@ interface WorkDetailsData {
 export default function EditWorkDetails() {
   const navigate = useNavigate();
   const { workDetailsId } = useParams<{ workDetailsId: string }>();
+  const { profile } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Check user role
+  const isPPICOrMaster = profile?.role === "PPIC" || profile?.role === "MASTER";
+  const isProduction = profile?.role === "PRODUCTION";
 
   // Form state
   const [formData, setFormData] = useState({
     description: "",
     location_id: 0,
+    work_location: "",
     planned_start_date: "",
     target_close_date: "",
     period_close_target: "",
@@ -105,8 +113,8 @@ export default function EditWorkDetails() {
   // Dropdown data
   const [locations, setLocations] = useState<Location[]>([]);
   const [workScopes, setWorkScopes] = useState<WorkScope[]>([]);
-  const [loadingLocations, setLoadingLocations] = useState(false);
-  const [loadingWorkScopes, setLoadingWorkScopes] = useState(false);
+  const [_loadingLocations, setLoadingLocations] = useState(false);
+  const [_loadingWorkScopes, setLoadingWorkScopes] = useState(false);
 
   // Search dropdown states
   const [locationSearchTerm, setLocationSearchTerm] = useState("");
@@ -291,6 +299,7 @@ export default function EditWorkDetails() {
       setFormData({
         description: data.description || "",
         location_id: data.location_id || 0,
+        work_location: data.work_location || "",
         planned_start_date: data.planned_start_date || "",
         target_close_date: data.target_close_date || "",
         period_close_target: data.period_close_target || "",
@@ -346,7 +355,7 @@ export default function EditWorkDetails() {
     }
 
     setSelectedFile(file);
-    setRemoveExistingFile(false); // Reset remove flag when new file is selected
+    setRemoveExistingFile(false);
   };
 
   // Remove selected file
@@ -361,7 +370,7 @@ export default function EditWorkDetails() {
   // Toggle remove existing file
   const handleRemoveExistingFile = () => {
     setRemoveExistingFile(!removeExistingFile);
-    setSelectedFile(null); // Clear new file selection
+    setSelectedFile(null);
     setFileError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -392,53 +401,66 @@ export default function EditWorkDetails() {
   const validateForm = () => {
     const errors: string[] = [];
 
-    if (!formData.description.trim()) {
-      errors.push("Description is required");
-    }
-    if (!formData.location_id || formData.location_id === 0) {
-      errors.push("Location is required");
-    }
-    if (!formData.planned_start_date) {
-      errors.push("Planned start date is required");
-    }
-    if (!formData.target_close_date) {
-      errors.push("Target close date is required");
-    }
-    if (!formData.period_close_target.trim()) {
-      errors.push("Period close target is required");
-    }
-    if (!formData.pic.trim()) {
-      errors.push("Person in charge (PIC) is required");
-    }
+    // PPIC fields validation
+    if (isPPICOrMaster) {
+      if (!formData.description.trim()) {
+        errors.push("Description is required");
+      }
+      if (!formData.location_id || formData.location_id === 0) {
+        errors.push("Location is required");
+      }
+      if (!formData.work_location.trim()) {
+        errors.push("Work location is required");
+      }
+      if (!formData.work_scope_id || formData.work_scope_id === 0) {
+        errors.push("Work scope is required");
+      }
+      if (!formData.work_type.trim()) {
+        errors.push("Work type is required");
+      }
+      if (!formData.quantity || parseFloat(formData.quantity) <= 0) {
+        errors.push("Quantity must be greater than 0");
+      }
+      if (!formData.uom.trim()) {
+        errors.push("Unit of measure (UOM) is required");
+      }
+      if (!formData.planned_start_date) {
+        errors.push("Planned start date is required");
+      }
+      if (!formData.target_close_date) {
+        errors.push("Target close date is required");
+      }
+      if (!formData.period_close_target.trim()) {
+        errors.push("Period close target is required");
+      }
 
-    // New field validations
-    if (!formData.work_scope_id || formData.work_scope_id === 0) {
-      errors.push("Work scope is required");
-    }
-    if (!formData.work_type.trim()) {
-      errors.push("Work type is required");
-    }
-    if (!formData.quantity || parseFloat(formData.quantity) <= 0) {
-      errors.push("Quantity must be greater than 0");
-    }
-    if (!formData.uom.trim()) {
-      errors.push("Unit of measure (UOM) is required");
-    }
-
-    // Date validation
-    if (formData.planned_start_date && formData.target_close_date) {
-      const startDate = new Date(formData.planned_start_date);
-      const endDate = new Date(formData.target_close_date);
-      if (startDate > endDate) {
-        errors.push("Target close date must be after planned start date");
+      // Date validation for PPIC
+      if (formData.planned_start_date && formData.target_close_date) {
+        const startDate = new Date(formData.planned_start_date);
+        const endDate = new Date(formData.target_close_date);
+        if (startDate > endDate) {
+          errors.push(
+            "Target close date must be on or after planned start date"
+          );
+        }
       }
     }
 
-    if (formData.actual_start_date && formData.actual_close_date) {
-      const actualStart = new Date(formData.actual_start_date);
-      const actualClose = new Date(formData.actual_close_date);
-      if (actualStart > actualClose) {
-        errors.push("Actual close date must be after actual start date");
+    // PRODUCTION fields validation
+    if (isProduction) {
+      if (!formData.pic.trim()) {
+        errors.push("Person in charge (PIC) is required");
+      }
+
+      // Date validation for PRODUCTION
+      if (formData.actual_start_date && formData.actual_close_date) {
+        const actualStart = new Date(formData.actual_start_date);
+        const actualClose = new Date(formData.actual_close_date);
+        if (actualStart > actualClose) {
+          errors.push(
+            "Actual close date must be on or after actual start date"
+          );
+        }
       }
     }
 
@@ -461,77 +483,89 @@ export default function EditWorkDetails() {
       let newStoragePath: string | null = formData.storage_path || null;
       let newWorkPermitUrl: string | null = formData.work_permit_url || null;
 
-      // Handle file operations
-      if (removeExistingFile && originalData?.storage_path) {
-        // Remove existing file
-        await deleteWorkPermitFile(originalData.storage_path);
-        newStoragePath = null;
-        newWorkPermitUrl = null;
-      }
-
-      if (selectedFile) {
-        // Upload new file
-        setUploadProgress(true);
-
-        // Generate custom path for the file
-        const workOrderNumber =
-          originalData?.work_order?.shipyard_wo_number || "unknown";
-        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        const customPath = `work-orders/${workOrderNumber}/permits/${timestamp}_${selectedFile.name.replace(
-          /[^a-zA-Z0-9.-]/g,
-          "_"
-        )}`;
-
-        const uploadResult = await uploadWorkPermitFile(
-          selectedFile,
-          customPath
-        );
-
-        setUploadProgress(false);
-
-        if (!uploadResult.success) {
-          throw new Error(uploadResult.error || "File upload failed");
+      // Handle file operations (only for PRODUCTION users)
+      if (isProduction || isPPICOrMaster) {
+        if (removeExistingFile && originalData?.storage_path) {
+          await deleteWorkPermitFile(originalData.storage_path);
+          newStoragePath = null;
+          newWorkPermitUrl = null;
         }
 
-        // If we had an old file and uploaded a new one, delete the old one
-        if (
-          originalData?.storage_path &&
-          originalData.storage_path !== uploadResult.storagePath
-        ) {
-          try {
-            await deleteWorkPermitFile(originalData.storage_path);
-          } catch (deleteErr) {
-            console.warn("Failed to delete old permit file:", deleteErr);
-            // Don't fail the whole operation if old file deletion fails
+        if (selectedFile) {
+          setUploadProgress(true);
+
+          const workOrderNumber =
+            originalData?.work_order?.shipyard_wo_number || "unknown";
+          const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+          const customPath = `work-orders/${workOrderNumber}/permits/${timestamp}_${selectedFile.name.replace(
+            /[^a-zA-Z0-9.-]/g,
+            "_"
+          )}`;
+
+          const uploadResult = await uploadWorkPermitFile(
+            selectedFile,
+            customPath
+          );
+
+          setUploadProgress(false);
+
+          if (!uploadResult.success) {
+            throw new Error(uploadResult.error || "File upload failed");
           }
-        }
 
-        newStoragePath = uploadResult.storagePath || null;
-        newWorkPermitUrl = uploadResult.publicUrl || null;
+          if (
+            originalData?.storage_path &&
+            originalData.storage_path !== uploadResult.storagePath
+          ) {
+            try {
+              await deleteWorkPermitFile(originalData.storage_path);
+            } catch (deleteErr) {
+              console.warn("Failed to delete old permit file:", deleteErr);
+            }
+          }
+
+          newStoragePath = uploadResult.storagePath || null;
+          newWorkPermitUrl = uploadResult.publicUrl || null;
+        }
       }
 
-      // Prepare data for update
-      const updateData = {
-        description: formData.description.trim(),
-        location_id: formData.location_id,
-        planned_start_date: formData.planned_start_date,
-        target_close_date: formData.target_close_date,
-        period_close_target: formData.period_close_target.trim(),
-        actual_start_date: formData.actual_start_date || null,
-        actual_close_date: formData.actual_close_date || null,
-        pic: formData.pic.trim(),
-        work_permit_url: newWorkPermitUrl,
-        storage_path: newStoragePath,
-        work_scope_id: formData.work_scope_id,
-        work_type: formData.work_type.trim(),
-        quantity: parseFloat(formData.quantity),
-        uom: formData.uom.trim(),
-        is_additional_wo_details: formData.is_additional_wo_details,
-        spk_number: formData.spk_number.trim() || null,
-        spkk_number: formData.spkk_number.trim() || null,
-        notes: formData.notes.trim() || null,
+      // Prepare data based on role
+      let updateData: any = {
         updated_at: new Date().toISOString(),
       };
+
+      if (isPPICOrMaster) {
+        // PPIC can update their fields
+        updateData = {
+          ...updateData,
+          description: formData.description.trim(),
+          location_id: formData.location_id,
+          work_location: formData.work_location.trim(),
+          work_scope_id: formData.work_scope_id,
+          work_type: formData.work_type.trim(),
+          quantity: parseFloat(formData.quantity),
+          uom: formData.uom.trim(),
+          is_additional_wo_details: formData.is_additional_wo_details,
+          planned_start_date: formData.planned_start_date,
+          target_close_date: formData.target_close_date,
+          period_close_target: formData.period_close_target.trim(),
+        };
+      }
+
+      if (isProduction || isPPICOrMaster) {
+        // PRODUCTION (and MASTER) can update their fields
+        updateData = {
+          ...updateData,
+          pic: formData.pic.trim(),
+          spk_number: formData.spk_number.trim() || null,
+          spkk_number: formData.spkk_number.trim() || null,
+          work_permit_url: newWorkPermitUrl,
+          storage_path: newStoragePath,
+          notes: formData.notes.trim() || null,
+          actual_start_date: formData.actual_start_date || null,
+          actual_close_date: formData.actual_close_date || null,
+        };
+      }
 
       const { error } = await supabase
         .from("work_details")
@@ -545,7 +579,6 @@ export default function EditWorkDetails() {
         throw error;
       }
 
-      // Navigate back to work details view
       navigate(`/work-details`);
     } catch (err) {
       console.error("Error updating work details:", err);
@@ -633,6 +666,16 @@ export default function EditWorkDetails() {
               {originalData.work_order.shipyard_wo_number} on{" "}
               {originalData.work_order.vessel.name}
             </p>
+            {isPPICOrMaster && (
+              <p className="text-sm text-blue-600 mt-1">
+                🔧 PPIC Mode: Editing planning and scope fields
+              </p>
+            )}
+            {isProduction && (
+              <p className="text-sm text-green-600 mt-1">
+                🏭 PRODUCTION Mode: Editing execution and documentation fields
+              </p>
+            )}
           </div>
           <button
             onClick={handleCancel}
@@ -667,7 +710,10 @@ export default function EditWorkDetails() {
             Work Details Information
           </h2>
           <p className="text-sm text-gray-600">
-            Update the work details information
+            {isPPICOrMaster &&
+              "Update planning fields (PPIC): description, location, work scope, dates, quantity"}
+            {isProduction &&
+              "Update execution fields (PRODUCTION): PIC, SPK/SPKK numbers, work permit, actual dates, notes"}
           </p>
         </div>
 
@@ -683,578 +729,660 @@ export default function EditWorkDetails() {
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Description */}
-            <div className="md:col-span-2">
-              <label
-                htmlFor="description"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Work Description *
-              </label>
-              <textarea
-                id="description"
-                name="description"
-                value={formData.description}
-                onChange={handleInputChange}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Describe the specific work task in detail..."
-                required
-              />
-            </div>
-
-            {/* Work Scope */}
-            <div className="md:col-span-2">
-              <label
-                htmlFor="work_scope_id"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Work Scope *
-              </label>
-              <div className="relative" ref={workScopeDropdownRef}>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={workScopeSearchTerm}
-                    onChange={handleWorkScopeSearch}
-                    onFocus={() => setShowWorkScopeDropdown(true)}
-                    placeholder="Search work scope..."
-                    disabled={loadingWorkScopes}
-                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
-                  />
-                  {workScopeSearchTerm && (
-                    <button
-                      type="button"
-                      onClick={handleClearWorkScopeSearch}
-                      className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-
-                {/* Work Scope Dropdown */}
-                {showWorkScopeDropdown &&
-                  filteredWorkScopesForSearch.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      {filteredWorkScopesForSearch.map((scope) => (
-                        <div
-                          key={scope.id}
-                          onClick={() =>
-                            handleWorkScopeSelectFromDropdown(scope)
-                          }
-                          className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                            formData.work_scope_id === scope.id
-                              ? "bg-blue-100"
-                              : ""
-                          }`}
-                        >
-                          <div className="font-medium text-gray-900 text-sm">
-                            {scope.work_scope}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-              </div>
-
-              {formData.work_scope_id > 0 && (
-                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="text-sm text-blue-800">
-                    <strong>Selected Work Scope:</strong> {workScopeSearchTerm}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Work Type */}
-            <div>
-              <label
-                htmlFor="work_type"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Work Type *
-              </label>
-              <select
-                id="work_type"
-                name="work_type"
-                value={formData.work_type}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              >
-                <option value="">Select work type</option>
-                <option value="Docking">Docking</option>
-                <option value="Repair">Repair</option>
-              </select>
-            </div>
-
-            {/* Quantity */}
-            <div>
-              <label
-                htmlFor="quantity"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Quantity *
-              </label>
-              <input
-                type="number"
-                id="quantity"
-                name="quantity"
-                value={formData.quantity}
-                onChange={handleInputChange}
-                min="0"
-                step="0.01"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter quantity"
-                required
-              />
-            </div>
-
-            {/* Unit of Measure (UOM) */}
-            <div>
-              <label
-                htmlFor="uom"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Unit of Measure (UOM) *
-              </label>
-              <select
-                id="uom"
-                name="uom"
-                value={formData.uom}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              >
-                <option value="">Select UOM</option>
-                <option value="Ls">Ls</option>
-                <option value="Unit">Unit</option>
-                <option value="Pcs">Pcs</option>
-                <option value="Lbr">Lbr</option>
-              </select>
-            </div>
-
-            {/* Location */}
-            <div>
-              <label
-                htmlFor="location_id"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Location *
-              </label>
-              <div className="relative" ref={locationDropdownRef}>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={locationSearchTerm}
-                    onChange={handleLocationSearch}
-                    onFocus={() => setShowLocationDropdown(true)}
-                    placeholder="Search location..."
-                    disabled={loadingLocations}
-                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
-                  />
-                  {locationSearchTerm && (
-                    <button
-                      type="button"
-                      onClick={handleClearLocationSearch}
-                      className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-
-                {/* Location Dropdown */}
-                {showLocationDropdown &&
-                  filteredLocationsForSearch.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      {filteredLocationsForSearch.map((location) => (
-                        <div
-                          key={location.id}
-                          onClick={() =>
-                            handleLocationSelectFromDropdown(location)
-                          }
-                          className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                            formData.location_id === location.id
-                              ? "bg-blue-100"
-                              : ""
-                          }`}
-                        >
-                          <div className="font-medium text-gray-900 text-sm">
-                            {location.location}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-              </div>
-
-              {formData.location_id > 0 && (
-                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="text-sm text-blue-800">
-                    <strong>Selected Location:</strong> {locationSearchTerm}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Person in Charge */}
-            <div>
-              <label
-                htmlFor="pic"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Person in Charge (PIC) *
-              </label>
-              <input
-                type="text"
-                id="pic"
-                name="pic"
-                value={formData.pic}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Name of responsible person"
-                required
-              />
-            </div>
-
-            {/* SPK Number */}
-            <div>
-              <label
-                htmlFor="spk_number"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                SPK Number (Optional)
-              </label>
-              <input
-                type="text"
-                id="spk_number"
-                name="spk_number"
-                value={formData.spk_number}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter SPK number"
-              />
-            </div>
-
-            {/* SPKK Number */}
-            <div>
-              <label
-                htmlFor="spkk_number"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                SPKK Number (Optional)
-              </label>
-              <input
-                type="text"
-                id="spkk_number"
-                name="spkk_number"
-                value={formData.spkk_number}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter SPKK number"
-              />
-            </div>
-
-            {/* Planned Start Date */}
-            <div>
-              <label
-                htmlFor="planned_start_date"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Planned Start Date *
-              </label>
-              <input
-                type="date"
-                id="planned_start_date"
-                name="planned_start_date"
-                value={formData.planned_start_date}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              />
-            </div>
-
-            {/* Target Close Date */}
-            <div>
-              <label
-                htmlFor="target_close_date"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Target Close Date *
-              </label>
-              <input
-                type="date"
-                id="target_close_date"
-                name="target_close_date"
-                value={formData.target_close_date}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              />
-            </div>
-
-            {/* Period Close Target */}
-            <div className="md:col-span-2">
-              <label
-                htmlFor="period_close_target"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Period Close Target *
-              </label>
-              <select
-                id="period_close_target"
-                name="period_close_target"
-                value={formData.period_close_target}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              >
-                <option value="">Select target month</option>
-                <option value="January">January</option>
-                <option value="February">February</option>
-                <option value="March">March</option>
-                <option value="April">April</option>
-                <option value="May">May</option>
-                <option value="June">June</option>
-                <option value="July">July</option>
-                <option value="August">August</option>
-                <option value="September">September</option>
-                <option value="October">October</option>
-                <option value="November">November</option>
-                <option value="December">December</option>
-              </select>
-            </div>
-
-            {/* Actual Start Date */}
-            <div>
-              <label
-                htmlFor="actual_start_date"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Actual Start Date (Optional)
-              </label>
-              <input
-                type="date"
-                id="actual_start_date"
-                name="actual_start_date"
-                value={formData.actual_start_date}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            {/* Actual Close Date */}
-            <div>
-              <label
-                htmlFor="actual_close_date"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Actual Close Date (Optional)
-              </label>
-              <input
-                type="date"
-                id="actual_close_date"
-                name="actual_close_date"
-                value={formData.actual_close_date}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            {/* Is Additional WO Details Checkbox */}
-            <div className="md:col-span-2">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="is_additional_wo_details"
-                  name="is_additional_wo_details"
-                  checked={formData.is_additional_wo_details}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      is_additional_wo_details: e.target.checked,
-                    }))
-                  }
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label
-                  htmlFor="is_additional_wo_details"
-                  className="ml-2 block text-sm font-medium text-gray-700"
-                >
-                  Is Additional Work Order Details
-                </label>
-              </div>
-              <p className="text-xs text-gray-500 mt-1 ml-6">
-                Check this if these details are additional to the original work
-                order
-              </p>
-            </div>
-
-            {/* Notes */}
-            <div className="md:col-span-2">
-              <label
-                htmlFor="notes"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Notes (Optional)
-              </label>
-              <textarea
-                id="notes"
-                name="notes"
-                value={formData.notes}
-                onChange={handleInputChange}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Additional notes or comments..."
-              />
-            </div>
-
-            {/* Work Permit File Management */}
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Work Permit Document (Optional)
-              </label>
-
-              {/* Existing File Display */}
-              {originalData.storage_path && !removeExistingFile && (
-                <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <span className="text-green-600 mr-2">📄</span>
-                      <div>
-                        <div className="text-sm font-medium text-green-800">
-                          Current Work Permit
-                        </div>
-                        <div className="text-xs text-green-600">
-                          Uploaded and available
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={handleViewPermit}
-                        className="text-blue-600 hover:text-blue-800 text-sm underline"
-                      >
-                        View
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleRemoveExistingFile}
-                        className="text-red-600 hover:text-red-800 text-sm underline"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Remove Existing File Warning */}
-              {removeExistingFile && (
-                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <span className="text-red-600 mr-2">⚠️</span>
-                      <div>
-                        <div className="text-sm font-medium text-red-800">
-                          Work Permit Will Be Removed
-                        </div>
-                        <div className="text-xs text-red-600">
-                          The current work permit will be deleted when you save
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setRemoveExistingFile(false)}
-                      className="text-blue-600 hover:text-blue-800 text-sm underline"
-                    >
-                      Keep File
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* No Existing File */}
-              {!originalData.storage_path && (
-                <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <div className="flex items-center">
-                    <span className="text-yellow-600 mr-2">⚠️</span>
-                    <div>
-                      <div className="text-sm font-medium text-yellow-800">
-                        No Work Permit Uploaded
-                      </div>
-                      <div className="text-xs text-yellow-600">
-                        Upload a work permit to start this work
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* File Upload Section */}
-              <div className="mt-4">
-                <div className="mb-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                    id="work_permit_file"
-                  />
+            {/* PPIC FIELDS */}
+            {isPPICOrMaster && (
+              <>
+                {/* Description */}
+                <div className="md:col-span-2">
                   <label
-                    htmlFor="work_permit_file"
-                    className="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    htmlFor="description"
+                    className="block text-sm font-medium text-gray-700 mb-2"
                   >
-                    📄{" "}
-                    {originalData.storage_path
-                      ? "Replace with New PDF"
-                      : "Upload PDF File"}
+                    Work Description *{" "}
+                    <span className="text-blue-600">(PPIC)</span>
                   </label>
+                  <textarea
+                    id="description"
+                    name="description"
+                    value={formData.description}
+                    onChange={handleInputChange}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Describe the specific work task in detail..."
+                    required
+                  />
                 </div>
 
-                {/* File Error */}
-                {fileError && (
-                  <div className="mt-2 text-sm text-red-600">{fileError}</div>
-                )}
+                {/* Location */}
+                <div>
+                  <label
+                    htmlFor="location_id"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Location * <span className="text-blue-600">(PPIC)</span>
+                  </label>
+                  <div className="relative" ref={locationDropdownRef}>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={locationSearchTerm}
+                        onChange={handleLocationSearch}
+                        onFocus={() => setShowLocationDropdown(true)}
+                        placeholder="Search location..."
+                        className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      {locationSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={handleClearLocationSearch}
+                          className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
 
-                {/* Selected File Display */}
-                {selectedFile && (
-                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <span className="text-blue-600 mr-2">📄</span>
-                        <div>
-                          <div className="text-sm font-medium text-blue-800">
-                            {selectedFile.name}
+                    {showLocationDropdown &&
+                      filteredLocationsForSearch.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {filteredLocationsForSearch.map((location) => (
+                            <div
+                              key={location.id}
+                              onClick={() =>
+                                handleLocationSelectFromDropdown(location)
+                              }
+                              className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                                formData.location_id === location.id
+                                  ? "bg-blue-100"
+                                  : ""
+                              }`}
+                            >
+                              <div className="font-medium text-gray-900 text-sm">
+                                {location.location}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                  </div>
+                </div>
+
+                {/* Work Location */}
+                <div>
+                  <label
+                    htmlFor="work_location"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Work Location *{" "}
+                    <span className="text-blue-600">(PPIC)</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="work_location"
+                    name="work_location"
+                    value={formData.work_location}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Specific work location"
+                    required
+                  />
+                </div>
+
+                {/* Work Scope */}
+                <div className="md:col-span-2">
+                  <label
+                    htmlFor="work_scope_id"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Work Scope * <span className="text-blue-600">(PPIC)</span>
+                  </label>
+                  <div className="relative" ref={workScopeDropdownRef}>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={workScopeSearchTerm}
+                        onChange={handleWorkScopeSearch}
+                        onFocus={() => setShowWorkScopeDropdown(true)}
+                        placeholder="Search work scope..."
+                        className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      {workScopeSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={handleClearWorkScopeSearch}
+                          className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    {showWorkScopeDropdown &&
+                      filteredWorkScopesForSearch.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {filteredWorkScopesForSearch.map((scope) => (
+                            <div
+                              key={scope.id}
+                              onClick={() =>
+                                handleWorkScopeSelectFromDropdown(scope)
+                              }
+                              className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                                formData.work_scope_id === scope.id
+                                  ? "bg-blue-100"
+                                  : ""
+                              }`}
+                            >
+                              <div className="font-medium text-gray-900 text-sm">
+                                {scope.work_scope}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                  </div>
+                </div>
+
+                {/* Work Type */}
+                <div>
+                  <label
+                    htmlFor="work_type"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Work Type * <span className="text-blue-600">(PPIC)</span>
+                  </label>
+                  <select
+                    id="work_type"
+                    name="work_type"
+                    value={formData.work_type}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="">Select work type</option>
+                    <option value="Docking">Docking</option>
+                    <option value="Repair">Repair</option>
+                  </select>
+                </div>
+
+                {/* Quantity */}
+                <div>
+                  <label
+                    htmlFor="quantity"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Quantity * <span className="text-blue-600">(PPIC)</span>
+                  </label>
+                  <input
+                    type="number"
+                    id="quantity"
+                    name="quantity"
+                    value={formData.quantity}
+                    onChange={handleInputChange}
+                    min="0"
+                    step="0.01"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter quantity"
+                    required
+                  />
+                </div>
+
+                {/* UOM */}
+                <div>
+                  <label
+                    htmlFor="uom"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    UOM * <span className="text-blue-600">(PPIC)</span>
+                  </label>
+                  <select
+                    id="uom"
+                    name="uom"
+                    value={formData.uom}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="">Select UOM</option>
+                    <option value="Ls">Ls</option>
+                    <option value="Unit">Unit</option>
+                    <option value="Pcs">Pcs</option>
+                    <option value="Lbr">Lbr</option>
+                  </select>
+                </div>
+
+                {/* Planned Start Date */}
+                <div>
+                  <label
+                    htmlFor="planned_start_date"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Planned Start Date *{" "}
+                    <span className="text-blue-600">(PPIC)</span>
+                  </label>
+                  <input
+                    type="date"
+                    id="planned_start_date"
+                    name="planned_start_date"
+                    value={formData.planned_start_date}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+
+                {/* Target Close Date */}
+                <div>
+                  <label
+                    htmlFor="target_close_date"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Target Close Date *{" "}
+                    <span className="text-blue-600">(PPIC)</span>
+                  </label>
+                  <input
+                    type="date"
+                    id="target_close_date"
+                    name="target_close_date"
+                    value={formData.target_close_date}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+
+                {/* Period Close Target */}
+                <div className="md:col-span-2">
+                  <label
+                    htmlFor="period_close_target"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Period Close Target *{" "}
+                    <span className="text-blue-600">(PPIC)</span>
+                  </label>
+                  <select
+                    id="period_close_target"
+                    name="period_close_target"
+                    value={formData.period_close_target}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="">Select target month</option>
+                    <option value="January">January</option>
+                    <option value="February">February</option>
+                    <option value="March">March</option>
+                    <option value="April">April</option>
+                    <option value="May">May</option>
+                    <option value="June">June</option>
+                    <option value="July">July</option>
+                    <option value="August">August</option>
+                    <option value="September">September</option>
+                    <option value="October">October</option>
+                    <option value="November">November</option>
+                    <option value="December">December</option>
+                  </select>
+                </div>
+
+                {/* Is Additional */}
+                <div className="md:col-span-2">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="is_additional_wo_details"
+                      name="is_additional_wo_details"
+                      checked={formData.is_additional_wo_details}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          is_additional_wo_details: e.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label
+                      htmlFor="is_additional_wo_details"
+                      className="ml-2 block text-sm font-medium text-gray-700"
+                    >
+                      Is Additional Work Order Details{" "}
+                      <span className="text-blue-600">(PPIC)</span>
+                    </label>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* READ-ONLY PPIC FIELDS FOR PRODUCTION */}
+            {isProduction && (
+              <>
+                <div className="md:col-span-2 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                    📋 Planning Information (Read-only)
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-500">Description:</span>
+                      <div className="font-medium text-gray-900">
+                        {formData.description}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Location:</span>
+                      <div className="font-medium text-gray-900">
+                        {locationSearchTerm}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Work Location:</span>
+                      <div className="font-medium text-gray-900">
+                        {formData.work_location}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Work Scope:</span>
+                      <div className="font-medium text-gray-900">
+                        {workScopeSearchTerm}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Work Type:</span>
+                      <div className="font-medium text-gray-900">
+                        {formData.work_type}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Quantity:</span>
+                      <div className="font-medium text-gray-900">
+                        {formData.quantity} {formData.uom}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Planned Dates:</span>
+                      <div className="font-medium text-gray-900">
+                        {new Date(
+                          formData.planned_start_date
+                        ).toLocaleDateString()}{" "}
+                        -{" "}
+                        {new Date(
+                          formData.target_close_date
+                        ).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Period Target:</span>
+                      <div className="font-medium text-gray-900">
+                        {formData.period_close_target}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* PRODUCTION FIELDS */}
+            {(isProduction || isPPICOrMaster) && (
+              <>
+                {/* Person in Charge */}
+                <div>
+                  <label
+                    htmlFor="pic"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Person in Charge (PIC) *{" "}
+                    <span className="text-green-600">(PRODUCTION)</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="pic"
+                    name="pic"
+                    value={formData.pic}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Name of responsible person"
+                    required={isProduction}
+                  />
+                </div>
+
+                {/* SPK Number */}
+                <div>
+                  <label
+                    htmlFor="spk_number"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    SPK Number{" "}
+                    <span className="text-green-600">(PRODUCTION)</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="spk_number"
+                    name="spk_number"
+                    value={formData.spk_number}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter SPK number"
+                  />
+                </div>
+
+                {/* SPKK Number */}
+                <div>
+                  <label
+                    htmlFor="spkk_number"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    SPKK Number{" "}
+                    <span className="text-green-600">(PRODUCTION)</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="spkk_number"
+                    name="spkk_number"
+                    value={formData.spkk_number}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter SPKK number"
+                  />
+                </div>
+
+                {/* Actual Start Date */}
+                <div>
+                  <label
+                    htmlFor="actual_start_date"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Actual Start Date{" "}
+                    <span className="text-green-600">(PRODUCTION)</span>
+                  </label>
+                  <input
+                    type="date"
+                    id="actual_start_date"
+                    name="actual_start_date"
+                    value={formData.actual_start_date}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Actual Close Date */}
+                <div>
+                  <label
+                    htmlFor="actual_close_date"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Actual Close Date{" "}
+                    <span className="text-green-600">(PRODUCTION)</span>
+                  </label>
+                  <input
+                    type="date"
+                    id="actual_close_date"
+                    name="actual_close_date"
+                    value={formData.actual_close_date}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Notes */}
+                <div className="md:col-span-2">
+                  <label
+                    htmlFor="notes"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Notes <span className="text-green-600">(PRODUCTION)</span>
+                  </label>
+                  <textarea
+                    id="notes"
+                    name="notes"
+                    value={formData.notes}
+                    onChange={handleInputChange}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Additional notes or comments..."
+                  />
+                </div>
+
+                {/* Work Permit File */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Work Permit Document{" "}
+                    <span className="text-green-600">(PRODUCTION)</span>
+                  </label>
+
+                  {originalData.storage_path && !removeExistingFile && (
+                    <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <span className="text-green-600 mr-2">📄</span>
+                          <div>
+                            <div className="text-sm font-medium text-green-800">
+                              Current Work Permit
+                            </div>
+                            <div className="text-xs text-green-600">
+                              Uploaded and available
+                            </div>
                           </div>
-                          <div className="text-xs text-blue-600">
-                            {(selectedFile.size / 1024 / 1024).toFixed(2)} MB -
-                            Ready to upload
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={handleViewPermit}
+                            className="text-blue-600 hover:text-blue-800 text-sm underline"
+                          >
+                            View
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleRemoveExistingFile}
+                            className="text-red-600 hover:text-red-800 text-sm underline"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {removeExistingFile && (
+                    <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <span className="text-red-600 mr-2">⚠️</span>
+                          <div>
+                            <div className="text-sm font-medium text-red-800">
+                              Work Permit Will Be Removed
+                            </div>
+                            <div className="text-xs text-red-600">
+                              The current work permit will be deleted when you
+                              save
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setRemoveExistingFile(false)}
+                          className="text-blue-600 hover:text-blue-800 text-sm underline"
+                        >
+                          Keep File
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {!originalData.storage_path && (
+                    <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <div className="flex items-center">
+                        <span className="text-yellow-600 mr-2">⚠️</span>
+                        <div>
+                          <div className="text-sm font-medium text-yellow-800">
+                            No Work Permit Uploaded
+                          </div>
+                          <div className="text-xs text-yellow-600">
+                            Upload a work permit to start this work
                           </div>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleRemoveFile}
-                        className="text-red-600 hover:text-red-800 text-sm"
-                      >
-                        Remove
-                      </button>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                <p className="text-xs text-gray-500 mt-2">
-                  Upload a PDF file containing the work permit or safety
-                  authorization (max 10MB)
-                </p>
-              </div>
-            </div>
+                  <div className="mt-4">
+                    <div className="mb-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".pdf"
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        id="work_permit_file"
+                      />
+                      <label
+                        htmlFor="work_permit_file"
+                        className="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        📄{" "}
+                        {originalData.storage_path
+                          ? "Replace with New PDF"
+                          : "Upload PDF File"}
+                      </label>
+                    </div>
+
+                    {fileError && (
+                      <div className="mt-2 text-sm text-red-600">
+                        {fileError}
+                      </div>
+                    )}
+
+                    {selectedFile && (
+                      <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <span className="text-blue-600 mr-2">📄</span>
+                            <div>
+                              <div className="text-sm font-medium text-blue-800">
+                                {selectedFile.name}
+                              </div>
+                              <div className="text-xs text-blue-600">
+                                {(selectedFile.size / 1024 / 1024).toFixed(2)}{" "}
+                                MB - Ready to upload
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleRemoveFile}
+                            className="text-red-600 hover:text-red-800 text-sm"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-gray-500 mt-2">
+                      Upload a PDF file containing the work permit or safety
+                      authorization (max 10MB)
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Form Actions */}

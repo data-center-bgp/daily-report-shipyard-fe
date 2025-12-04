@@ -19,6 +19,7 @@ interface WorkDetailsWithProgress extends WorkDetails {
     id: number;
     location: string;
   };
+  work_location: string;
   work_progress?: Array<{
     id: number;
     progress_percentage: number;
@@ -436,6 +437,14 @@ export default function VerifyWorkDetails() {
                     <p className="mt-1 text-sm text-slate-700 bg-gradient-to-r from-slate-50 to-slate-100 p-2 rounded-lg border">
                       📍 {workDetails.location?.location || "-"}
                     </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Work Location
+                    </label>
+                    <div className="mt-1 text-sm text-gray-900">
+                      {workDetails.work_location || "N/A"}
+                    </div>
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">

@@ -72,6 +72,7 @@ export interface WorkDetails {
   spk_number?: string;
   spkk_number?: string;
   notes?: string;
+  work_location: string;
 }
 
 export interface WorkProgress {

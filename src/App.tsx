@@ -70,7 +70,15 @@ function AppRoutes() {
 
         {/* Work Details */}
         <Route path="/work-details" element={<WorkOrderDetails />} />
-        <Route path="/add-work-details" element={<AddWorkDetails />} />
+        <Route path="/work-details/add" element={<AddWorkDetails />} />
+        <Route
+          path="/work-details/add/:workOrderId"
+          element={<AddWorkDetails />}
+        />
+        <Route
+          path="/work-order/:workOrderId/add-work-details"
+          element={<AddWorkDetails />}
+        />
         <Route
           path="/edit-work-details/:workDetailsId"
           element={<EditWorkDetails />}
