@@ -55,7 +55,6 @@ export default function WorkVerification() {
     []
   );
   const [loading, setLoading] = useState(true);
-  const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -69,6 +68,8 @@ export default function WorkVerification() {
   const [vesselSearchTerm, setVesselSearchTerm] = useState("");
   const [showVesselDropdown, setShowVesselDropdown] = useState(false);
   const vesselDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
   // Handle click outside to close dropdown
   useEffect(() => {
@@ -86,6 +87,18 @@ export default function WorkVerification() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  const toggleRowExpansion = (id: number) => {
+    setExpandedRows((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
 
   // Filter vessels for search dropdown
   const filteredVesselsForSearch = vessels.filter((vessel) => {
@@ -252,43 +265,6 @@ export default function WorkVerification() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
-
-  const handleRemoveVerification = async (
-    verification: VerificationWithDetails
-  ) => {
-    if (!window.confirm("Are you sure you want to remove this verification?")) {
-      return;
-    }
-
-    try {
-      setSubmittingId(verification.work_details_id);
-      setError(null);
-      setSuccess(null);
-
-      // Soft delete by setting deleted_at
-      const { error } = await supabase
-        .from("work_verification")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", verification.id);
-
-      if (error) throw error;
-
-      setSuccess("Verification removed successfully");
-
-      // Refresh data
-      await fetchData();
-
-      // Hide success message after 3 seconds
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      console.error("Error removing verification:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to remove verification"
-      );
-    } finally {
-      setSubmittingId(null);
-    }
-  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -553,6 +529,9 @@ export default function WorkVerification() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                        {/* Expand column */}
+                      </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Work Details
                       </th>
@@ -575,72 +554,254 @@ export default function WorkVerification() {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {filteredPending.map((wd) => (
-                      <tr key={wd.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4">
-                          <div className="space-y-1">
-                            <div className="text-sm font-medium text-gray-900 max-w-xs">
-                              {wd.description.length > 60
-                                ? `${wd.description.substring(0, 60)}...`
-                                : wd.description}
+                      <>
+                        <tr key={wd.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <button
+                              onClick={() => toggleRowExpansion(wd.id)}
+                              className="text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                              <svg
+                                className={`w-5 h-5 transition-transform duration-200 ${
+                                  expandedRows.has(wd.id) ? "rotate-90" : ""
+                                }`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M9 5l7 7-7 7"
+                                />
+                              </svg>
+                            </button>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="space-y-1">
+                              <div className="text-sm font-medium text-gray-900 max-w-xs">
+                                {wd.description.length > 60
+                                  ? `${wd.description.substring(0, 60)}...`
+                                  : wd.description}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                📍 {wd.location?.location || "-"}
+                              </div>
+                              <div className="text-xs text-gray-400">
+                                👤 {wd.pic}
+                              </div>
                             </div>
-                            <div className="text-sm text-gray-500">
-                              📍{" "}
-                              {typeof wd.location === "object"
-                                ? wd.location?.location || "-"
-                                : wd.location || "-"}{" "}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="space-y-1">
+                              <div className="text-sm font-medium text-gray-900">
+                                {wd.work_order?.shipyard_wo_number || "-"}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {wd.work_order?.customer_wo_number || "-"}
+                              </div>
                             </div>
-                            <div className="text-xs text-gray-400">
-                              👤 {wd.pic}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="space-y-1">
+                              <div className="text-sm font-medium text-gray-900">
+                                {wd.work_order?.vessel?.name || "-"}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {wd.work_order?.vessel?.type || "-"} •{" "}
+                                {wd.work_order?.vessel?.company || "-"}
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="space-y-1">
-                            <div className="text-sm font-medium text-gray-900">
-                              {wd.work_order?.shipyard_wo_number || "-"}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {wd.latest_progress_date
+                              ? formatDate(wd.latest_progress_date)
+                              : "-"}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                                <div className="bg-green-600 h-2 rounded-full w-full"></div>
+                              </div>
+                              <span className="text-sm font-medium text-green-600">
+                                100%
+                              </span>
                             </div>
-                            <div className="text-sm text-gray-500">
-                              {wd.work_order?.customer_wo_number || "-"}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="space-y-1">
-                            <div className="text-sm font-medium text-gray-900">
-                              {wd.work_order?.vessel?.name || "-"}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {wd.work_order?.vessel?.type || "-"} •{" "}
-                              {wd.work_order?.vessel?.company || "-"}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {wd.latest_progress_date
-                            ? formatDate(wd.latest_progress_date)
-                            : "-"}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                              <div className="bg-green-600 h-2 rounded-full w-full"></div>
-                            </div>
-                            <span className="text-sm font-medium text-green-600">
-                              100%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <button
-                            onClick={() =>
-                              navigate(`/work-verification/verify/${wd.id}`)
-                            }
-                            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-                          >
-                            🔍 Verify
-                          </button>
-                        </td>
-                      </tr>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <button
+                              onClick={() =>
+                                navigate(`/work-verification/verify/${wd.id}`)
+                              }
+                              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                            >
+                              🔍 Verify
+                            </button>
+                          </td>
+                        </tr>
+
+                        {/* Expanded Row Content */}
+                        {expandedRows.has(wd.id) && (
+                          <tr>
+                            <td colSpan={7} className="px-0 py-0">
+                              <div className="bg-gray-50 border-l-4 border-blue-400">
+                                <div className="px-6 py-4">
+                                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    {/* Left Column - Work Details */}
+                                    <div className="space-y-4">
+                                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                        🔧 Work Details
+                                      </h4>
+
+                                      {/* Full Description */}
+                                      <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                        <span className="text-gray-500 text-xs">
+                                          Description:
+                                        </span>
+                                        <div className="font-medium text-gray-900 mt-1 text-sm">
+                                          {wd.description}
+                                        </div>
+                                      </div>
+
+                                      {/* Work Scope & Type */}
+                                      <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                          <div>
+                                            <span className="text-gray-500 text-xs">
+                                              Work Scope:
+                                            </span>
+                                            <div className="font-medium text-gray-900 mt-0.5">
+                                              {(wd as any).work_scope
+                                                ?.work_scope || "N/A"}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-500 text-xs">
+                                              Type:
+                                            </span>
+                                            <div className="font-medium text-gray-900 mt-0.5">
+                                              {wd.work_type || "N/A"}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Quantity & Location */}
+                                      <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                          <div>
+                                            <span className="text-gray-500 text-xs">
+                                              Quantity:
+                                            </span>
+                                            <div className="font-bold text-blue-900 text-lg mt-0.5">
+                                              {wd.quantity || 0}{" "}
+                                              <span className="text-sm text-blue-700 font-medium">
+                                                {wd.uom || ""}
+                                              </span>
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-500 text-xs">
+                                              Location:
+                                            </span>
+                                            <div className="font-medium text-green-900 mt-0.5">
+                                              📍{" "}
+                                              {wd.location?.location || "N/A"}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* SPK/SPKK Numbers */}
+                                      {(wd.spk_number || wd.spkk_number) && (
+                                        <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                          <div className="space-y-2 text-sm">
+                                            {wd.spk_number && (
+                                              <div>
+                                                <span className="text-gray-500 text-xs">
+                                                  SPK Number:
+                                                </span>
+                                                <div className="font-medium text-gray-900 mt-0.5">
+                                                  {wd.spk_number}
+                                                </div>
+                                              </div>
+                                            )}
+                                            {wd.spkk_number && (
+                                              <div>
+                                                <span className="text-gray-500 text-xs">
+                                                  SPKK Number:
+                                                </span>
+                                                <div className="font-medium text-gray-900 mt-0.5">
+                                                  {wd.spkk_number}
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Right Column - Additional Details */}
+                                    <div className="space-y-4">
+                                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                        📋 Additional Information
+                                      </h4>
+
+                                      {/* Schedule */}
+                                      <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                        <div className="space-y-3 text-sm">
+                                          <div>
+                                            <span className="text-gray-500 text-xs">
+                                              Planned Start:
+                                            </span>
+                                            <div className="font-medium text-gray-900 mt-0.5">
+                                              📅{" "}
+                                              {wd.planned_start_date
+                                                ? formatDate(
+                                                    wd.planned_start_date
+                                                  )
+                                                : "N/A"}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-500 text-xs">
+                                              Target Close:
+                                            </span>
+                                            <div className="font-medium text-gray-900 mt-0.5">
+                                              🎯{" "}
+                                              {formatDate(wd.target_close_date)}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-500 text-xs">
+                                              Period Close Target:
+                                            </span>
+                                            <div className="font-medium text-gray-900 mt-0.5">
+                                              ⏰{" "}
+                                              {wd.period_close_target || "N/A"}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* PIC */}
+                                      <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                        <span className="text-gray-500 text-xs">
+                                          Person in Charge:
+                                        </span>
+                                        <div className="font-medium text-gray-900 mt-0.5 text-sm">
+                                          👤 {wd.pic}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     ))}
                   </tbody>
                 </table>
@@ -681,6 +842,9 @@ export default function WorkVerification() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                      {/* Expand column */}
+                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Work Details
                     </th>
@@ -696,87 +860,278 @@ export default function WorkVerification() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Verified By
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredVerified.map((verification) => (
-                    <tr key={verification.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
-                        <div className="space-y-1">
-                          <div className="text-sm font-medium text-gray-900 max-w-xs">
-                            {verification.work_details?.description?.length > 60
-                              ? `${verification.work_details.description.substring(
-                                  0,
-                                  60
-                                )}...`
-                              : verification.work_details?.description}
+                    <>
+                      <tr key={verification.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <button
+                            onClick={() =>
+                              toggleRowExpansion(verification.work_details_id)
+                            }
+                            className="text-gray-400 hover:text-gray-600 transition-colors"
+                          >
+                            <svg
+                              className={`w-5 h-5 transition-transform duration-200 ${
+                                expandedRows.has(verification.work_details_id)
+                                  ? "rotate-90"
+                                  : ""
+                              }`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 5l7 7-7 7"
+                              />
+                            </svg>
+                          </button>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="space-y-1">
+                            <div className="text-sm font-medium text-gray-900 max-w-xs">
+                              {verification.work_details?.description?.length >
+                              60
+                                ? `${verification.work_details.description.substring(
+                                    0,
+                                    60
+                                  )}...`
+                                : verification.work_details?.description}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              📍{" "}
+                              {verification.work_details?.location?.location ||
+                                "-"}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              👤 {verification.work_details?.pic}
+                            </div>
                           </div>
-                          <div className="text-sm text-gray-500">
-                            📍{" "}
-                            {typeof verification.work_details?.location ===
-                            "object"
-                              ? verification.work_details?.location?.location ||
-                                "-"
-                              : verification.work_details?.location || "-"}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="space-y-1">
+                            <div className="text-sm font-medium text-gray-900">
+                              {verification.work_details?.work_order
+                                ?.shipyard_wo_number || "-"}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {verification.work_details?.work_order
+                                ?.customer_wo_number || "-"}
+                            </div>
                           </div>
-                          <div className="text-xs text-gray-400">
-                            👤 {verification.work_details?.pic}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="space-y-1">
+                            <div className="text-sm font-medium text-gray-900">
+                              {verification.work_details?.work_order?.vessel
+                                ?.name || "-"}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {verification.work_details?.work_order?.vessel
+                                ?.type || "-"}{" "}
+                              •{" "}
+                              {verification.work_details?.work_order?.vessel
+                                ?.company || "-"}
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="space-y-1">
-                          <div className="text-sm font-medium text-gray-900">
-                            {verification.work_details?.work_order
-                              ?.shipyard_wo_number || "-"}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {verification.work_details?.work_order
-                              ?.customer_wo_number || "-"}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="space-y-1">
-                          <div className="text-sm font-medium text-gray-900">
-                            {verification.work_details?.work_order?.vessel
-                              ?.name || "-"}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {verification.work_details?.work_order?.vessel
-                              ?.type || "-"}{" "}
-                            •{" "}
-                            {verification.work_details?.work_order?.vessel
-                              ?.company || "-"}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(verification.verification_date)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {verification.profiles?.name || "Unknown User"}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                          onClick={() => handleRemoveVerification(verification)}
-                          disabled={
-                            submittingId === verification.work_details_id
-                          }
-                          className="text-red-600 hover:text-red-900 transition-colors disabled:opacity-50"
-                          title="Remove Verification"
-                        >
-                          {submittingId === verification.work_details_id ? (
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
-                          ) : (
-                            "🗑️ Remove"
-                          )}
-                        </button>
-                      </td>
-                    </tr>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatDate(verification.verification_date)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {verification.profiles?.name || "Unknown User"}
+                        </td>
+                      </tr>
+
+                      {/* Expanded Row Content */}
+                      {expandedRows.has(verification.work_details_id) && (
+                        <tr>
+                          <td colSpan={6} className="px-0 py-0">
+                            <div className="bg-gray-50 border-l-4 border-green-400">
+                              <div className="px-6 py-4">
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                  {/* Left Column - Work Details */}
+                                  <div className="space-y-4">
+                                    <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                      🔧 Work Details
+                                    </h4>
+
+                                    {/* Full Description */}
+                                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                      <span className="text-gray-500 text-xs">
+                                        Description:
+                                      </span>
+                                      <div className="font-medium text-gray-900 mt-1 text-sm">
+                                        {verification.work_details?.description}
+                                      </div>
+                                    </div>
+
+                                    {/* Work Scope & Type */}
+                                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                      <div className="grid grid-cols-2 gap-3 text-sm">
+                                        <div>
+                                          <span className="text-gray-500 text-xs">
+                                            Work Scope:
+                                          </span>
+                                          <div className="font-medium text-gray-900 mt-0.5">
+                                            {(verification.work_details as any)
+                                              .work_scope?.work_scope || "N/A"}
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <span className="text-gray-500 text-xs">
+                                            Type:
+                                          </span>
+                                          <div className="font-medium text-gray-900 mt-0.5">
+                                            {verification.work_details
+                                              ?.work_type || "N/A"}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Quantity & Location */}
+                                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                      <div className="grid grid-cols-2 gap-3 text-sm">
+                                        <div>
+                                          <span className="text-gray-500 text-xs">
+                                            Quantity:
+                                          </span>
+                                          <div className="font-bold text-blue-900 text-lg mt-0.5">
+                                            {verification.work_details
+                                              ?.quantity || 0}{" "}
+                                            <span className="text-sm text-blue-700 font-medium">
+                                              {verification.work_details?.uom ||
+                                                ""}
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <span className="text-gray-500 text-xs">
+                                            Location:
+                                          </span>
+                                          <div className="font-medium text-green-900 mt-0.5">
+                                            📍{" "}
+                                            {verification.work_details?.location
+                                              ?.location || "N/A"}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* SPK/SPKK Numbers */}
+                                    {(verification.work_details?.spk_number ||
+                                      verification.work_details
+                                        ?.spkk_number) && (
+                                      <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                        <div className="space-y-2 text-sm">
+                                          {verification.work_details
+                                            ?.spk_number && (
+                                            <div>
+                                              <span className="text-gray-500 text-xs">
+                                                SPK Number:
+                                              </span>
+                                              <div className="font-medium text-gray-900 mt-0.5">
+                                                {
+                                                  verification.work_details
+                                                    ?.spk_number
+                                                }
+                                              </div>
+                                            </div>
+                                          )}
+                                          {verification.work_details
+                                            ?.spkk_number && (
+                                            <div>
+                                              <span className="text-gray-500 text-xs">
+                                                SPKK Number:
+                                              </span>
+                                              <div className="font-medium text-gray-900 mt-0.5">
+                                                {
+                                                  verification.work_details
+                                                    ?.spkk_number
+                                                }
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Right Column - Additional Details */}
+                                  <div className="space-y-4">
+                                    <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                      📋 Additional Information
+                                    </h4>
+
+                                    {/* Schedule */}
+                                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                      <div className="space-y-3 text-sm">
+                                        <div>
+                                          <span className="text-gray-500 text-xs">
+                                            Planned Start:
+                                          </span>
+                                          <div className="font-medium text-gray-900 mt-0.5">
+                                            📅{" "}
+                                            {verification.work_details
+                                              ?.planned_start_date
+                                              ? formatDate(
+                                                  verification.work_details
+                                                    ?.planned_start_date
+                                                )
+                                              : "N/A"}
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <span className="text-gray-500 text-xs">
+                                            Target Close:
+                                          </span>
+                                          <div className="font-medium text-gray-900 mt-0.5">
+                                            🎯{" "}
+                                            {verification.work_details
+                                              ?.target_close_date
+                                              ? formatDate(
+                                                  verification.work_details
+                                                    .target_close_date
+                                                )
+                                              : "N/A"}
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <span className="text-gray-500 text-xs">
+                                            Period Close Target:
+                                          </span>
+                                          <div className="font-medium text-gray-900 mt-0.5">
+                                            ⏰{" "}
+                                            {verification.work_details
+                                              ?.period_close_target || "N/A"}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* PIC */}
+                                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                      <span className="text-gray-500 text-xs">
+                                        Person in Charge:
+                                      </span>
+                                      <div className="font-medium text-gray-900 mt-0.5 text-sm">
+                                        👤 {verification.work_details?.pic}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   ))}
                 </tbody>
               </table>
