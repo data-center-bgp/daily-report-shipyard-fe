@@ -429,7 +429,7 @@ export default function EditWorkDetails() {
     if (formData.planned_start_date && formData.target_close_date) {
       const startDate = new Date(formData.planned_start_date);
       const endDate = new Date(formData.target_close_date);
-      if (startDate >= endDate) {
+      if (startDate > endDate) {
         errors.push("Target close date must be after planned start date");
       }
     }
@@ -437,7 +437,7 @@ export default function EditWorkDetails() {
     if (formData.actual_start_date && formData.actual_close_date) {
       const actualStart = new Date(formData.actual_start_date);
       const actualClose = new Date(formData.actual_close_date);
-      if (actualStart >= actualClose) {
+      if (actualStart > actualClose) {
         errors.push("Actual close date must be after actual start date");
       }
     }
