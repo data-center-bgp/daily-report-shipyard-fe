@@ -23,6 +23,7 @@ interface WorkDetailsInfo {
   id: number;
   description: string;
   location: string;
+  work_location: string;
   pic: string;
   planned_start_date: string;
   target_close_date: string;
@@ -62,6 +63,7 @@ interface SupabaseWorkDetailsData {
         location: string;
       }>;
   pic: string;
+  work_location: string;
   planned_start_date: string;
   target_close_date: string;
   period_close_target: string;
@@ -81,6 +83,7 @@ interface SupabaseWorkProgressResponse {
   work_details: {
     id: number;
     description: string;
+    work_location: string;
     location?: {
       id: number;
       location: string;
@@ -122,6 +125,7 @@ const transformSupabaseWorkDetails = (
     id: data.id,
     description: data.description,
     location: locationValue,
+    work_location: data.work_location,
     pic: data.pic,
     planned_start_date: data.planned_start_date,
     target_close_date: data.target_close_date,
@@ -155,6 +159,7 @@ const transformSupabaseWorkProgress = (
     work_details: {
       id: workDetails.id,
       description: workDetails.description,
+      work_location: workDetails.work_location,
       location: workDetails.location
         ? Array.isArray(workDetails.location)
           ? workDetails.location[0]
@@ -372,6 +377,7 @@ export default function WorkProgressTable({
           id,
           location
         ),
+        work_location,
         pic,
         planned_start_date,
         target_close_date,
@@ -423,6 +429,7 @@ export default function WorkProgressTable({
     work_details!inner (
       id,
       description,
+      work_location,
       location:location_id (
         id,
         location
@@ -691,9 +698,10 @@ export default function WorkProgressTable({
           id,
           description,
           location:location_id (
-          id,
-          location
+            id,
+            location
           ),
+          work_location,
           pic,
           planned_start_date,
           target_close_date,
@@ -771,6 +779,7 @@ export default function WorkProgressTable({
                 id,
                 location
                 ),
+              work_location,
               pic,
               planned_start_date,
               target_close_date,
@@ -1261,6 +1270,11 @@ export default function WorkProgressTable({
                           📍 {workDetails.location || "No location"} • 👤{" "}
                           {workDetails.pic}
                         </div>
+                        {workDetails.work_location && (
+                          <div className="text-xs text-blue-600 mt-1">
+                            📌 {workDetails.work_location}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1514,6 +1528,11 @@ export default function WorkProgressTable({
                                       location: string;
                                     }
                                   ).location}
+                            </div>
+                          )}
+                          {item.work_details.work_location && (
+                            <div className="text-xs text-gray-600 mt-0.5 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 inline-block">
+                              📌 {item.work_details.work_location}
                             </div>
                           )}
                         </td>

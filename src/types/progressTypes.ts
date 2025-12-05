@@ -18,6 +18,7 @@ export interface WorkProgressWithDetails extends WorkProgress {
     id: number;
     description: string;
     location?: string;
+    work_location: string;
     work_order: {
       id: number;
       shipyard_wo_number: string;
