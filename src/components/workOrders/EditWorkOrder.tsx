@@ -38,9 +38,10 @@ export default function EditWorkOrder() {
     // Optional fields
     customer_wo_number: "",
     customer_wo_date: "",
-    wo_document_delivery_date: "",
     is_additional_wo: false,
     kapro_id: "",
+    work_location: "",
+    work_type: "",
   });
 
   const [loading, setLoading] = useState(false);
@@ -111,9 +112,10 @@ export default function EditWorkOrder() {
           shipyard_wo_date: data.shipyard_wo_date || "",
           customer_wo_number: data.customer_wo_number || "",
           customer_wo_date: data.customer_wo_date || "",
-          wo_document_delivery_date: data.wo_document_delivery_date || "",
           is_additional_wo: data.is_additional_wo || false,
           kapro_id: data.kapro_id?.toString() || "",
+          work_location: data.work_location || "",
+          work_type: data.work_type || "",
         });
 
         // Set vessel search term
@@ -276,11 +278,12 @@ export default function EditWorkOrder() {
         shipyard_wo_date: formData.shipyard_wo_date,
         customer_wo_number: formData.customer_wo_number.trim() || null,
         customer_wo_date: formData.customer_wo_date || null,
-        wo_document_delivery_date: formData.wo_document_delivery_date || null,
         is_additional_wo: formData.is_additional_wo,
         kapro_id: formData.kapro_id
           ? parseInt(formData.kapro_id.toString())
           : null,
+        work_location: formData.work_location.trim() || null,
+        work_type: formData.work_type || null,
         updated_at: new Date().toISOString(),
       };
 
@@ -637,6 +640,61 @@ export default function EditWorkOrder() {
                 🟡 Optional Information
               </h3>
 
+              {/* Work Type */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Work Type
+                  <span className="text-slate-500 font-normal">
+                    {" "}
+                    (Optional)
+                  </span>
+                </label>
+                <select
+                  name="work_type"
+                  value={formData.work_type}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors"
+                >
+                  <option value="">Select Work Type</option>
+                  <option value="Docking">Docking</option>
+                  <option value="Docking - IS (Intermediate Survey)">
+                    Docking - IS (Intermediate Survey)
+                  </option>
+                  <option value="Docking - AS (Annual Survey)">
+                    Docking - AS (Annual Survey)
+                  </option>
+                  <option value="Docking - SS (Special Survey)">
+                    Docking - SS (Special Survey)
+                  </option>
+                  <option value="Repair">Repair</option>
+                </select>
+                <p className="text-xs text-slate-500 mt-1">
+                  Select the type of work to be performed
+                </p>
+              </div>
+
+              {/* Work Location */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Work Location
+                  <span className="text-slate-500 font-normal">
+                    {" "}
+                    (Optional)
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  name="work_location"
+                  value={formData.work_location}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors"
+                  placeholder="e.g., Dock 1, Workshop Area A"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Specify the general location where work will be performed
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Customer WO Number */}
                 <div>
@@ -674,24 +732,6 @@ export default function EditWorkOrder() {
                     className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors"
                   />
                 </div>
-              </div>
-
-              {/* WO Document Delivery Date */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Work Order Document Delivery Date
-                  <span className="text-slate-500 font-normal">
-                    {" "}
-                    (Optional)
-                  </span>
-                </label>
-                <input
-                  type="date"
-                  name="wo_document_delivery_date"
-                  value={formData.wo_document_delivery_date}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors"
-                />
               </div>
             </div>
 

@@ -36,6 +36,10 @@ interface WorkOrderWithProgress
   has_progress_data: boolean;
 }
 
+interface WorkTypeStats {
+  [key: string]: number;
+}
+
 export default function VesselWorkOrders() {
   const { vesselId } = useParams<{ vesselId: string }>();
   const navigate = useNavigate();
@@ -393,7 +397,6 @@ export default function VesselWorkOrders() {
           ➕ Add Work Order
         </button>
       </div>
-
       {/* Vessel Info Card */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center gap-4">
@@ -411,7 +414,6 @@ export default function VesselWorkOrders() {
           </div>
         </div>
       </div>
-
       {/* Search and Actions */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
@@ -454,6 +456,9 @@ export default function VesselWorkOrders() {
                       Work Order <SortIcon field="shipyard_wo_number" />
                     </div>
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Work Info
+                  </th>
                   <th
                     onClick={() => handleSort("shipyard_wo_date")}
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
@@ -461,6 +466,9 @@ export default function VesselWorkOrders() {
                     <div className="flex items-center gap-1">
                       Dates <SortIcon field="shipyard_wo_date" />
                     </div>
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Additional Info
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Overall Progress
@@ -504,48 +512,115 @@ export default function VesselWorkOrders() {
                           </button>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="space-y-1">
-                          <div className="text-sm font-medium text-gray-900">
-                            SY: {wo.shipyard_wo_number}
+
+                      {/* Work Order Numbers */}
+                      <td className="px-6 py-4">
+                        <div className="space-y-2">
+                          <div>
+                            <div className="text-xs text-gray-500 font-medium">
+                              Shipyard WO
+                            </div>
+                            <div className="text-sm font-semibold text-gray-900">
+                              {wo.shipyard_wo_number}
+                            </div>
                           </div>
                           {wo.customer_wo_number && (
-                            <div className="text-sm text-gray-500">
-                              Customer: {wo.customer_wo_number}
+                            <div>
+                              <div className="text-xs text-gray-500 font-medium">
+                                Customer WO
+                              </div>
+                              <div className="text-sm text-gray-700">
+                                {wo.customer_wo_number}
+                              </div>
                             </div>
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="space-y-1">
-                          <div className="text-sm text-gray-900">
-                            <span className="font-medium text-gray-600">
-                              Shipyard WO:
-                            </span>{" "}
-                            {formatDate(wo.shipyard_wo_date)}
+
+                      {/* Work Info */}
+                      <td className="px-6 py-4">
+                        <div className="space-y-2">
+                          {wo.work_type && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-gray-500">
+                                ⚙️ Type:
+                              </span>
+                              <span className="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                                {wo.work_type}
+                              </span>
+                            </div>
+                          )}
+                          {wo.work_location && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-gray-500">
+                                📍 Location:
+                              </span>
+                              <span className="text-xs text-gray-700">
+                                {wo.work_location}
+                              </span>
+                            </div>
+                          )}
+                          {!wo.work_type && !wo.work_location && (
+                            <span className="text-xs text-gray-400">-</span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Dates */}
+                      <td className="px-6 py-4">
+                        <div className="space-y-2">
+                          <div>
+                            <div className="text-xs text-gray-500">
+                              Shipyard WO Date
+                            </div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {formatDate(wo.shipyard_wo_date)}
+                            </div>
                           </div>
                           {wo.customer_wo_date && (
-                            <div className="text-sm text-gray-500">
-                              <span className="font-medium text-gray-600">
-                                Customer WO:
-                              </span>{" "}
-                              {formatDate(wo.customer_wo_date)}
-                            </div>
-                          )}
-                          {wo.wo_document_delivery_date && (
-                            <div className="text-xs text-blue-600">
-                              <span className="font-medium text-blue-700">
-                                Doc Delivery:
-                              </span>{" "}
-                              {formatDate(wo.wo_document_delivery_date)}
+                            <div>
+                              <div className="text-xs text-gray-500">
+                                Customer WO Date
+                              </div>
+                              <div className="text-sm text-gray-700">
+                                {formatDate(wo.customer_wo_date)}
+                              </div>
                             </div>
                           )}
                         </div>
                       </td>
+
+                      {/* Additional Info */}
+                      <td className="px-6 py-4">
+                        <div className="space-y-2">
+                          {wo.is_additional_wo && (
+                            <div>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
+                                ⚠️ Additional WO
+                              </span>
+                            </div>
+                          )}
+                          {wo.kapro_id && (
+                            <div className="text-xs text-gray-600">
+                              👤 Kapro ID: {wo.kapro_id}
+                            </div>
+                          )}
+                          <div className="text-xs text-gray-400">
+                            Created: {formatDate(wo.created_at)}
+                          </div>
+                          {wo.updated_at && wo.updated_at !== wo.created_at && (
+                            <div className="text-xs text-gray-400">
+                              Updated: {formatDate(wo.updated_at)}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Overall Progress */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         {wo.has_progress_data ? (
                           <div className="flex items-center gap-3">
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-[100px]">
                               <div className="flex items-center justify-between mb-1">
                                 <span className="text-xs font-medium text-gray-700">
                                   {wo.overall_progress}%
@@ -567,6 +642,8 @@ export default function VesselWorkOrders() {
                           </span>
                         )}
                       </td>
+
+                      {/* Status */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(
@@ -576,6 +653,8 @@ export default function VesselWorkOrders() {
                           {getStatus(wo)}
                         </span>
                       </td>
+
+                      {/* Actions */}
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <div className="flex space-x-2">
                           <button
@@ -596,10 +675,11 @@ export default function VesselWorkOrders() {
                       </td>
                     </tr>
 
-                    {/* Expandable Work Details Rows */}
+                    {/* Expandable Work Details Rows - Keep existing expandable section */}
                     {expandedWorkOrders.has(wo.id) && (
                       <tr>
-                        <td colSpan={6} className="px-0 py-0">
+                        <td colSpan={8} className="px-0 py-0">
+                          {/* Keep your existing expandable work details section */}
                           <div className="bg-gray-50 border-l-4 border-blue-400">
                             <div className="px-6 py-4">
                               <h4 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
@@ -613,8 +693,8 @@ export default function VesselWorkOrders() {
                                       key={detail.id}
                                       className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow"
                                     >
+                                      {/* Keep existing work details display */}
                                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                                        {/* Work Detail Info */}
                                         <div className="lg:col-span-2">
                                           <div className="flex items-start gap-3">
                                             <span className="text-lg">
@@ -626,7 +706,6 @@ export default function VesselWorkOrders() {
                                               <h5 className="font-medium text-gray-900 mb-2">
                                                 {detail.description}
                                               </h5>
-                                              {/* Enhanced work details with clear labels */}
                                               <div className="space-y-1 text-sm text-gray-600">
                                                 {detail.location && (
                                                   <div className="flex items-center gap-1">
@@ -636,6 +715,17 @@ export default function VesselWorkOrders() {
                                                     </span>
                                                     <span>
                                                       {detail.location.location}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                                {detail.work_location && (
+                                                  <div className="flex items-center gap-1">
+                                                    <span>📌</span>
+                                                    <span className="font-medium">
+                                                      Specific Location:
+                                                    </span>
+                                                    <span>
+                                                      {detail.work_location}
                                                     </span>
                                                   </div>
                                                 )}
@@ -742,7 +832,6 @@ export default function VesselWorkOrders() {
                                           </div>
                                         </div>
 
-                                        {/* Progress Info */}
                                         <div className="lg:col-span-1">
                                           <div className="text-center">
                                             <div className="text-lg font-bold text-gray-900 mb-2">
@@ -805,6 +894,7 @@ export default function VesselWorkOrders() {
             </table>
           </div>
         ) : (
+          // Keep existing empty state
           <div className="text-center py-12">
             <span className="text-gray-400 text-4xl mb-4 block">📋</span>
             {searchTerm ? (

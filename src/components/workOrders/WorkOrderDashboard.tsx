@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { supabase } from "../../lib/supabase";
+import { supabase, type Kapro } from "../../lib/supabase";
 
 interface WorkOrderStats {
   totalWorkOrders: number;
@@ -12,6 +12,12 @@ interface VesselSummary {
   type: string;
   company: string;
   totalWorkOrders: number;
+  workOrders: {
+    work_type?: string;
+    work_location?: string;
+    kapro_id?: number;
+    is_additional_wo?: boolean;
+  }[];
 }
 
 export default function WorkOrderDashboard() {
@@ -28,6 +34,22 @@ export default function WorkOrderDashboard() {
   const [showVesselDropdown, setShowVesselDropdown] = useState(false);
   const vesselDropdownRef = useRef<HTMLDivElement>(null);
   const [selectedVesselId, setSelectedVesselId] = useState<number | null>(null);
+
+  // Filter states
+  const [workTypeFilter, setWorkTypeFilter] = useState<string>("");
+  const [workLocationFilter, setWorkLocationFilter] = useState<string>("");
+  const [kaproFilter, setKaproFilter] = useState<string>("");
+  const [additionalWoFilter, setAdditionalWoFilter] = useState<string>("");
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Kapros list
+  const [kapros, setKapros] = useState<Kapro[]>([]);
+
+  // Available filter options
+  const [availableWorkTypes, setAvailableWorkTypes] = useState<string[]>([]);
+  const [availableWorkLocations, setAvailableWorkLocations] = useState<
+    string[]
+  >([]);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [vesselsPerPage] = useState(12);
@@ -54,10 +76,29 @@ export default function WorkOrderDashboard() {
     };
   }, []);
 
-  // FIXED: Proper memoization and error handling
+  // Fetch Kapros
+  useEffect(() => {
+    const fetchKapros = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("kapro")
+          .select("*")
+          .is("deleted_at", null)
+          .order("kapro_name", { ascending: true });
+
+        if (error) throw error;
+        setKapros(data || []);
+      } catch (err) {
+        console.error("Error fetching kapros:", err);
+      }
+    };
+
+    fetchKapros();
+  }, []);
+
   const fetchWorkOrders = useCallback(async () => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
       setLoading(true);
@@ -108,7 +149,19 @@ export default function WorkOrderDashboard() {
         totalWorkOrders: validWorkOrders.length,
       });
 
-      // Group by vessels
+      // Extract unique work types and locations for filters
+      const workTypes = new Set<string>();
+      const workLocations = new Set<string>();
+
+      validWorkOrders.forEach((wo) => {
+        if (wo.work_type) workTypes.add(wo.work_type);
+        if (wo.work_location) workLocations.add(wo.work_location);
+      });
+
+      setAvailableWorkTypes(Array.from(workTypes).sort());
+      setAvailableWorkLocations(Array.from(workLocations).sort());
+
+      // Group by vessels with work order details
       const vesselMap = new Map<
         number,
         {
@@ -117,6 +170,12 @@ export default function WorkOrderDashboard() {
           type: string;
           company: string;
           count: number;
+          workOrders: {
+            work_type?: string;
+            work_location?: string;
+            kapro_id?: number;
+            is_additional_wo?: boolean;
+          }[];
         }
       >();
 
@@ -130,11 +189,18 @@ export default function WorkOrderDashboard() {
             type: wo.vessel!.type,
             company: wo.vessel!.company,
             count: 0,
+            workOrders: [],
           });
         }
 
         const vesselData = vesselMap.get(vesselId)!;
         vesselData.count++;
+        vesselData.workOrders.push({
+          work_type: wo.work_type,
+          work_location: wo.work_location,
+          kapro_id: wo.kapro_id,
+          is_additional_wo: wo.is_additional_wo,
+        });
       });
 
       const vesselSummaries = Array.from(vesselMap.values()).map((vessel) => ({
@@ -143,6 +209,7 @@ export default function WorkOrderDashboard() {
         type: vessel.type,
         company: vessel.company,
         totalWorkOrders: vessel.count,
+        workOrders: vessel.workOrders,
       }));
 
       console.log("📊 Vessel summaries:", vesselSummaries.length);
@@ -169,7 +236,7 @@ export default function WorkOrderDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []); // Empty deps - functions are stable
+  }, []);
 
   // Filter vessels for search dropdown
   const searchFilteredVessels = vessels.filter((vessel) => {
@@ -199,7 +266,17 @@ export default function WorkOrderDashboard() {
     setShowVesselDropdown(false);
   };
 
-  // Filter and sort vessels based on search
+  const handleClearFilters = () => {
+    setWorkTypeFilter("");
+    setWorkLocationFilter("");
+    setKaproFilter("");
+    setAdditionalWoFilter("");
+  };
+
+  const hasActiveFilters =
+    workTypeFilter || workLocationFilter || kaproFilter || additionalWoFilter;
+
+  // Filter and sort vessels based on search and filters
   useEffect(() => {
     let filtered = vessels;
 
@@ -217,6 +294,45 @@ export default function WorkOrderDashboard() {
       );
     }
 
+    // Apply work order filters
+    if (hasActiveFilters) {
+      filtered = filtered.filter((vessel) => {
+        return vessel.workOrders.some((wo) => {
+          // Work Type Filter
+          if (workTypeFilter && wo.work_type !== workTypeFilter) {
+            return false;
+          }
+
+          // Work Location Filter
+          if (workLocationFilter && wo.work_location !== workLocationFilter) {
+            return false;
+          }
+
+          // Kapro Filter
+          if (kaproFilter) {
+            if (kaproFilter === "unassigned") {
+              if (wo.kapro_id != null) return false;
+            } else {
+              if (wo.kapro_id !== parseInt(kaproFilter)) return false;
+            }
+          }
+
+          // Additional WO Filter
+          if (additionalWoFilter) {
+            if (additionalWoFilter === "yes" && !wo.is_additional_wo) {
+              return false;
+            }
+            if (additionalWoFilter === "no" && wo.is_additional_wo) {
+              return false;
+            }
+          }
+
+          return true;
+        });
+      });
+    }
+
+    // Sort
     filtered = [...filtered].sort((a, b) => {
       let aValue: string | number;
       let bValue: string | number;
@@ -255,6 +371,11 @@ export default function WorkOrderDashboard() {
     showVesselDropdown,
     sortBy,
     sortDirection,
+    workTypeFilter,
+    workLocationFilter,
+    kaproFilter,
+    additionalWoFilter,
+    hasActiveFilters,
   ]);
 
   // Pagination
@@ -354,6 +475,7 @@ export default function WorkOrderDashboard() {
         </div>
       )}
 
+      {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
           <div className="flex items-center justify-between">
@@ -399,87 +521,259 @@ export default function WorkOrderDashboard() {
         </div>
       </div>
 
+      {/* Vessels Section with Filters */}
       <div className="bg-white rounded-lg shadow">
         <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">Vessels</h2>
-              <p className="text-gray-600 text-sm">
-                Click on a vessel to view its work orders (
-                {filteredVessels.length} of {vessels.length} vessels)
-              </p>
+          <div className="flex flex-col gap-4">
+            {/* Header with Search and Sort */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Vessels</h2>
+                <p className="text-gray-600 text-sm">
+                  Click on a vessel to view its work orders (
+                  {filteredVessels.length} of {vessels.length} vessels)
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                {/* Searchable Vessel Dropdown */}
+                <div className="relative" ref={vesselDropdownRef}>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search vessels..."
+                      value={vesselSearchTerm}
+                      onChange={handleVesselSearch}
+                      onFocus={() => setShowVesselDropdown(true)}
+                      className="w-full sm:w-64 pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <span className="absolute left-3 top-2.5 text-gray-400">
+                      🔍
+                    </span>
+                    {(vesselSearchTerm || selectedVesselId) && (
+                      <button
+                        onClick={handleClearSearch}
+                        className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {showVesselDropdown && searchFilteredVessels.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {searchFilteredVessels.map((vessel) => (
+                        <div
+                          key={vessel.id}
+                          onClick={() => handleVesselSelect(vessel)}
+                          className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                            selectedVesselId === vessel.id ? "bg-blue-100" : ""
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-medium text-gray-900">
+                                {vessel.name}
+                              </div>
+                              <div className="text-sm text-gray-600">
+                                {vessel.type} • {vessel.company}
+                              </div>
+                            </div>
+                            <div className="text-sm text-blue-600 font-medium">
+                              {vessel.totalWorkOrders} WO
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <select
+                  value={`${sortBy}-${sortDirection}`}
+                  onChange={(e) => {
+                    const [field, direction] = e.target.value.split("-");
+                    setSortBy(field as typeof sortBy);
+                    setSortDirection(direction as "asc" | "desc");
+                  }}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="name-asc">Name (A-Z)</option>
+                  <option value="name-desc">Name (Z-A)</option>
+                  <option value="totalWorkOrders-desc">Most Work Orders</option>
+                  <option value="totalWorkOrders-asc">Least Work Orders</option>
+                </select>
+
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                    showFilters || hasActiveFilters
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  🔽 Filters
+                  {hasActiveFilters && (
+                    <span className="bg-white text-blue-600 px-2 py-0.5 rounded-full text-xs font-bold">
+                      ●
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3">
-              {/* Searchable Vessel Dropdown */}
-              <div className="relative" ref={vesselDropdownRef}>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search vessels..."
-                    value={vesselSearchTerm}
-                    onChange={handleVesselSearch}
-                    onFocus={() => setShowVesselDropdown(true)}
-                    className="w-full sm:w-64 pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <span className="absolute left-3 top-2.5 text-gray-400">
-                    🔍
-                  </span>
-                  {(vesselSearchTerm || selectedVesselId) && (
+            {/* Filter Panel */}
+            {showFilters && (
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-gray-900">
+                    Filter Work Orders
+                  </h3>
+                  {hasActiveFilters && (
                     <button
-                      onClick={handleClearSearch}
-                      className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                      onClick={handleClearFilters}
+                      className="text-sm text-blue-600 hover:text-blue-800"
                     >
-                      ✕
+                      Clear all filters
                     </button>
                   )}
                 </div>
 
-                {/* Dropdown */}
-                {showVesselDropdown && searchFilteredVessels.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {searchFilteredVessels.map((vessel) => (
-                      <div
-                        key={vessel.id}
-                        onClick={() => handleVesselSelect(vessel)}
-                        className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                          selectedVesselId === vessel.id ? "bg-blue-100" : ""
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="font-medium text-gray-900">
-                              {vessel.name}
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              {vessel.type} • {vessel.company}
-                            </div>
-                          </div>
-                          <div className="text-sm text-blue-600 font-medium">
-                            {vessel.totalWorkOrders} WO
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Work Type Filter */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Work Type
+                    </label>
+                    <select
+                      value={workTypeFilter}
+                      onChange={(e) => setWorkTypeFilter(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">All Types</option>
+                      {availableWorkTypes.map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Work Location Filter */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Work Location
+                    </label>
+                    <select
+                      value={workLocationFilter}
+                      onChange={(e) => setWorkLocationFilter(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">All Locations</option>
+                      {availableWorkLocations.map((location) => (
+                        <option key={location} value={location}>
+                          {location}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Kapro Filter */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Kapro
+                    </label>
+                    <select
+                      value={kaproFilter}
+                      onChange={(e) => setKaproFilter(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">All Kapros</option>
+                      <option value="unassigned">Unassigned</option>
+                      {kapros.map((kapro) => (
+                        <option key={kapro.id} value={kapro.id.toString()}>
+                          {kapro.kapro_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Additional WO Filter */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Additional WO
+                    </label>
+                    <select
+                      value={additionalWoFilter}
+                      onChange={(e) => setAdditionalWoFilter(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">All</option>
+                      <option value="yes">Yes</option>
+                      <option value="no">No</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Active Filters Display */}
+                {hasActiveFilters && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <span className="text-sm text-gray-600">
+                      Active filters:
+                    </span>
+                    {workTypeFilter && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded text-sm">
+                        Type: {workTypeFilter}
+                        <button
+                          onClick={() => setWorkTypeFilter("")}
+                          className="hover:text-blue-900"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    )}
+                    {workLocationFilter && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded text-sm">
+                        Location: {workLocationFilter}
+                        <button
+                          onClick={() => setWorkLocationFilter("")}
+                          className="hover:text-blue-900"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    )}
+                    {kaproFilter && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded text-sm">
+                        Kapro:{" "}
+                        {kaproFilter === "unassigned"
+                          ? "Unassigned"
+                          : kapros.find((k) => k.id.toString() === kaproFilter)
+                              ?.kapro_name}
+                        <button
+                          onClick={() => setKaproFilter("")}
+                          className="hover:text-blue-900"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    )}
+                    {additionalWoFilter && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded text-sm">
+                        Additional:{" "}
+                        {additionalWoFilter === "yes" ? "Yes" : "No"}
+                        <button
+                          onClick={() => setAdditionalWoFilter("")}
+                          className="hover:text-blue-900"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
-
-              <select
-                value={`${sortBy}-${sortDirection}`}
-                onChange={(e) => {
-                  const [field, direction] = e.target.value.split("-");
-                  setSortBy(field as typeof sortBy);
-                  setSortDirection(direction as "asc" | "desc");
-                }}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="name-asc">Name (A-Z)</option>
-                <option value="name-desc">Name (Z-A)</option>
-                <option value="totalWorkOrders-desc">Most Work Orders</option>
-                <option value="totalWorkOrders-asc">Least Work Orders</option>
-              </select>
-            </div>
+            )}
           </div>
         </div>
 
@@ -588,17 +882,29 @@ export default function WorkOrderDashboard() {
           ) : (
             <div className="text-center py-12">
               <span className="text-gray-400 text-4xl mb-4 block">🚢</span>
-              {vesselSearchTerm || selectedVesselId ? (
+              {vesselSearchTerm || selectedVesselId || hasActiveFilters ? (
                 <>
                   <p className="text-gray-500 text-lg mb-2">
-                    No vessels found matching your search
+                    No vessels found matching your search or filters
                   </p>
-                  <button
-                    onClick={handleClearSearch}
-                    className="text-blue-600 hover:text-blue-800 transition-colors"
-                  >
-                    Clear search
-                  </button>
+                  <div className="flex gap-2 justify-center">
+                    {(vesselSearchTerm || selectedVesselId) && (
+                      <button
+                        onClick={handleClearSearch}
+                        className="text-blue-600 hover:text-blue-800 transition-colors"
+                      >
+                        Clear search
+                      </button>
+                    )}
+                    {hasActiveFilters && (
+                      <button
+                        onClick={handleClearFilters}
+                        className="text-blue-600 hover:text-blue-800 transition-colors"
+                      >
+                        Clear filters
+                      </button>
+                    )}
+                  </div>
                 </>
               ) : (
                 <>

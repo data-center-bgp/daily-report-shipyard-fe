@@ -26,9 +26,10 @@ export default function AddWorkOrder() {
     // Optional fields
     customer_wo_number: "",
     customer_wo_date: "",
-    wo_document_delivery_date: "",
     is_additional_wo: false,
     kapro_id: "",
+    work_location: "",
+    work_type: "",
   });
 
   const [loading, setLoading] = useState(false);
@@ -287,11 +288,12 @@ export default function AddWorkOrder() {
         shipyard_wo_date: formData.shipyard_wo_date,
         customer_wo_number: formData.customer_wo_number.trim() || null,
         customer_wo_date: formData.customer_wo_date || null,
-        wo_document_delivery_date: formData.wo_document_delivery_date || null,
         is_additional_wo: formData.is_additional_wo,
         kapro_id: formData.kapro_id
           ? parseInt(formData.kapro_id.toString())
           : null,
+        work_location: formData.work_location.trim() || null,
+        work_type: formData.work_type || null,
         user_id: userId,
       };
 
@@ -503,6 +505,54 @@ export default function AddWorkOrder() {
                 Optional Information
               </h3>
 
+              {/* Work Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Work Type <span className="text-gray-500">(Optional)</span>
+                </label>
+                <select
+                  name="work_type"
+                  value={formData.work_type}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select Work Type</option>
+                  <option value="Docking">Docking</option>
+                  <option value="Docking - IS (Intermediate Survey)">
+                    Docking - IS (Intermediate Survey)
+                  </option>
+                  <option value="Docking - AS (Annual Survey)">
+                    Docking - AS (Annual Survey)
+                  </option>
+                  <option value="Docking - SS (Special Survey)">
+                    Docking - SS (Special Survey)
+                  </option>
+                  <option value="Repair">Repair</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Select the type of work to be performed
+                </p>
+              </div>
+
+              {/* Work Location */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Work Location{" "}
+                  <span className="text-gray-500">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  name="work_location"
+                  value={formData.work_location}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., Dock 1, Workshop Area A"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Specify the general location where work will be performed
+                </p>
+              </div>
+
               {/* Customer WO Number */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -532,25 +582,6 @@ export default function AddWorkOrder() {
                   onChange={handleInputChange}
                   className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
-              </div>
-
-              {/* WO Document Delivery Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Work Order Document Delivery Date{" "}
-                  <span className="text-gray-500">(Optional)</span>
-                </label>
-                <input
-                  type="date"
-                  name="wo_document_delivery_date"
-                  value={formData.wo_document_delivery_date}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  This date is typically filled when the work order process is
-                  completed
-                </p>
               </div>
 
               {/* Additional WO Checkbox */}

@@ -41,10 +41,11 @@ export interface WorkOrder {
   shipyard_wo_date: string;
   customer_wo_number?: string;
   customer_wo_date?: string;
-  wo_document_delivery_date?: string;
   user_id: number;
   is_additional_wo?: boolean;
   kapro_id?: number;
+  work_location?: string;
+  work_type?: string;
 }
 
 export interface WorkDetails {
