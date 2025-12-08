@@ -36,10 +36,6 @@ interface WorkOrderWithProgress
   has_progress_data: boolean;
 }
 
-interface WorkTypeStats {
-  [key: string]: number;
-}
-
 export default function VesselWorkOrders() {
   const { vesselId } = useParams<{ vesselId: string }>();
   const navigate = useNavigate();
@@ -718,17 +714,6 @@ export default function VesselWorkOrders() {
                                                     </span>
                                                   </div>
                                                 )}
-                                                {detail.work_location && (
-                                                  <div className="flex items-center gap-1">
-                                                    <span>📌</span>
-                                                    <span className="font-medium">
-                                                      Specific Location:
-                                                    </span>
-                                                    <span>
-                                                      {detail.work_location}
-                                                    </span>
-                                                  </div>
-                                                )}
                                                 {detail.work_scope && (
                                                   <div className="flex items-center gap-1">
                                                     <span>🔧</span>
@@ -740,17 +725,6 @@ export default function VesselWorkOrders() {
                                                         detail.work_scope
                                                           .work_scope
                                                       }
-                                                    </span>
-                                                  </div>
-                                                )}
-                                                {detail.work_type && (
-                                                  <div className="flex items-center gap-1">
-                                                    <span>⚙️</span>
-                                                    <span className="font-medium">
-                                                      Type:
-                                                    </span>
-                                                    <span>
-                                                      {detail.work_type}
                                                     </span>
                                                   </div>
                                                 )}

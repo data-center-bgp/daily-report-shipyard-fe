@@ -66,14 +66,13 @@ export interface WorkDetails {
   storage_path?: string;
   user_id: number;
   work_scope_id: number;
-  work_type: string;
   quantity: number;
   uom: string;
   is_additional_wo_details: boolean;
   spk_number?: string;
   spkk_number?: string;
   notes?: string;
-  work_location: string;
+  ptw_number?: string;
 }
 
 export interface WorkProgress {

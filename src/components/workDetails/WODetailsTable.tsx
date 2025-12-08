@@ -85,6 +85,14 @@ export default function WODetailsTable({
   const [showWorkOrderDropdown, setShowWorkOrderDropdown] = useState(false);
   const workOrderDropdownRef = useRef<HTMLDivElement>(null);
 
+  const [selectedWorkOrderDetails, setSelectedWorkOrderDetails] = useState<
+    | (WorkOrder & {
+        vessel?: Vessel;
+        kapro?: { id: number; kapro_name: string };
+      })
+    | null
+  >(null);
+
   const navigate = useNavigate();
 
   // Calculate pagination
@@ -174,6 +182,7 @@ export default function WODetailsTable({
     setWorkOrderSearchTerm("");
     setWorkOrders([]);
     setCurrentPage(1);
+    setSelectedWorkOrderDetails(null);
   };
 
   const handleWorkOrderSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -189,6 +198,7 @@ export default function WODetailsTable({
     setWorkOrderSearchTerm(workOrder.shipyard_wo_number || "");
     setShowWorkOrderDropdown(false);
     setCurrentPage(1);
+    fetchWorkOrderDetails(workOrder.id);
   };
 
   const handleClearWorkOrderSearch = () => {
@@ -196,6 +206,7 @@ export default function WODetailsTable({
     setSelectedWorkOrderId(0);
     setShowWorkOrderDropdown(false);
     setCurrentPage(1);
+    setSelectedWorkOrderDetails(null);
   };
 
   // Fetch vessels for filter dropdown
@@ -234,6 +245,36 @@ export default function WODetailsTable({
       console.error("Error fetching work orders:", err);
     } finally {
       setLoadingWorkOrders(false);
+    }
+  };
+
+  const fetchWorkOrderDetails = async (workOrderId: number) => {
+    try {
+      const { data, error } = await supabase
+        .from("work_order")
+        .select(
+          `
+        *,
+        vessel (
+          id,
+          name,
+          type,
+          company
+        ),
+        kapro (
+          id,
+          kapro_name
+        )
+      `
+        )
+        .eq("id", workOrderId)
+        .single();
+
+      if (error) throw error;
+      setSelectedWorkOrderDetails(data);
+    } catch (err) {
+      console.error("Error fetching work order details:", err);
+      setSelectedWorkOrderDetails(null);
     }
   };
 
@@ -371,6 +412,12 @@ export default function WODetailsTable({
   useEffect(() => {
     if (!workOrderId) {
       fetchVessels();
+    }
+  }, [workOrderId]);
+
+  useEffect(() => {
+    if (workOrderId) {
+      fetchWorkOrderDetails(workOrderId);
     }
   }, [workOrderId]);
 
@@ -823,6 +870,209 @@ export default function WODetailsTable({
         </div>
       )}
 
+      {/* Work Order Information Card - Show when work order is selected */}
+      {(selectedWorkOrderId > 0 || workOrderId) && selectedWorkOrderDetails && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-sm border border-blue-200 p-6">
+          {/* Header */}
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-600 text-white rounded-full w-12 h-12 flex items-center justify-center text-xl font-bold">
+                🏗️
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Work Order Details
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Selected work order information
+                </p>
+              </div>
+            </div>
+            {!workOrderId && (
+              <button
+                onClick={() =>
+                  navigate(`/work-order/${selectedWorkOrderDetails.id}`)
+                }
+                className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
+              >
+                View Full Details →
+              </button>
+            )}
+          </div>
+
+          {/* Horizontal Layout */}
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="grid grid-cols-1 gap-4">
+              {/* Row 1: Vessel & Work Order Numbers */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-gray-200">
+                {/* Vessel Information */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xl">🚢</span>
+                    <span className="text-xs font-semibold text-gray-500 uppercase">
+                      Vessel
+                    </span>
+                  </div>
+                  <div className="font-bold text-gray-900 text-base">
+                    {selectedWorkOrderDetails.vessel?.name || "N/A"}
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    {selectedWorkOrderDetails.vessel?.type || "N/A"}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {selectedWorkOrderDetails.vessel?.company || "N/A"}
+                  </div>
+                </div>
+
+                {/* Work Order Numbers */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xl">📋</span>
+                    <span className="text-xs font-semibold text-gray-500 uppercase">
+                      Work Order Numbers
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xs text-gray-500 min-w-[80px]">
+                        Shipyard WO:
+                      </span>
+                      <span className="font-bold text-gray-900">
+                        {selectedWorkOrderDetails.shipyard_wo_number}
+                      </span>
+                    </div>
+                    {selectedWorkOrderDetails.customer_wo_number && (
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xs text-gray-500 min-w-[80px]">
+                          Customer WO:
+                        </span>
+                        <span className="font-medium text-gray-700">
+                          {selectedWorkOrderDetails.customer_wo_number}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Dates & Location/Type */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-gray-200">
+                {/* Dates */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xl">📅</span>
+                    <span className="text-xs font-semibold text-gray-500 uppercase">
+                      Work Order Dates
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xs text-gray-500 min-w-[100px]">
+                        Shipyard WO Date:
+                      </span>
+                      <span className="font-medium text-gray-900">
+                        {formatDate(selectedWorkOrderDetails.shipyard_wo_date)}
+                      </span>
+                    </div>
+                    {selectedWorkOrderDetails.customer_wo_date && (
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xs text-gray-500 min-w-[100px]">
+                          Customer WO Date:
+                        </span>
+                        <span className="font-medium text-gray-700">
+                          {formatDate(
+                            selectedWorkOrderDetails.customer_wo_date
+                          )}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Work Location & Type */}
+                {(selectedWorkOrderDetails.work_location ||
+                  selectedWorkOrderDetails.work_type) && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xl">📍</span>
+                      <span className="text-xs font-semibold text-gray-500 uppercase">
+                        Location & Type
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      {selectedWorkOrderDetails.work_location && (
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-xs text-gray-500 min-w-[60px]">
+                            Location:
+                          </span>
+                          <span className="font-medium text-gray-900">
+                            {selectedWorkOrderDetails.work_location}
+                          </span>
+                        </div>
+                      )}
+                      {selectedWorkOrderDetails.work_type && (
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-xs text-gray-500 min-w-[60px]">
+                            Type:
+                          </span>
+                          <span className="font-medium text-gray-700">
+                            {selectedWorkOrderDetails.work_type}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Row 3: KAPRO & Additional Work Badge */}
+              <div className="flex flex-wrap items-center gap-4">
+                {/* KAPRO */}
+                {selectedWorkOrderDetails.kapro && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">👷</span>
+                    <div>
+                      <span className="text-xs text-gray-500">KAPRO: </span>
+                      <span className="font-medium text-gray-900">
+                        {selectedWorkOrderDetails.kapro.kapro_name}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Additional Work Badge */}
+                {selectedWorkOrderDetails.is_additional_wo && (
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                    <span className="text-base">⚠️</span>
+                    <span className="text-sm font-medium">
+                      Additional Work Order
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Summary Stats Footer */}
+          <div className="mt-4 pt-4 border-t border-blue-200">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">
+                Total Work Details:{" "}
+                <span className="font-bold text-gray-900">{totalItems}</span>
+              </span>
+              {totalItems > 0 && (
+                <span className="text-gray-600">
+                  Showing page{" "}
+                  <span className="font-bold text-gray-900">{currentPage}</span>{" "}
+                  of{" "}
+                  <span className="font-bold text-gray-900">{totalPages}</span>
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Work Details Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">
@@ -888,11 +1138,11 @@ export default function WODetailsTable({
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                       <div className="flex items-center gap-1">Details</div>
                     </th>
-                    {!workOrderId && (
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Work Order / Vessel
-                      </th>
-                    )}
+                    {/* Work Scope Column */}
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      <div className="flex items-center gap-1">Work Scope</div>
+                    </th>
+                    {/* Description Column */}
                     <th
                       onClick={() => handleSort("description")}
                       className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
@@ -901,17 +1151,24 @@ export default function WODetailsTable({
                         Description {getSortIcon("description")}
                       </div>
                     </th>
+                    {/* Quantity/UOM Column */}
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      <div className="flex items-center gap-1">Quantity</div>
+                    </th>
+                    {/* Start/Target Date Column */}
                     <th
                       onClick={() => handleSort("target_close_date")}
                       className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
                     >
                       <div className="flex items-center gap-1">
-                        Target Date {getSortIcon("target_close_date")}
+                        Start / Target {getSortIcon("target_close_date")}
                       </div>
                     </th>
+                    {/* Progress Column */}
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                       Progress
                     </th>
+                    {/* Actions Column */}
                     <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
                       Actions
                     </th>
@@ -945,39 +1202,13 @@ export default function WODetailsTable({
                             </button>
                           </td>
 
-                          {/* Work Order & Vessel */}
-                          {!workOrderId && (
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              {detail.work_order && (
-                                <div className="space-y-1">
-                                  <div className="text-sm font-medium text-gray-900">
-                                    {detail.work_order.shipyard_wo_number}
-                                  </div>
-                                  {detail.work_order.vessel && (
-                                    <div className="text-xs text-gray-500">
-                                      🚢 {detail.work_order.vessel.name}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </td>
-                          )}
-
-                          {/* Description */}
-                          <td className="px-6 py-4">
-                            <div className="max-w-md">
-                              <div
-                                className="text-sm font-medium text-gray-900 mb-1"
-                                title={detail.description}
-                              >
-                                {detail.description.length > 60
-                                  ? `${detail.description.substring(0, 60)}...`
-                                  : detail.description}
+                          {/* Work Scope */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm">
+                              <div className="font-medium text-gray-900">
+                                {detail.work_scope?.work_scope || "N/A"}
                               </div>
-                              <div className="flex flex-wrap gap-1">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                                  👤 {detail.pic}
-                                </span>
+                              <div className="flex flex-wrap gap-1 mt-1">
                                 <span
                                   className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${status.color}`}
                                 >
@@ -987,17 +1218,68 @@ export default function WODetailsTable({
                             </div>
                           </td>
 
-                          {/* Target Date */}
+                          {/* Description */}
+                          <td className="px-6 py-4">
+                            <div className="max-w-md">
+                              <div
+                                className="text-sm text-gray-900"
+                                title={detail.description}
+                              >
+                                {detail.description.length > 80
+                                  ? `${detail.description.substring(0, 80)}...`
+                                  : detail.description}
+                              </div>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                  👤 {detail.pic || "Not assigned"}
+                                </span>
+                                {detail.location && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                    📍 {detail.location.location}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Quantity/UOM */}
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">
-                              🎯 {formatDate(detail.target_close_date)}
+                            <div className="text-sm">
+                              <div className="font-bold text-blue-900 text-base">
+                                {detail.quantity || 0}
+                              </div>
+                              <div className="text-xs text-blue-700 font-medium">
+                                {detail.uom || "N/A"}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Start/Target Date */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm space-y-1">
+                              <div className="flex items-center gap-1 text-gray-900">
+                                <span className="text-xs text-gray-500">
+                                  Start:
+                                </span>
+                                <span className="font-medium">
+                                  {formatDate(detail.planned_start_date)}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1 text-gray-900">
+                                <span className="text-xs text-gray-500">
+                                  Target:
+                                </span>
+                                <span className="font-medium">
+                                  {formatDate(detail.target_close_date)}
+                                </span>
+                              </div>
                             </div>
                           </td>
 
                           {/* Progress */}
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-3">
-                              <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 min-w-[80px]">
                                 <div className="flex items-center justify-between mb-1">
                                   <span className="text-xs font-medium text-gray-700">
                                     {detail.current_progress || 0}%
@@ -1038,13 +1320,14 @@ export default function WODetailsTable({
                           </td>
                         </tr>
 
-                        {/* Expandable Details Row */}
+                        {/* Expandable Details Row - Update colspan */}
                         {isExpanded && (
                           <tr>
                             <td
-                              colSpan={workOrderId ? 5 : 6}
+                              colSpan={workOrderId ? 7 : 8}
                               className="px-0 py-0"
                             >
+                              {/* Keep the expandable content the same */}
                               <div className="bg-gray-50 border-l-4 border-blue-400">
                                 <div className="px-6 py-4">
                                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1064,14 +1347,6 @@ export default function WODetailsTable({
                                             <div className="font-medium text-gray-900 mt-0.5">
                                               {detail.work_scope?.work_scope ||
                                                 "N/A"}
-                                            </div>
-                                          </div>
-                                          <div>
-                                            <span className="text-gray-500 text-xs">
-                                              Type:
-                                            </span>
-                                            <div className="font-medium text-gray-900 mt-0.5">
-                                              {detail.work_type || "N/A"}
                                             </div>
                                           </div>
                                         </div>
@@ -1100,20 +1375,26 @@ export default function WODetailsTable({
                                               {detail.location?.location ||
                                                 "N/A"}
                                             </div>
-                                            {detail.work_location && (
-                                              <div className="text-md text-gray-600 mt-0.5">
-                                                {detail.work_location}
-                                              </div>
-                                            )}
                                           </div>
                                         </div>
                                       </div>
 
-                                      {/* SPK/SPKK Numbers */}
+                                      {/* SPK/SPKK/PTW Numbers */}
                                       {(detail.spk_number ||
-                                        detail.spkk_number) && (
+                                        detail.spkk_number ||
+                                        detail.ptw_number) && (
                                         <div className="bg-white rounded-lg border border-gray-200 p-3">
                                           <div className="space-y-2 text-sm">
+                                            {detail.ptw_number && (
+                                              <div>
+                                                <span className="text-gray-500 text-xs">
+                                                  PTW Number:
+                                                </span>
+                                                <div className="font-medium text-gray-900 mt-0.5">
+                                                  {detail.ptw_number}
+                                                </div>
+                                              </div>
+                                            )}
                                             {detail.spk_number && (
                                               <div>
                                                 <span className="text-gray-500 text-xs">

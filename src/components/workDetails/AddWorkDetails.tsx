@@ -18,12 +18,10 @@ interface WorkScope {
 }
 
 interface WorkDetailFormData {
-  id: string; // Temporary ID for tracking
+  id: string;
   description: string;
   location_id: number;
-  work_location: string;
   work_scope_id: number;
-  work_type: string;
   quantity: string;
   uom: string;
   is_additional_wo_details: boolean;
@@ -37,15 +35,15 @@ export default function AddWorkDetails() {
   const { workOrderId } = useParams<{ workOrderId: string }>();
   const { profile } = useAuth();
 
-  // Check if user is PPIC
-  const isPPICOrMaster = profile?.role === "PPIC" || profile?.role === "MASTER";
+  // Check user role - Only check for PPIC
+  const isPPIC = profile?.role === "PPIC";
 
-  // Redirect if not PPIC or MASTER
+  // Redirect if not PPIC or MASTER (anyone who is not PPIC needs to be MASTER)
   useEffect(() => {
-    if (profile && !isPPICOrMaster) {
+    if (profile && !isPPIC && profile.role !== "MASTER") {
       navigate("/work-details");
     }
-  }, [profile, isPPICOrMaster, navigate]);
+  }, [profile, isPPIC, navigate]);
 
   // Form state - array of work details
   const [workDetailsList, setWorkDetailsList] = useState<WorkDetailFormData[]>([
@@ -53,9 +51,7 @@ export default function AddWorkDetails() {
       id: crypto.randomUUID(),
       description: "",
       location_id: 0,
-      work_location: "",
       work_scope_id: 0,
-      work_type: "",
       quantity: "",
       uom: "",
       is_additional_wo_details: false,
@@ -285,9 +281,7 @@ export default function AddWorkDetails() {
         id: crypto.randomUUID(),
         description: "",
         location_id: 0,
-        work_location: "",
         work_scope_id: 0,
-        work_type: "",
         quantity: "",
         uom: "",
         is_additional_wo_details: false,
@@ -377,14 +371,8 @@ export default function AddWorkDetails() {
       if (!item.location_id || item.location_id === 0) {
         errors.push(`Row ${index + 1}: Location is required`);
       }
-      if (!item.work_location.trim()) {
-        errors.push(`Row ${index + 1}: Work location is required`);
-      }
       if (!item.work_scope_id || item.work_scope_id === 0) {
         errors.push(`Row ${index + 1}: Work scope is required`);
-      }
-      if (!item.work_type.trim()) {
-        errors.push(`Row ${index + 1}: Work type is required`);
       }
       if (!item.quantity || parseFloat(item.quantity) <= 0) {
         errors.push(`Row ${index + 1}: Quantity must be greater than 0`);
@@ -450,9 +438,7 @@ export default function AddWorkDetails() {
         work_order_id: selectedWorkOrderId,
         description: item.description.trim(),
         location_id: item.location_id,
-        work_location: item.work_location.trim(),
         work_scope_id: item.work_scope_id,
-        work_type: item.work_type.trim(),
         quantity: parseFloat(item.quantity),
         uom: item.uom.trim(),
         is_additional_wo_details: item.is_additional_wo_details,
@@ -469,6 +455,7 @@ export default function AddWorkDetails() {
         notes: null,
         actual_start_date: null,
         actual_close_date: null,
+        ptw_number: null,
       }));
 
       const { error } = await supabase
@@ -500,7 +487,8 @@ export default function AddWorkDetails() {
     }
   };
 
-  if (!isPPICOrMaster) {
+  // Access control - Only PPIC or MASTER can add
+  if (!isPPIC && profile?.role !== "MASTER") {
     return (
       <div className="p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -523,7 +511,23 @@ export default function AddWorkDetails() {
             </h1>
             <p className="text-gray-600 mt-2">
               Create one or multiple work details for one work order
+              {profile?.role === "MASTER" && (
+                <span className="text-purple-600 font-medium">
+                  {" "}
+                  (MASTER - Full Access)
+                </span>
+              )}
             </p>
+            {isPPIC && (
+              <p className="text-sm text-blue-600 mt-1">
+                🔧 PPIC Mode: Creating planning and scope fields
+              </p>
+            )}
+            {!isPPIC && profile?.role === "MASTER" && (
+              <p className="text-sm text-purple-600 mt-1">
+                👑 MASTER Mode: Full access to create work details
+              </p>
+            )}
           </div>
           <button
             onClick={handleCancel}
@@ -541,8 +545,11 @@ export default function AddWorkDetails() {
             Work Details Information
           </h2>
           <p className="text-sm text-gray-600">
-            Fill in the PPIC-managed fields. PRODUCTION team will complete the
-            rest.
+            {isPPIC &&
+              "Fill in the PPIC-managed fields. PRODUCTION team will complete the rest."}
+            {!isPPIC &&
+              profile?.role === "MASTER" &&
+              "Fill in all work details fields. PRODUCTION team can later add execution details."}
           </p>
         </div>
 
@@ -746,7 +753,7 @@ export default function AddWorkDetails() {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4">
                     {/* Description */}
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -792,26 +799,6 @@ export default function AddWorkDetails() {
                       </select>
                     </div>
 
-                    {/* Work Location */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Work Location *
-                      </label>
-                      <input
-                        type="text"
-                        value={item.work_location}
-                        onChange={(e) =>
-                          handleWorkDetailChange(
-                            item.id,
-                            "work_location",
-                            e.target.value
-                          )
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        placeholder="Specific work location"
-                      />
-                    </div>
-
                     {/* Work Scope */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -834,28 +821,6 @@ export default function AddWorkDetails() {
                             {scope.work_scope}
                           </option>
                         ))}
-                      </select>
-                    </div>
-
-                    {/* Work Type */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Work Type *
-                      </label>
-                      <select
-                        value={item.work_type}
-                        onChange={(e) =>
-                          handleWorkDetailChange(
-                            item.id,
-                            "work_type",
-                            e.target.value
-                          )
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Select type</option>
-                        <option value="Docking">Docking</option>
-                        <option value="Repair">Repair</option>
                       </select>
                     </div>
 
@@ -940,7 +905,7 @@ export default function AddWorkDetails() {
                     </div>
 
                     {/* Period Close Target */}
-                    <div className="md:col-span-2">
+                    <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Period Close Target *
                       </label>
@@ -972,7 +937,7 @@ export default function AddWorkDetails() {
                     </div>
 
                     {/* Is Additional */}
-                    <div className="md:col-span-2">
+                    <div>
                       <div className="flex items-center">
                         <input
                           type="checkbox"

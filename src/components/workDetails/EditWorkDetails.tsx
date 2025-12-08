@@ -30,7 +30,6 @@ interface WorkDetailsData {
   work_order_id: number;
   description: string;
   location_id: number;
-  work_location: string;
   planned_start_date: string;
   target_close_date: string;
   period_close_target: string;
@@ -40,7 +39,6 @@ interface WorkDetailsData {
   actual_start_date?: string;
   actual_close_date?: string;
   work_scope_id: number;
-  work_type: string;
   quantity: number;
   uom: string;
   is_additional_wo_details: boolean;
@@ -59,6 +57,7 @@ interface WorkDetailsData {
   };
   location?: Location;
   work_scope?: WorkScope;
+  ptw_number?: string;
 }
 
 export default function EditWorkDetails() {
@@ -67,15 +66,14 @@ export default function EditWorkDetails() {
   const { profile } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Check user role
-  const isPPICOrMaster = profile?.role === "PPIC" || profile?.role === "MASTER";
+  // Check user role - Only check for PPIC or PRODUCTION
+  const isPPIC = profile?.role === "PPIC";
   const isProduction = profile?.role === "PRODUCTION";
 
   // Form state
   const [formData, setFormData] = useState({
     description: "",
     location_id: 0,
-    work_location: "",
     planned_start_date: "",
     target_close_date: "",
     period_close_target: "",
@@ -85,13 +83,13 @@ export default function EditWorkDetails() {
     work_permit_url: "",
     storage_path: "",
     work_scope_id: 0,
-    work_type: "",
     quantity: "",
     uom: "",
     is_additional_wo_details: false,
     spk_number: "",
     spkk_number: "",
     notes: "",
+    ptw_number: "",
   });
 
   // Original data for comparison
@@ -299,7 +297,6 @@ export default function EditWorkDetails() {
       setFormData({
         description: data.description || "",
         location_id: data.location_id || 0,
-        work_location: data.work_location || "",
         planned_start_date: data.planned_start_date || "",
         target_close_date: data.target_close_date || "",
         period_close_target: data.period_close_target || "",
@@ -309,13 +306,13 @@ export default function EditWorkDetails() {
         work_permit_url: data.work_permit_url || "",
         storage_path: data.storage_path || "",
         work_scope_id: data.work_scope_id || 0,
-        work_type: data.work_type || "",
         quantity: data.quantity?.toString() || "",
         uom: data.uom || "",
         is_additional_wo_details: data.is_additional_wo_details || false,
         spk_number: data.spk_number || "",
         spkk_number: data.spkk_number || "",
         notes: data.notes || "",
+        ptw_number: data.ptw_number || "",
       });
     } catch (err) {
       console.error("Error fetching work details:", err);
@@ -402,21 +399,15 @@ export default function EditWorkDetails() {
     const errors: string[] = [];
 
     // PPIC fields validation
-    if (isPPICOrMaster) {
+    if (isPPIC) {
       if (!formData.description.trim()) {
         errors.push("Description is required");
       }
       if (!formData.location_id || formData.location_id === 0) {
         errors.push("Location is required");
       }
-      if (!formData.work_location.trim()) {
-        errors.push("Work location is required");
-      }
       if (!formData.work_scope_id || formData.work_scope_id === 0) {
         errors.push("Work scope is required");
-      }
-      if (!formData.work_type.trim()) {
-        errors.push("Work type is required");
       }
       if (!formData.quantity || parseFloat(formData.quantity) <= 0) {
         errors.push("Quantity must be greater than 0");
@@ -483,8 +474,8 @@ export default function EditWorkDetails() {
       let newStoragePath: string | null = formData.storage_path || null;
       let newWorkPermitUrl: string | null = formData.work_permit_url || null;
 
-      // Handle file operations (only for PRODUCTION users)
-      if (isProduction || isPPICOrMaster) {
+      // Handle file operations (only for NOT PPIC users - includes PRODUCTION and MASTER)
+      if (!isPPIC) {
         if (removeExistingFile && originalData?.storage_path) {
           await deleteWorkPermitFile(originalData.storage_path);
           newStoragePath = null;
@@ -534,15 +525,13 @@ export default function EditWorkDetails() {
         updated_at: new Date().toISOString(),
       };
 
-      if (isPPICOrMaster) {
-        // PPIC can update their fields
+      if (isPPIC) {
+        // PPIC can update their fields only
         updateData = {
           ...updateData,
           description: formData.description.trim(),
           location_id: formData.location_id,
-          work_location: formData.work_location.trim(),
           work_scope_id: formData.work_scope_id,
-          work_type: formData.work_type.trim(),
           quantity: parseFloat(formData.quantity),
           uom: formData.uom.trim(),
           is_additional_wo_details: formData.is_additional_wo_details,
@@ -552,8 +541,8 @@ export default function EditWorkDetails() {
         };
       }
 
-      if (isProduction || isPPICOrMaster) {
-        // PRODUCTION (and MASTER) can update their fields
+      if (!isPPIC) {
+        // NOT PPIC (PRODUCTION and MASTER) can update PRODUCTION fields
         updateData = {
           ...updateData,
           pic: formData.pic.trim(),
@@ -564,6 +553,7 @@ export default function EditWorkDetails() {
           notes: formData.notes.trim() || null,
           actual_start_date: formData.actual_start_date || null,
           actual_close_date: formData.actual_close_date || null,
+          ptw_number: formData.ptw_number?.trim() || null,
         };
       }
 
@@ -666,7 +656,7 @@ export default function EditWorkDetails() {
               {originalData.work_order.shipyard_wo_number} on{" "}
               {originalData.work_order.vessel.name}
             </p>
-            {isPPICOrMaster && (
+            {isPPIC && (
               <p className="text-sm text-blue-600 mt-1">
                 🔧 PPIC Mode: Editing planning and scope fields
               </p>
@@ -674,6 +664,11 @@ export default function EditWorkDetails() {
             {isProduction && (
               <p className="text-sm text-green-600 mt-1">
                 🏭 PRODUCTION Mode: Editing execution and documentation fields
+              </p>
+            )}
+            {!isPPIC && !isProduction && (
+              <p className="text-sm text-purple-600 mt-1">
+                👑 MASTER Mode: Full access to all fields (PPIC + PRODUCTION)
               </p>
             )}
           </div>
@@ -710,10 +705,13 @@ export default function EditWorkDetails() {
             Work Details Information
           </h2>
           <p className="text-sm text-gray-600">
-            {isPPICOrMaster &&
+            {isPPIC &&
               "Update planning fields (PPIC): description, location, work scope, dates, quantity"}
             {isProduction &&
               "Update execution fields (PRODUCTION): PIC, SPK/SPKK numbers, work permit, actual dates, notes"}
+            {!isPPIC &&
+              !isProduction &&
+              "Full access: Update both planning (PPIC) and execution (PRODUCTION) fields"}
           </p>
         </div>
 
@@ -728,12 +726,12 @@ export default function EditWorkDetails() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* PPIC FIELDS */}
-            {isPPICOrMaster && (
+          <div className="grid grid-cols-1 gap-6">
+            {/* PPIC FIELDS - Show for NOT PRODUCTION (includes PPIC and MASTER) */}
+            {!isProduction && (
               <>
                 {/* Description */}
-                <div className="md:col-span-2">
+                <div>
                   <label
                     htmlFor="description"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -749,12 +747,14 @@ export default function EditWorkDetails() {
                     rows={3}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Describe the specific work task in detail..."
-                    required
+                    required={isPPIC}
                   />
                 </div>
 
                 {/* Location */}
                 <div>
+                  {" "}
+                  {/* ✅ Already single column */}
                   <label
                     htmlFor="location_id"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -807,29 +807,10 @@ export default function EditWorkDetails() {
                   </div>
                 </div>
 
-                {/* Work Location */}
-                <div>
-                  <label
-                    htmlFor="work_location"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
-                    Work Location *{" "}
-                    <span className="text-blue-600">(PPIC)</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="work_location"
-                    name="work_location"
-                    value={formData.work_location}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Specific work location"
-                    required
-                  />
-                </div>
-
                 {/* Work Scope */}
-                <div className="md:col-span-2">
+                <div>
+                  {" "}
+                  {/* ✅ Already single column */}
                   <label
                     htmlFor="work_scope_id"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -882,30 +863,10 @@ export default function EditWorkDetails() {
                   </div>
                 </div>
 
-                {/* Work Type */}
-                <div>
-                  <label
-                    htmlFor="work_type"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
-                    Work Type * <span className="text-blue-600">(PPIC)</span>
-                  </label>
-                  <select
-                    id="work_type"
-                    name="work_type"
-                    value={formData.work_type}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
-                  >
-                    <option value="">Select work type</option>
-                    <option value="Docking">Docking</option>
-                    <option value="Repair">Repair</option>
-                  </select>
-                </div>
-
                 {/* Quantity */}
                 <div>
+                  {" "}
+                  {/* ✅ Already single column */}
                   <label
                     htmlFor="quantity"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -922,12 +883,14 @@ export default function EditWorkDetails() {
                     step="0.01"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Enter quantity"
-                    required
+                    required={isPPIC}
                   />
                 </div>
 
                 {/* UOM */}
                 <div>
+                  {" "}
+                  {/* ✅ Already single column */}
                   <label
                     htmlFor="uom"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -940,7 +903,7 @@ export default function EditWorkDetails() {
                     value={formData.uom}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
+                    required={isPPIC}
                   >
                     <option value="">Select UOM</option>
                     <option value="Ls">Ls</option>
@@ -952,6 +915,8 @@ export default function EditWorkDetails() {
 
                 {/* Planned Start Date */}
                 <div>
+                  {" "}
+                  {/* ✅ Already single column */}
                   <label
                     htmlFor="planned_start_date"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -966,12 +931,14 @@ export default function EditWorkDetails() {
                     value={formData.planned_start_date}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
+                    required={isPPIC}
                   />
                 </div>
 
                 {/* Target Close Date */}
                 <div>
+                  {" "}
+                  {/* ✅ Already single column */}
                   <label
                     htmlFor="target_close_date"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -986,12 +953,12 @@ export default function EditWorkDetails() {
                     value={formData.target_close_date}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
+                    required={isPPIC}
                   />
                 </div>
 
                 {/* Period Close Target */}
-                <div className="md:col-span-2">
+                <div>
                   <label
                     htmlFor="period_close_target"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -1005,7 +972,7 @@ export default function EditWorkDetails() {
                     value={formData.period_close_target}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
+                    required={isPPIC}
                   >
                     <option value="">Select target month</option>
                     <option value="January">January</option>
@@ -1024,7 +991,7 @@ export default function EditWorkDetails() {
                 </div>
 
                 {/* Is Additional */}
-                <div className="md:col-span-2">
+                <div>
                   <div className="flex items-center">
                     <input
                       type="checkbox"
@@ -1050,11 +1017,10 @@ export default function EditWorkDetails() {
                 </div>
               </>
             )}
-
-            {/* READ-ONLY PPIC FIELDS FOR PRODUCTION */}
+            {/* READ-ONLY PPIC FIELDS FOR PRODUCTION ONLY */}
             {isProduction && (
               <>
-                <div className="md:col-span-2 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
                   <h3 className="text-sm font-semibold text-gray-700 mb-3">
                     📋 Planning Information (Read-only)
                   </h3>
@@ -1072,21 +1038,9 @@ export default function EditWorkDetails() {
                       </div>
                     </div>
                     <div>
-                      <span className="text-gray-500">Work Location:</span>
-                      <div className="font-medium text-gray-900">
-                        {formData.work_location}
-                      </div>
-                    </div>
-                    <div>
                       <span className="text-gray-500">Work Scope:</span>
                       <div className="font-medium text-gray-900">
                         {workScopeSearchTerm}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Work Type:</span>
-                      <div className="font-medium text-gray-900">
-                        {formData.work_type}
                       </div>
                     </div>
                     <div>
@@ -1117,12 +1071,13 @@ export default function EditWorkDetails() {
                 </div>
               </>
             )}
-
-            {/* PRODUCTION FIELDS */}
-            {(isProduction || isPPICOrMaster) && (
+            {/* PRODUCTION FIELDS - Show for NOT PPIC (includes PRODUCTION and MASTER) */}
+            {!isPPIC && (
               <>
                 {/* Person in Charge */}
                 <div>
+                  {" "}
+                  {/* ✅ Already single column */}
                   <label
                     htmlFor="pic"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -1144,6 +1099,8 @@ export default function EditWorkDetails() {
 
                 {/* SPK Number */}
                 <div>
+                  {" "}
+                  {/* ✅ Already single column */}
                   <label
                     htmlFor="spk_number"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -1164,6 +1121,8 @@ export default function EditWorkDetails() {
 
                 {/* SPKK Number */}
                 <div>
+                  {" "}
+                  {/* ✅ Already single column */}
                   <label
                     htmlFor="spkk_number"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -1184,6 +1143,8 @@ export default function EditWorkDetails() {
 
                 {/* Actual Start Date */}
                 <div>
+                  {" "}
+                  {/* ✅ Already single column */}
                   <label
                     htmlFor="actual_start_date"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -1203,6 +1164,8 @@ export default function EditWorkDetails() {
 
                 {/* Actual Close Date */}
                 <div>
+                  {" "}
+                  {/* ✅ Already single column */}
                   <label
                     htmlFor="actual_close_date"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -1221,7 +1184,7 @@ export default function EditWorkDetails() {
                 </div>
 
                 {/* Notes */}
-                <div className="md:col-span-2">
+                <div>
                   <label
                     htmlFor="notes"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -1239,13 +1202,32 @@ export default function EditWorkDetails() {
                   />
                 </div>
 
+                {/* PTW Number */}
+                <div>
+                  <label
+                    htmlFor="ptw_number"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    PTW Number{" "}
+                    <span className="text-green-600">(PRODUCTION)</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="ptw_number"
+                    name="ptw_number"
+                    value={formData.ptw_number}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter PTW number"
+                  />
+                </div>
+
                 {/* Work Permit File */}
-                <div className="md:col-span-2">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Work Permit Document{" "}
                     <span className="text-green-600">(PRODUCTION)</span>
                   </label>
-
                   {originalData.storage_path && !removeExistingFile && (
                     <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
                       <div className="flex items-center justify-between">
@@ -1279,7 +1261,6 @@ export default function EditWorkDetails() {
                       </div>
                     </div>
                   )}
-
                   {removeExistingFile && (
                     <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
                       <div className="flex items-center justify-between">
@@ -1305,7 +1286,6 @@ export default function EditWorkDetails() {
                       </div>
                     </div>
                   )}
-
                   {!originalData.storage_path && (
                     <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                       <div className="flex items-center">
@@ -1321,7 +1301,6 @@ export default function EditWorkDetails() {
                       </div>
                     </div>
                   )}
-
                   <div className="mt-4">
                     <div className="mb-2">
                       <input
@@ -1384,7 +1363,6 @@ export default function EditWorkDetails() {
               </>
             )}
           </div>
-
           {/* Form Actions */}
           <div className="flex items-center justify-end gap-4 mt-8 pt-6 border-t border-gray-200">
             <button
