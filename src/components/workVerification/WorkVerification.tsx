@@ -666,14 +666,6 @@ export default function WorkVerification() {
                                                 ?.work_scope || "N/A"}
                                             </div>
                                           </div>
-                                          <div>
-                                            <span className="text-gray-500 text-xs">
-                                              Type:
-                                            </span>
-                                            <div className="font-medium text-gray-900 mt-0.5">
-                                              {wd.work_type || "N/A"}
-                                            </div>
-                                          </div>
                                         </div>
                                       </div>
 
@@ -971,15 +963,6 @@ export default function WorkVerification() {
                                           <div className="font-medium text-gray-900 mt-0.5">
                                             {(verification.work_details as any)
                                               .work_scope?.work_scope || "N/A"}
-                                          </div>
-                                        </div>
-                                        <div>
-                                          <span className="text-gray-500 text-xs">
-                                            Type:
-                                          </span>
-                                          <div className="font-medium text-gray-900 mt-0.5">
-                                            {verification.work_details
-                                              ?.work_type || "N/A"}
                                           </div>
                                         </div>
                                       </div>
