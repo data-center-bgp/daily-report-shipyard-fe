@@ -56,6 +56,12 @@ export default function VesselWorkOrders() {
   >("shipyard_wo_date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
+  // ✅ NEW: Delete Modal State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [workOrderToDelete, setWorkOrderToDelete] =
+    useState<WorkOrderWithProgress | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const fetchVesselWorkOrders = useCallback(async () => {
     try {
       setLoading(true);
@@ -245,22 +251,55 @@ export default function VesselWorkOrders() {
     navigate(`/edit-work-order/${workOrder.id}`);
   };
 
-  const handleDeleteWorkOrder = async (workOrder: WorkOrderWithProgress) => {
+  // ✅ NEW: Open delete modal
+  const handleDeleteWorkOrder = (workOrder: WorkOrderWithProgress) => {
+    setWorkOrderToDelete(workOrder);
+    setShowDeleteModal(true);
+  };
+
+  // ✅ NEW: Confirm delete action
+  const confirmDelete = async () => {
+    if (!workOrderToDelete) return;
+
     try {
-      const { error } = await supabase
+      setIsDeleting(true);
+
+      // First, soft delete all associated work details
+      const { error: detailsError } = await supabase
+        .from("work_details")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("work_order_id", workOrderToDelete.id);
+
+      if (detailsError) throw detailsError;
+
+      // Then, soft delete the work order
+      const { error: workOrderError } = await supabase
         .from("work_order")
-        .delete()
-        .eq("id", workOrder.id);
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", workOrderToDelete.id);
 
-      if (error) throw error;
+      if (workOrderError) throw workOrderError;
 
+      // Refresh the list
       fetchVesselWorkOrders();
+
+      // Close modal and reset state
+      setShowDeleteModal(false);
+      setWorkOrderToDelete(null);
     } catch (err) {
       console.error("Error deleting work order:", err);
       setError(
         err instanceof Error ? err.message : "An error occurred while deleting"
       );
+    } finally {
+      setIsDeleting(false);
     }
+  };
+
+  // ✅ NEW: Cancel delete action
+  const cancelDelete = () => {
+    setShowDeleteModal(false);
+    setWorkOrderToDelete(null);
   };
 
   const formatDate = (dateString: string | null) => {
@@ -333,6 +372,76 @@ export default function VesselWorkOrders() {
     );
   };
 
+  // ✅ NEW: Delete Confirmation Modal
+  const renderDeleteModal = () => {
+    if (!showDeleteModal || !workOrderToDelete) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 overflow-y-auto">
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 bg-black/30 backdrop-blur-sm transition-opacity"
+          onClick={cancelDelete}
+        ></div>
+
+        {/* Modal */}
+        <div className="flex min-h-full items-center justify-center p-4">
+          <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full transform transition-all">
+            {/* Header */}
+            <div className="bg-red-600 px-6 py-4 rounded-t-lg">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">⚠️</span>
+                <h3 className="text-xl font-bold text-white">Confirm Delete</h3>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-6">
+              <p className="text-gray-700 text-base mb-4">
+                Are you sure you want to delete work order{" "}
+                <strong>"{workOrderToDelete.shipyard_wo_number}"</strong>?
+              </p>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-sm text-amber-800">
+                  <strong>Warning:</strong> This will also soft delete all
+                  associated work details (
+                  {workOrderToDelete.work_details.length} item
+                  {workOrderToDelete.work_details.length !== 1 ? "s" : ""}).
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="bg-gray-50 px-6 py-4 rounded-b-lg flex gap-3 justify-end">
+              <button
+                onClick={cancelDelete}
+                disabled={isDeleting}
+                className="px-5 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={isDeleting}
+                className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Deleting...
+                  </>
+                ) : (
+                  <>🗑️ Delete Work Order</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="p-8">
@@ -375,6 +484,9 @@ export default function VesselWorkOrders() {
 
   return (
     <div className="p-8 space-y-6">
+      {/* ✅ DELETE MODAL */}
+      {renderDeleteModal()}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -393,6 +505,7 @@ export default function VesselWorkOrders() {
           ➕ Add Work Order
         </button>
       </div>
+
       {/* Vessel Info Card */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center gap-4">
@@ -410,6 +523,7 @@ export default function VesselWorkOrders() {
           </div>
         </div>
       </div>
+
       {/* Search and Actions */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
@@ -671,11 +785,10 @@ export default function VesselWorkOrders() {
                       </td>
                     </tr>
 
-                    {/* Expandable Work Details Rows - Keep existing expandable section */}
+                    {/* Expandable Work Details Rows */}
                     {expandedWorkOrders.has(wo.id) && (
                       <tr>
                         <td colSpan={8} className="px-0 py-0">
-                          {/* Keep your existing expandable work details section */}
                           <div className="bg-gray-50 border-l-4 border-blue-400">
                             <div className="px-6 py-4">
                               <h4 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
@@ -689,7 +802,6 @@ export default function VesselWorkOrders() {
                                       key={detail.id}
                                       className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow"
                                     >
-                                      {/* Keep existing work details display */}
                                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                                         <div className="lg:col-span-2">
                                           <div className="flex items-start gap-3">
@@ -868,7 +980,6 @@ export default function VesselWorkOrders() {
             </table>
           </div>
         ) : (
-          // Keep existing empty state
           <div className="text-center py-12">
             <span className="text-gray-400 text-4xl mb-4 block">📋</span>
             {searchTerm ? (

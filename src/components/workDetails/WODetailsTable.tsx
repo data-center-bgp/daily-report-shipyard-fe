@@ -85,6 +85,12 @@ export default function WODetailsTable({
   const [showWorkOrderDropdown, setShowWorkOrderDropdown] = useState(false);
   const workOrderDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Delete modal states
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [detailToDelete, setDetailToDelete] =
+    useState<WorkDetailsWithWorkOrder | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const [selectedWorkOrderDetails, setSelectedWorkOrderDetails] = useState<
     | (WorkOrder & {
         vessel?: Vessel;
@@ -462,25 +468,25 @@ export default function WODetailsTable({
     navigate(`/edit-work-details/${workDetailsId}`);
   };
 
-  const handleDeleteWorkDetails = async (detail: WorkDetailsWithWorkOrder) => {
-    if (
-      !window.confirm(
-        `Are you sure you want to delete work details "${detail.description.substring(
-          0,
-          50
-        )}${detail.description.length > 50 ? "..." : ""}"?`
-      )
-    ) {
-      return;
-    }
+  // Open delete modal
+  const handleDeleteWorkDetails = (detail: WorkDetailsWithWorkOrder) => {
+    setDetailToDelete(detail);
+    setShowDeleteModal(true);
+  };
+
+  // Confirm delete action
+  const confirmDelete = async () => {
+    if (!detailToDelete) return;
 
     try {
+      setIsDeleting(true);
       const { error } = await supabase
         .from("work_details")
-        .delete()
-        .eq("id", detail.id);
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", detailToDelete.id);
 
       if (error) throw error;
+
       const newTotalItems = totalItems - 1;
       const newTotalPages = Math.ceil(newTotalItems / itemsPerPage);
       if (currentPage > newTotalPages && newTotalPages > 0) {
@@ -489,12 +495,24 @@ export default function WODetailsTable({
 
       fetchWorkDetails();
       onRefresh?.();
+
+      // Close modal and reset state
+      setShowDeleteModal(false);
+      setDetailToDelete(null);
     } catch (err) {
       console.error("Error deleting work details:", err);
       setError(
         err instanceof Error ? err.message : "An error occurred while deleting"
       );
+    } finally {
+      setIsDeleting(false);
     }
+  };
+
+  // Cancel delete action
+  const cancelDelete = () => {
+    setShowDeleteModal(false);
+    setDetailToDelete(null);
   };
 
   const handleViewPermit = async (detail: WorkDetailsWithWorkOrder) => {
@@ -699,6 +717,65 @@ export default function WODetailsTable({
     );
   };
 
+  const renderDeleteModal = () => {
+    if (!showDeleteModal || !detailToDelete) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 overflow-y-auto">
+        {/* Backdrop - Now with transparency */}
+        <div
+          className="fixed inset-0 bg-black/30 backdrop-blur-sm transition-opacity"
+          onClick={cancelDelete}
+        ></div>
+
+        {/* Modal */}
+        <div className="flex min-h-full items-center justify-center p-4">
+          <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full transform transition-all">
+            {/* Header */}
+            <div className="bg-red-600 px-6 py-4 rounded-t-lg">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">⚠️</span>
+                <h3 className="text-xl font-bold text-white">Confirm Delete</h3>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-6">
+              <p className="text-gray-700 text-base">
+                Are you sure you want to delete this work detail?
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="bg-gray-50 px-6 py-4 rounded-b-lg flex gap-3 justify-end">
+              <button
+                onClick={cancelDelete}
+                disabled={isDeleting}
+                className="px-5 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={isDeleting}
+                className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Deleting...
+                  </>
+                ) : (
+                  <>🗑️ Delete</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -725,6 +802,7 @@ export default function WODetailsTable({
 
   return (
     <div className={embedded ? "space-y-4" : "space-y-6"}>
+      {renderDeleteModal()}
       {/* Page Header - Only show if not embedded */}
       {!embedded && (
         <div className="flex justify-between items-center">
