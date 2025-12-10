@@ -1,9 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { openProgressEvidence } from "../../utils/progressEvidenceHandler";
 import type { WorkProgressWithDetails } from "../../types/progressTypes";
+
+// ==================== INTERFACES ====================
 
 interface VesselInfo {
   id: number;
@@ -23,7 +25,6 @@ interface WorkDetailsInfo {
   id: number;
   description: string;
   location: string;
-  work_location: string;
   pic: string;
   planned_start_date: string;
   target_close_date: string;
@@ -63,7 +64,6 @@ interface SupabaseWorkDetailsData {
         location: string;
       }>;
   pic: string;
-  work_location: string;
   planned_start_date: string;
   target_close_date: string;
   period_close_target: string;
@@ -83,7 +83,6 @@ interface SupabaseWorkProgressResponse {
   work_details: {
     id: number;
     description: string;
-    work_location: string;
     location?: {
       id: number;
       location: string;
@@ -91,6 +90,11 @@ interface SupabaseWorkProgressResponse {
     work_order: {
       id: number;
       shipyard_wo_number: string;
+      customer_wo_number?: string;
+      work_type?: string;
+      work_location?: string;
+      is_additional_wo?: boolean;
+      kapro_id?: number;
       vessel: SupabaseVesselData | SupabaseVesselData[];
     };
   }[];
@@ -100,6 +104,24 @@ interface SupabaseWorkProgressResponse {
     email: string;
   }[];
 }
+
+interface Kapro {
+  id: number;
+  kapro_name: string;
+}
+
+interface WorkOrderFullData {
+  id: number;
+  vessel_id: number;
+  shipyard_wo_number: string;
+  customer_wo_number?: string;
+  work_type?: string;
+  work_location?: string;
+  is_additional_wo?: boolean;
+  kapro_id?: number;
+}
+
+// ==================== TRANSFORMATION FUNCTIONS ====================
 
 const transformSupabaseWorkOrder = (
   data: SupabaseWorkOrderData
@@ -125,7 +147,6 @@ const transformSupabaseWorkDetails = (
     id: data.id,
     description: data.description,
     location: locationValue,
-    work_location: data.work_location,
     pic: data.pic,
     planned_start_date: data.planned_start_date,
     target_close_date: data.target_close_date,
@@ -159,7 +180,7 @@ const transformSupabaseWorkProgress = (
     work_details: {
       id: workDetails.id,
       description: workDetails.description,
-      work_location: workDetails.work_location,
+      work_location: workDetails.work_order.work_location || "",
       location: workDetails.location
         ? Array.isArray(workDetails.location)
           ? workDetails.location[0]
@@ -176,237 +197,244 @@ const transformSupabaseWorkProgress = (
     profiles: profiles,
   };
 };
+
+// ==================== MAIN COMPONENT ====================
+
 export default function WorkProgressTable({
   workDetailsId,
   embedded = false,
 }: WorkProgressTableProps) {
   const navigate = useNavigate();
 
+  // ==================== STATE - Data ====================
   const [workProgress, setWorkProgress] = useState<WorkProgressWithDetails[]>(
     []
   );
-  const [vessels, setVessels] = useState<VesselInfo[]>([]);
-  const [workOrders, setWorkOrders] = useState<WorkOrderInfo[]>([]);
-  const [workDetailsList, setWorkDetailsList] = useState<WorkDetailsInfo[]>([]);
-
-  const [selectedVesselId, setSelectedVesselId] = useState<number>(0);
-  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<number>(0);
-  const [selectedWorkDetailsIdFilter, setSelectedWorkDetailsIdFilter] =
-    useState<number>(workDetailsId || 0);
-
-  const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const itemsPerPage = 10;
-
-  const [loading, setLoading] = useState(true);
-  const [loadingVessels, setLoadingVessels] = useState(false);
-  const [loadingWorkOrders, setLoadingWorkOrders] = useState(false);
-  const [loadingWorkDetails, setLoadingWorkDetails] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   const [maxProgressByWorkDetail, setMaxProgressByWorkDetail] = useState<
     Record<number, number>
   >({});
 
-  // Search states for dropdowns
+  // ==================== STATE - Filters ====================
+  const [showFilters, setShowFilters] = useState(false);
+  const [vesselFilter, setVesselFilter] = useState("");
   const [vesselSearchTerm, setVesselSearchTerm] = useState("");
   const [showVesselDropdown, setShowVesselDropdown] = useState(false);
+  const [shipyardWoFilter, setShipyardWoFilter] = useState("");
+  const [customerWoFilter, setCustomerWoFilter] = useState("");
+  const [kaproFilter, setKaproFilter] = useState("");
+  const [workLocationFilter, setWorkLocationFilter] = useState("");
+  const [workTypeFilter, setWorkTypeFilter] = useState("");
+  const [additionalWoFilter, setAdditionalWoFilter] = useState("");
+
+  // ==================== STATE - Filter Options ====================
+  const [allVessels, setAllVessels] = useState<VesselInfo[]>([]);
+  const [allWorkOrders, setAllWorkOrders] = useState<WorkOrderFullData[]>([]);
+  const [allKapros, setAllKapros] = useState<Kapro[]>([]);
   const vesselDropdownRef = useRef<HTMLDivElement>(null);
 
-  const [workOrderSearchTerm, setWorkOrderSearchTerm] = useState("");
-  const [showWorkOrderDropdown, setShowWorkOrderDropdown] = useState(false);
-  const workOrderDropdownRef = useRef<HTMLDivElement>(null);
+  // ==================== STATE - UI ====================
+  const [currentPage, setCurrentPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [workDetailsSearchTerm, setWorkDetailsSearchTerm] = useState("");
-  const [showWorkDetailsDropdown, setShowWorkDetailsDropdown] = useState(false);
-  const workDetailsDropdownRef = useRef<HTMLDivElement>(null);
+  // ==================== CONSTANTS ====================
+  const itemsPerPage = 10;
+  const totalPages = Math.ceil(totalCount / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage + 1;
+  const endIndex = Math.min(currentPage * itemsPerPage, totalCount);
 
-  // Vessel search handlers
-  const handleVesselSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setVesselSearchTerm(e.target.value);
-    setShowVesselDropdown(true);
-    if (selectedVesselId) {
-      setSelectedVesselId(0);
-      setSelectedWorkOrderId(0);
-      setSelectedWorkDetailsIdFilter(0);
-      setWorkOrders([]);
-      setWorkDetailsList([]);
+  // ==================== COMPUTED VALUES ====================
+  const hasActiveFilters =
+    vesselFilter ||
+    shipyardWoFilter ||
+    customerWoFilter ||
+    kaproFilter ||
+    workLocationFilter ||
+    workTypeFilter ||
+    additionalWoFilter;
+
+  // ✅ Dynamically filter work orders based on active filters
+  const filteredWorkOrders = useMemo(() => {
+    let filtered = allWorkOrders;
+
+    // Filter by vessel
+    if (vesselFilter) {
+      filtered = filtered.filter(
+        (wo) => wo.vessel_id === parseInt(vesselFilter)
+      );
     }
-  };
 
-  const handleVesselSelectFromDropdown = (vessel: VesselInfo) => {
-    setSelectedVesselId(vessel.id);
-    setVesselSearchTerm(`${vessel.name} - ${vessel.type} (${vessel.company})`);
-    setShowVesselDropdown(false);
-    setSelectedWorkOrderId(0);
-    setSelectedWorkDetailsIdFilter(0);
-    setWorkOrderSearchTerm("");
-    setWorkDetailsSearchTerm("");
-    setCurrentPage(1);
-  };
-
-  const handleClearVesselSearch = () => {
-    setVesselSearchTerm("");
-    setSelectedVesselId(0);
-    setShowVesselDropdown(false);
-    setSelectedWorkOrderId(0);
-    setSelectedWorkDetailsIdFilter(0);
-    setWorkOrderSearchTerm("");
-    setWorkDetailsSearchTerm("");
-    setWorkOrders([]);
-    setWorkDetailsList([]);
-    setCurrentPage(1);
-  };
-
-  // Work Order search handlers
-  const handleWorkOrderSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setWorkOrderSearchTerm(e.target.value);
-    setShowWorkOrderDropdown(true);
-    if (selectedWorkOrderId) {
-      setSelectedWorkOrderId(0);
-      setSelectedWorkDetailsIdFilter(0);
-      setWorkDetailsList([]);
+    // Filter by kapro
+    if (kaproFilter) {
+      if (kaproFilter === "unassigned") {
+        filtered = filtered.filter((wo) => !wo.kapro_id);
+      } else {
+        filtered = filtered.filter(
+          (wo) => wo.kapro_id === parseInt(kaproFilter)
+        );
+      }
     }
-  };
 
-  const handleWorkOrderSelectFromDropdown = (workOrder: WorkOrderInfo) => {
-    setSelectedWorkOrderId(workOrder.id);
-    setWorkOrderSearchTerm(workOrder.shipyard_wo_number || "");
-    setShowWorkOrderDropdown(false);
-    setSelectedWorkDetailsIdFilter(0);
-    setWorkDetailsSearchTerm("");
-    setCurrentPage(1);
-  };
-
-  const handleClearWorkOrderSearch = () => {
-    setWorkOrderSearchTerm("");
-    setSelectedWorkOrderId(0);
-    setShowWorkOrderDropdown(false);
-    setSelectedWorkDetailsIdFilter(0);
-    setWorkDetailsSearchTerm("");
-    setWorkDetailsList([]);
-    setCurrentPage(1);
-  };
-
-  // Work Details search handlers
-  const handleWorkDetailsSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setWorkDetailsSearchTerm(e.target.value);
-    setShowWorkDetailsDropdown(true);
-    if (selectedWorkDetailsIdFilter) {
-      setSelectedWorkDetailsIdFilter(0);
+    // Filter by work type
+    if (workTypeFilter) {
+      filtered = filtered.filter((wo) => wo.work_type === workTypeFilter);
     }
-  };
 
-  const handleWorkDetailsSelectFromDropdown = (
-    workDetails: WorkDetailsInfo
-  ) => {
-    setSelectedWorkDetailsIdFilter(workDetails.id);
-    setWorkDetailsSearchTerm(workDetails.description);
-    setShowWorkDetailsDropdown(false);
-    setCurrentPage(1);
-  };
+    // Filter by work location
+    if (workLocationFilter) {
+      filtered = filtered.filter(
+        (wo) => wo.work_location === workLocationFilter
+      );
+    }
 
-  const handleClearWorkDetailsSearch = () => {
-    setWorkDetailsSearchTerm("");
-    setSelectedWorkDetailsIdFilter(workDetailsId || 0);
-    setShowWorkDetailsDropdown(false);
-    setCurrentPage(1);
-  };
+    // Filter by additional WO
+    if (additionalWoFilter) {
+      const isAdditional = additionalWoFilter === "yes";
+      filtered = filtered.filter((wo) => wo.is_additional_wo === isAdditional);
+    }
 
-  const fetchVessels = useCallback(async () => {
+    // Filter by shipyard WO number
+    if (shipyardWoFilter) {
+      filtered = filtered.filter(
+        (wo) => wo.shipyard_wo_number === shipyardWoFilter
+      );
+    }
+
+    // Filter by customer WO number
+    if (customerWoFilter) {
+      filtered = filtered.filter(
+        (wo) => wo.customer_wo_number === customerWoFilter
+      );
+    }
+
+    return filtered;
+  }, [
+    allWorkOrders,
+    vesselFilter,
+    kaproFilter,
+    workTypeFilter,
+    workLocationFilter,
+    additionalWoFilter,
+    shipyardWoFilter,
+    customerWoFilter,
+  ]);
+
+  // ✅ Available vessels based on filtered work orders
+  const availableVessels = useMemo(() => {
+    if (!hasActiveFilters) return allVessels;
+
+    const vesselIds = new Set(filteredWorkOrders.map((wo) => wo.vessel_id));
+    return allVessels.filter((vessel) => vesselIds.has(vessel.id));
+  }, [allVessels, filteredWorkOrders, hasActiveFilters]);
+
+  // ✅ Available shipyard WO numbers based on filtered work orders
+  const availableShipyardWoNumbers = useMemo(() => {
+    const numbers = filteredWorkOrders
+      .map((wo) => wo.shipyard_wo_number)
+      .filter((num): num is string => !!num);
+    return Array.from(new Set(numbers)).sort();
+  }, [filteredWorkOrders]);
+
+  // ✅ Available customer WO numbers based on filtered work orders
+  const availableCustomerWoNumbers = useMemo(() => {
+    const numbers = filteredWorkOrders
+      .map((wo) => wo.customer_wo_number)
+      .filter((num): num is string => !!num);
+    return Array.from(new Set(numbers)).sort();
+  }, [filteredWorkOrders]);
+
+  // ✅ Available work types based on filtered work orders
+  const availableWorkTypes = useMemo(() => {
+    const types = filteredWorkOrders
+      .map((wo) => wo.work_type)
+      .filter((type): type is string => !!type);
+    return Array.from(new Set(types)).sort();
+  }, [filteredWorkOrders]);
+
+  // ✅ Available work locations based on filtered work orders
+  const availableWorkLocations = useMemo(() => {
+    const locations = filteredWorkOrders
+      .map((wo) => wo.work_location)
+      .filter((loc): loc is string => !!loc);
+    return Array.from(new Set(locations)).sort();
+  }, [filteredWorkOrders]);
+
+  // ✅ FIXED: Available kapros based on filtered work orders
+  const availableKapros = useMemo(() => {
+    if (!hasActiveFilters) {
+      return {
+        kapros: allKapros,
+        hasUnassigned: allWorkOrders.some((wo) => !wo.kapro_id),
+      };
+    }
+
+    const kaproIds = new Set(
+      filteredWorkOrders
+        .map((wo) => wo.kapro_id)
+        .filter((id): id is number => id !== null && id !== undefined)
+    );
+
+    const filteredKapros = allKapros.filter((kapro) => kaproIds.has(kapro.id));
+    const hasUnassigned = filteredWorkOrders.some((wo) => !wo.kapro_id);
+
+    return { kapros: filteredKapros, hasUnassigned };
+  }, [allKapros, filteredWorkOrders, hasActiveFilters, allWorkOrders]);
+
+  // ✅ Filtered vessels for search dropdown
+  const filteredVesselsForSearch = useMemo(() => {
+    if (!vesselSearchTerm) return availableVessels;
+
+    const searchLower = vesselSearchTerm.toLowerCase();
+    return availableVessels.filter((vessel) => {
+      const name = vessel.name?.toLowerCase() || "";
+      const type = vessel.type?.toLowerCase() || "";
+      const company = vessel.company?.toLowerCase() || "";
+
+      return (
+        name.includes(searchLower) ||
+        type.includes(searchLower) ||
+        company.includes(searchLower)
+      );
+    });
+  }, [availableVessels, vesselSearchTerm]);
+
+  // ==================== DATA FETCHING FUNCTIONS ====================
+
+  const fetchFilterOptions = useCallback(async () => {
     try {
-      setLoadingVessels(true);
-      const { data, error } = await supabase
+      // Fetch ALL Vessels
+      const { data: vesselData, error: vesselError } = await supabase
         .from("vessel")
         .select("id, name, type, company")
         .is("deleted_at", null)
         .order("name", { ascending: true });
 
-      if (error) throw error;
-      setVessels(data || []);
-    } catch (err) {
-      console.error("Error fetching vessels:", err);
-    } finally {
-      setLoadingVessels(false);
-    }
-  }, []);
+      if (vesselError) throw vesselError;
+      setAllVessels(vesselData || []);
 
-  const fetchWorkOrders = useCallback(async (vesselId: number) => {
-    try {
-      setLoadingWorkOrders(true);
-      const { data, error } = await supabase
+      // Fetch ALL Kapros
+      const { data: kaproData, error: kaproError } = await supabase
+        .from("kapro")
+        .select("id, kapro_name")
+        .is("deleted_at", null)
+        .order("kapro_name", { ascending: true });
+
+      if (kaproError) throw kaproError;
+      setAllKapros(kaproData || []);
+
+      // Fetch ALL work orders with all fields
+      const { data: woData, error: woError } = await supabase
         .from("work_order")
         .select(
-          `
-          id, 
-          shipyard_wo_number, 
-          shipyard_wo_date,
-          vessel!inner (
-            id,
-            name,
-            type,
-            company
-          )
-        `
+          "id, vessel_id, shipyard_wo_number, customer_wo_number, work_type, work_location, is_additional_wo, kapro_id"
         )
-        .eq("vessel_id", vesselId)
-        .is("deleted_at", null)
-        .order("shipyard_wo_number", { ascending: true });
+        .is("deleted_at", null);
 
-      if (error) throw error;
-
-      const transformedData = (data || []).map(transformSupabaseWorkOrder);
-      setWorkOrders(transformedData);
+      if (woError) throw woError;
+      setAllWorkOrders(woData || []);
     } catch (err) {
-      console.error("Error fetching work orders:", err);
-    } finally {
-      setLoadingWorkOrders(false);
-    }
-  }, []);
-
-  const fetchWorkDetails = useCallback(async (workOrderId: number) => {
-    try {
-      setLoadingWorkDetails(true);
-      const { data, error } = await supabase
-        .from("work_details")
-        .select(
-          `
-        id, 
-        description, 
-        location:location_id (
-          id,
-          location
-        ),
-        work_location,
-        pic,
-        planned_start_date,
-        target_close_date,
-        period_close_target,
-        work_order!inner (
-          id,
-          shipyard_wo_number,
-          shipyard_wo_date,
-          vessel!inner (
-            id,
-            name,
-            type,
-            company
-          )
-        )
-      `
-        )
-        .eq("work_order_id", workOrderId)
-        .is("deleted_at", null)
-        .order("description", { ascending: true });
-
-      if (error) throw error;
-
-      const transformedData = (data || []).map(transformSupabaseWorkDetails);
-      setWorkDetailsList(transformedData);
-    } catch (err) {
-      console.error("Error fetching work details:", err);
-    } finally {
-      setLoadingWorkDetails(false);
+      console.error("Error fetching filter options:", err);
     }
   }, []);
 
@@ -417,104 +445,91 @@ export default function WorkProgressTable({
 
       let query = supabase.from("work_progress").select(
         `
-    id,
-    progress_percentage,
-    report_date,
-    notes,
-    evidence_url,
-    storage_path,
-    created_at,
-    work_details_id,
-    user_id,
-    work_details!inner (
-      id,
-      description,
-      work_location,
-      location:location_id (
-        id,
-        location
-      ),
-      work_order!inner (
-        id,
-        shipyard_wo_number,
-        vessel!inner (
           id,
-          name,
-          type
-        )
-      )
-    ),
-    profiles (
-      id,
-      name,
-      email
-    )
-  `,
+          progress_percentage,
+          report_date,
+          notes,
+          evidence_url,
+          storage_path,
+          created_at,
+          work_details_id,
+          user_id,
+          work_details!inner (
+            id,
+            description,
+            location:location_id (
+              id,
+              location
+            ),
+            work_order!inner (
+              id,
+              shipyard_wo_number,
+              customer_wo_number,
+              work_type,
+              work_location,
+              is_additional_wo,
+              kapro_id,
+              vessel!inner (
+                id,
+                name,
+                type
+              )
+            )
+          ),
+          profiles (
+            id,
+            name,
+            email
+          )
+        `,
         { count: "exact" }
       );
 
-      if (selectedWorkDetailsIdFilter > 0) {
-        query = query.eq("work_details_id", selectedWorkDetailsIdFilter);
-      } else if (selectedWorkOrderId > 0) {
-        const { data: workDetailsInOrder } = await supabase
+      // Apply filters only if any filter is active
+      if (hasActiveFilters) {
+        if (filteredWorkOrders.length === 0) {
+          setWorkProgress([]);
+          setTotalCount(0);
+          setLoading(false);
+          return;
+        }
+
+        // Get work details for filtered work orders
+        const workOrderIds = filteredWorkOrders.map((wo) => wo.id);
+        const { data: workDetailsInOrders, error: wdError } = await supabase
           .from("work_details")
           .select("id")
-          .eq("work_order_id", selectedWorkOrderId);
+          .in("work_order_id", workOrderIds)
+          .is("deleted_at", null);
 
-        if (workDetailsInOrder && workDetailsInOrder.length > 0) {
-          const workDetailsIds = workDetailsInOrder.map((wd) => wd.id);
-          query = query.in("work_details_id", workDetailsIds);
-        } else {
+        if (wdError) throw wdError;
+
+        if (!workDetailsInOrders || workDetailsInOrders.length === 0) {
           setWorkProgress([]);
           setTotalCount(0);
           setLoading(false);
           return;
         }
-      } else if (selectedVesselId > 0) {
-        const { data: workOrdersInVessel } = await supabase
-          .from("work_order")
-          .select("id")
-          .eq("vessel_id", selectedVesselId);
 
-        if (workOrdersInVessel && workOrdersInVessel.length > 0) {
-          const workOrderIds = workOrdersInVessel.map((wo) => wo.id);
-          const { data: workDetailsInVessel } = await supabase
-            .from("work_details")
-            .select("id")
-            .in("work_order_id", workOrderIds);
-
-          if (workDetailsInVessel && workDetailsInVessel.length > 0) {
-            const workDetailsIds = workDetailsInVessel.map((wd) => wd.id);
-            query = query.in("work_details_id", workDetailsIds);
-          } else {
-            setWorkProgress([]);
-            setTotalCount(0);
-            setLoading(false);
-            return;
-          }
-        } else {
-          setWorkProgress([]);
-          setTotalCount(0);
-          setLoading(false);
-          return;
-        }
+        const workDetailsIds = workDetailsInOrders.map((wd) => wd.id);
+        query = query.in("work_details_id", workDetailsIds);
       }
 
-      const startIndex = (currentPage - 1) * itemsPerPage;
+      // Apply pagination
+      const startIdx = (currentPage - 1) * itemsPerPage;
       query = query
         .order("report_date", { ascending: false })
         .order("created_at", { ascending: false })
-        .range(startIndex, startIndex + itemsPerPage - 1);
+        .range(startIdx, startIdx + itemsPerPage - 1);
 
       const { data, error, count } = await query;
 
       if (error) throw error;
 
-      const progressData = (data || []).map((item: any) => {
-        return transformSupabaseWorkProgress(
-          item as SupabaseWorkProgressResponse
-        );
-      });
+      const progressData = (data || []).map((item: any) =>
+        transformSupabaseWorkProgress(item as SupabaseWorkProgressResponse)
+      );
+
       setWorkProgress(progressData);
       setTotalCount(count || 0);
 
@@ -525,12 +540,7 @@ export default function WorkProgressTable({
     } finally {
       setLoading(false);
     }
-  }, [
-    selectedVesselId,
-    selectedWorkOrderId,
-    selectedWorkDetailsIdFilter,
-    currentPage,
-  ]);
+  }, [currentPage, hasActiveFilters, filteredWorkOrders]);
 
   const calculateMaxProgress = async (
     currentProgressData: WorkProgressWithDetails[]
@@ -577,101 +587,47 @@ export default function WorkProgressTable({
     }
   };
 
-  useEffect(() => {
-    if (!workDetailsId) {
-      fetchVessels();
-    }
-    fetchWorkProgress();
-  }, [workDetailsId, fetchVessels, fetchWorkProgress]);
+  // ==================== FILTER HANDLERS ====================
 
-  useEffect(() => {
-    if (selectedVesselId > 0) {
-      fetchWorkOrders(selectedVesselId);
-    } else {
-      setWorkOrders([]);
-      setSelectedWorkOrderId(0);
-    }
-  }, [selectedVesselId, fetchWorkOrders]);
-
-  useEffect(() => {
-    if (selectedWorkOrderId > 0) {
-      fetchWorkDetails(selectedWorkOrderId);
-    } else {
-      setWorkDetailsList([]);
-      if (!workDetailsId) {
-        setSelectedWorkDetailsIdFilter(0);
-      }
-    }
-  }, [selectedWorkOrderId, workDetailsId, fetchWorkDetails]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedVesselId, selectedWorkOrderId, selectedWorkDetailsIdFilter]);
-
-  // Handle click outside to close dropdowns
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        vesselDropdownRef.current &&
-        !vesselDropdownRef.current.contains(event.target as Node)
-      ) {
-        setShowVesselDropdown(false);
-      }
-      if (
-        workOrderDropdownRef.current &&
-        !workOrderDropdownRef.current.contains(event.target as Node)
-      ) {
-        setShowWorkOrderDropdown(false);
-      }
-      if (
-        workDetailsDropdownRef.current &&
-        !workDetailsDropdownRef.current.contains(event.target as Node)
-      ) {
-        setShowWorkDetailsDropdown(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  // Filter vessels for search dropdown
-  const filteredVesselsForSearch = vessels.filter((vessel) => {
-    const searchLower = vesselSearchTerm.toLowerCase();
-    return (
-      vessel.name?.toLowerCase().includes(searchLower) ||
-      vessel.type?.toLowerCase().includes(searchLower) ||
-      vessel.company?.toLowerCase().includes(searchLower)
-    );
-  });
-
-  // Filter work orders for search dropdown
-  const filteredWorkOrdersForSearch = workOrders.filter((wo) => {
-    const searchLower = workOrderSearchTerm.toLowerCase();
-    return wo.shipyard_wo_number?.toLowerCase().includes(searchLower);
-  });
-
-  // Filter work details for search dropdown
-  const filteredWorkDetailsForSearch = workDetailsList.filter((wd) => {
-    const searchLower = workDetailsSearchTerm.toLowerCase();
-    return (
-      wd.description?.toLowerCase().includes(searchLower) ||
-      wd.location?.toLowerCase().includes(searchLower) ||
-      wd.pic?.toLowerCase().includes(searchLower)
-    );
-  });
-
-  const clearFilters = () => {
-    setSelectedVesselId(0);
-    setSelectedWorkOrderId(0);
-    setSelectedWorkDetailsIdFilter(workDetailsId || 0);
+  const handleClearFilters = () => {
+    setVesselFilter("");
     setVesselSearchTerm("");
-    setWorkOrderSearchTerm("");
-    setWorkDetailsSearchTerm("");
+    setShipyardWoFilter("");
+    setCustomerWoFilter("");
+    setKaproFilter("");
+    setWorkLocationFilter("");
+    setWorkTypeFilter("");
+    setAdditionalWoFilter("");
     setCurrentPage(1);
   };
+
+  const clearAllFilters = () => {
+    handleClearFilters();
+  };
+
+  const handleVesselSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVesselSearchTerm(e.target.value);
+    setShowVesselDropdown(true);
+    if (vesselFilter) {
+      setVesselFilter("");
+    }
+  };
+
+  const handleVesselSelectFromDropdown = (vessel: VesselInfo) => {
+    setVesselFilter(vessel.id.toString());
+    setVesselSearchTerm(`${vessel.name} - ${vessel.type}`);
+    setShowVesselDropdown(false);
+    setCurrentPage(1);
+  };
+
+  const handleClearVesselSearch = () => {
+    setVesselSearchTerm("");
+    setVesselFilter("");
+    setShowVesselDropdown(false);
+    setCurrentPage(1);
+  };
+
+  // ==================== NAVIGATION HANDLERS ====================
 
   const canAddProgress = (workDetailsId: number): boolean => {
     const maxProgress = maxProgressByWorkDetail[workDetailsId] || 0;
@@ -695,29 +651,29 @@ export default function WorkProgressTable({
         .from("work_details")
         .select(
           `
-          id,
-          description,
-          location:location_id (
             id,
-            location
-          ),
-          work_location,
-          pic,
-          planned_start_date,
-          target_close_date,
-          period_close_target,
-          work_order!inner (
-            id,
-            shipyard_wo_number,
-            shipyard_wo_date,
-            vessel!inner (
+            description,
+            location:location_id (
               id,
-              name,
-              type,
-              company
+              location
+            ),
+            pic,
+            planned_start_date,
+            target_close_date,
+            period_close_target,
+            work_order!inner (
+              id,
+              shipyard_wo_number,
+              shipyard_wo_date,
+              work_location,
+              vessel!inner (
+                id,
+                name,
+                type,
+                company
+              )
             )
-          )
-        `
+          `
         )
         .eq("id", workDetailsId)
         .single();
@@ -765,149 +721,11 @@ export default function WorkProgressTable({
     }
   };
 
-  const handleAddProgressFromNoResults = async () => {
-    if (selectedWorkDetailsIdFilter > 0) {
-      try {
-        const { data: workDetailsData, error: workDetailsError } =
-          await supabase
-            .from("work_details")
-            .select(
-              `
-              id,
-              description,
-              location:location_id (
-                id,
-                location
-                ),
-              work_location,
-              pic,
-              planned_start_date,
-              target_close_date,
-              period_close_target,
-              work_order!inner (
-                id,
-                shipyard_wo_number,
-                shipyard_wo_date,
-                vessel!inner (
-                  id,
-                  name,
-                  type,
-                  company
-                )
-              )
-            `
-            )
-            .eq("id", selectedWorkDetailsIdFilter)
-            .single();
-
-        if (workDetailsError) throw workDetailsError;
-
-        const transformedData = transformSupabaseWorkDetails(workDetailsData);
-
-        navigate(`/add-work-progress/${selectedWorkDetailsIdFilter}`, {
-          state: {
-            workDetails: transformedData,
-            currentProgress: 0,
-            lastReportDate: null,
-            prefillData: {
-              vesselId: transformedData.work_order.vessel.id,
-              vesselName: transformedData.work_order.vessel.name,
-              vesselType: transformedData.work_order.vessel.type,
-              vesselCompany: transformedData.work_order.vessel.company,
-
-              workOrderId: transformedData.work_order.id,
-              workOrderNumber: transformedData.work_order.shipyard_wo_number,
-              workOrderDate: transformedData.work_order.shipyard_wo_date,
-
-              workDetailsId: selectedWorkDetailsIdFilter,
-              workDescription: transformedData.description,
-              location: transformedData.location,
-              pic: transformedData.pic,
-              plannedStartDate: transformedData.planned_start_date,
-              targetCloseDate: transformedData.target_close_date,
-              periodCloseTarget: transformedData.period_close_target,
-
-              currentProgressPercentage: 0,
-              lastProgressPercentage: 0,
-              suggestedNextProgress: 10,
-
-              fromProgressTable: true,
-              fromNoResults: true,
-              isFirstProgress: true,
-            },
-          },
-        });
-      } catch (err) {
-        console.error("Error fetching work details:", err);
-        alert("Failed to load work details. Please try again.");
-      }
-    } else if (selectedWorkOrderId > 0) {
-      try {
-        const { data: workOrderData, error: workOrderError } = await supabase
-          .from("work_order")
-          .select(
-            `
-            id,
-            shipyard_wo_number,
-            shipyard_wo_date,
-            vessel!inner (
-              id,
-              name,
-              type,
-              company
-            )
-          `
-          )
-          .eq("id", selectedWorkOrderId)
-          .single();
-
-        if (workOrderError) throw workOrderError;
-
-        const transformedWorkOrder = transformSupabaseWorkOrder(workOrderData);
-
-        navigate("/add-work-progress", {
-          state: {
-            prefillData: {
-              vesselId: transformedWorkOrder.vessel.id,
-              vesselName: transformedWorkOrder.vessel.name,
-              vesselType: transformedWorkOrder.vessel.type,
-              vesselCompany: transformedWorkOrder.vessel.company,
-              workOrderId: selectedWorkOrderId,
-              workOrderNumber: transformedWorkOrder.shipyard_wo_number,
-              workOrderDate: transformedWorkOrder.shipyard_wo_date,
-              fromProgressTable: true,
-              fromNoResults: true,
-              preSelectWorkOrder: true,
-            },
-          },
-        });
-      } catch (err) {
-        console.error("Error fetching work order:", err);
-        alert("Failed to load work order. Please try again.");
-      }
-    } else if (selectedVesselId > 0) {
-      const selectedVessel = vessels.find((v) => v.id === selectedVesselId);
-      if (selectedVessel) {
-        navigate("/add-work-progress", {
-          state: {
-            prefillData: {
-              vesselId: selectedVesselId,
-              vesselName: selectedVessel.name,
-              vesselType: selectedVessel.type,
-              vesselCompany: selectedVessel.company,
-              fromProgressTable: true,
-              fromNoResults: true,
-              preSelectVessel: true,
-            },
-          },
-        });
-      } else {
-        navigate("/add-work-progress");
-      }
-    } else {
-      navigate("/add-work-progress");
-    }
+  const handleAddProgressFromNoResults = () => {
+    navigate("/add-work-progress");
   };
+
+  // ==================== UTILITY FUNCTIONS ====================
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -959,9 +777,45 @@ export default function WorkProgressTable({
     }
   };
 
-  const totalPages = Math.ceil(totalCount / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage + 1;
-  const endIndex = Math.min(currentPage * itemsPerPage, totalCount);
+  // ==================== EFFECTS ====================
+
+  useEffect(() => {
+    fetchFilterOptions();
+  }, [fetchFilterOptions]);
+
+  useEffect(() => {
+    fetchWorkProgress();
+  }, [fetchWorkProgress]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    vesselFilter,
+    shipyardWoFilter,
+    customerWoFilter,
+    kaproFilter,
+    workLocationFilter,
+    workTypeFilter,
+    additionalWoFilter,
+  ]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        vesselDropdownRef.current &&
+        !vesselDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowVesselDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // ==================== RENDER FUNCTIONS ====================
 
   const renderPagination = () => {
     if (totalPages <= 1) return null;
@@ -1008,16 +862,13 @@ export default function WorkProgressTable({
             </p>
           </div>
           <div>
-            <nav
-              className="isolate inline-flex -space-x-px rounded-md shadow-sm"
-              aria-label="Pagination"
-            >
+            <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm">
               <button
                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                 disabled={currentPage === 1}
-                className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <span className="sr-only">Previous</span>←
+                ←
               </button>
               {pages.map((page) => (
                 <button
@@ -1025,8 +876,8 @@ export default function WorkProgressTable({
                   onClick={() => setCurrentPage(page)}
                   className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
                     page === currentPage
-                      ? "z-10 bg-blue-600 text-white focus:z-20 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-                      : "text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0"
+                      ? "z-10 bg-blue-600 text-white"
+                      : "text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
                   }`}
                 >
                   {page}
@@ -1037,9 +888,9 @@ export default function WorkProgressTable({
                   setCurrentPage(Math.min(totalPages, currentPage + 1))
                 }
                 disabled={currentPage === totalPages}
-                className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <span className="sr-only">Next</span>→
+                →
               </button>
             </nav>
           </div>
@@ -1048,22 +899,517 @@ export default function WorkProgressTable({
     );
   };
 
-  if (error) {
+  const renderFilterSection = () => {
+    if (workDetailsId) return null;
+
     return (
-      <div className={`${embedded ? "" : "p-8"}`}>
+      <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-gray-900">🔍 Filters</h3>
+            {hasActiveFilters && (
+              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-bold">
+                {
+                  [
+                    vesselFilter,
+                    shipyardWoFilter,
+                    customerWoFilter,
+                    kaproFilter,
+                    workLocationFilter,
+                    workTypeFilter,
+                    additionalWoFilter,
+                  ].filter(Boolean).length
+                }
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {hasActiveFilters && (
+              <button
+                onClick={handleClearFilters}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                🔄 Clear All Filters
+              </button>
+            )}
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                showFilters || hasActiveFilters
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              {showFilters ? "Hide Filters" : "Show Filters"}
+            </button>
+          </div>
+        </div>
+
+        {showFilters && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Vessel Filter with Search Dropdown */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  🚢 Vessel
+                  {availableVessels.length < allVessels.length && (
+                    <span className="ml-2 text-xs text-blue-600">
+                      ({availableVessels.length} of {allVessels.length})
+                    </span>
+                  )}
+                </label>
+                <div className="relative" ref={vesselDropdownRef}>
+                  <input
+                    type="text"
+                    value={vesselSearchTerm}
+                    onChange={handleVesselSearch}
+                    onFocus={() => setShowVesselDropdown(true)}
+                    placeholder="Search vessel..."
+                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  {vesselSearchTerm && (
+                    <button
+                      onClick={handleClearVesselSearch}
+                      className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                    >
+                      ✕
+                    </button>
+                  )}
+
+                  {showVesselDropdown &&
+                    filteredVesselsForSearch.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {filteredVesselsForSearch.map((vessel) => (
+                          <div
+                            key={vessel.id}
+                            onClick={() =>
+                              handleVesselSelectFromDropdown(vessel)
+                            }
+                            className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                              vesselFilter === vessel.id.toString()
+                                ? "bg-blue-100"
+                                : ""
+                            }`}
+                          >
+                            <div className="font-medium text-gray-900 text-sm">
+                              {vessel.name}
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              {vessel.type} • {vessel.company}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                  {showVesselDropdown &&
+                    filteredVesselsForSearch.length === 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3 text-center text-sm text-gray-500">
+                        No vessels found
+                      </div>
+                    )}
+                </div>
+              </div>
+
+              {/* Shipyard WO Number Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  📋 Shipyard WO Number
+                  {availableShipyardWoNumbers.length > 0 && (
+                    <span className="ml-2 text-xs text-blue-600">
+                      ({availableShipyardWoNumbers.length})
+                    </span>
+                  )}
+                </label>
+                <select
+                  value={shipyardWoFilter}
+                  onChange={(e) => setShipyardWoFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  disabled={availableShipyardWoNumbers.length === 0}
+                >
+                  <option value="">
+                    {availableShipyardWoNumbers.length === 0
+                      ? "No WO available"
+                      : "All Shipyard WO"}
+                  </option>
+                  {availableShipyardWoNumbers.map((wo) => (
+                    <option key={wo} value={wo}>
+                      {wo}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Customer WO Number Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  📄 Customer WO Number
+                  {availableCustomerWoNumbers.length > 0 && (
+                    <span className="ml-2 text-xs text-blue-600">
+                      ({availableCustomerWoNumbers.length})
+                    </span>
+                  )}
+                </label>
+                <select
+                  value={customerWoFilter}
+                  onChange={(e) => setCustomerWoFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  disabled={availableCustomerWoNumbers.length === 0}
+                >
+                  <option value="">
+                    {availableCustomerWoNumbers.length === 0
+                      ? "No customer WO available"
+                      : "All Customer WO"}
+                  </option>
+                  {availableCustomerWoNumbers.map((wo) => (
+                    <option key={wo} value={wo}>
+                      {wo}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Work Type Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  🔧 Work Type
+                  {availableWorkTypes.length > 0 && (
+                    <span className="ml-2 text-xs text-blue-600">
+                      ({availableWorkTypes.length})
+                    </span>
+                  )}
+                </label>
+                <select
+                  value={workTypeFilter}
+                  onChange={(e) => setWorkTypeFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  disabled={availableWorkTypes.length === 0}
+                >
+                  <option value="">
+                    {availableWorkTypes.length === 0
+                      ? "No types available"
+                      : "All Types"}
+                  </option>
+                  {availableWorkTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Work Location Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  📍 Work Location
+                  {availableWorkLocations.length > 0 && (
+                    <span className="ml-2 text-xs text-blue-600">
+                      ({availableWorkLocations.length})
+                    </span>
+                  )}
+                </label>
+                <select
+                  value={workLocationFilter}
+                  onChange={(e) => setWorkLocationFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  disabled={availableWorkLocations.length === 0}
+                >
+                  <option value="">
+                    {availableWorkLocations.length === 0
+                      ? "No locations available"
+                      : "All Locations"}
+                  </option>
+                  {availableWorkLocations.map((location) => (
+                    <option key={location} value={location}>
+                      {location}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Kapro Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  👷 Kapro
+                  {availableKapros.kapros.length > 0 && (
+                    <span className="ml-2 text-xs text-blue-600">
+                      ({availableKapros.kapros.length}
+                      {availableKapros.hasUnassigned ? " + unassigned" : ""})
+                    </span>
+                  )}
+                </label>
+                <select
+                  value={kaproFilter}
+                  onChange={(e) => setKaproFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  disabled={
+                    availableKapros.kapros.length === 0 &&
+                    !availableKapros.hasUnassigned
+                  }
+                >
+                  <option value="">
+                    {availableKapros.kapros.length === 0 &&
+                    !availableKapros.hasUnassigned
+                      ? "No kapros available"
+                      : "All Kapros"}
+                  </option>
+                  {availableKapros.hasUnassigned && (
+                    <option value="unassigned">Unassigned</option>
+                  )}
+                  {availableKapros.kapros.map((kapro) => (
+                    <option key={kapro.id} value={kapro.id.toString()}>
+                      {kapro.kapro_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Additional WO Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  ⚠️ Additional WO
+                </label>
+                <select
+                  value={additionalWoFilter}
+                  onChange={(e) => setAdditionalWoFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">All</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Active Filters Display */}
+            {hasActiveFilters && (
+              <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-200">
+                <span className="text-sm text-gray-600 font-medium">
+                  Active filters:
+                </span>
+                {vesselFilter && (
+                  <FilterPill
+                    label="Vessel"
+                    value={
+                      allVessels.find((v) => v.id.toString() === vesselFilter)
+                        ?.name || vesselFilter
+                    }
+                    onRemove={handleClearVesselSearch}
+                  />
+                )}
+                {shipyardWoFilter && (
+                  <FilterPill
+                    label="Shipyard WO"
+                    value={shipyardWoFilter}
+                    onRemove={() => setShipyardWoFilter("")}
+                  />
+                )}
+                {customerWoFilter && (
+                  <FilterPill
+                    label="Customer WO"
+                    value={customerWoFilter}
+                    onRemove={() => setCustomerWoFilter("")}
+                  />
+                )}
+                {workTypeFilter && (
+                  <FilterPill
+                    label="Type"
+                    value={workTypeFilter}
+                    onRemove={() => setWorkTypeFilter("")}
+                  />
+                )}
+                {workLocationFilter && (
+                  <FilterPill
+                    label="Location"
+                    value={workLocationFilter}
+                    onRemove={() => setWorkLocationFilter("")}
+                  />
+                )}
+                {kaproFilter && (
+                  <FilterPill
+                    label="Kapro"
+                    value={
+                      kaproFilter === "unassigned"
+                        ? "Unassigned"
+                        : allKapros.find((k) => k.id.toString() === kaproFilter)
+                            ?.kapro_name || kaproFilter
+                    }
+                    onRemove={() => setKaproFilter("")}
+                  />
+                )}
+                {additionalWoFilter && (
+                  <FilterPill
+                    label="Additional"
+                    value={additionalWoFilter === "yes" ? "Yes" : "No"}
+                    onRemove={() => setAdditionalWoFilter("")}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderContent = () => {
+    if (error) {
+      return (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <h3 className="text-red-800 font-medium">Error</h3>
           <p className="text-red-600 mt-1">{error}</p>
           <button
             onClick={fetchWorkProgress}
-            className="mt-3 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+            className="mt-3 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
           >
             Retry
           </button>
         </div>
+      );
+    }
+
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <span className="ml-3 text-gray-600">Loading work progress...</span>
+        </div>
+      );
+    }
+
+    if (workProgress.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <div className="text-6xl mb-4">📊</div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            No Progress Reports Found
+          </h3>
+          <p className="text-gray-500 mb-4">
+            {hasActiveFilters
+              ? "No progress reports match your current filters."
+              : "No progress reports have been recorded yet."}
+          </p>
+
+          <div className="flex gap-3 justify-center">
+            {hasActiveFilters && (
+              <button
+                onClick={clearAllFilters}
+                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
+              >
+                Clear Filters
+              </button>
+            )}
+            <button
+              onClick={handleAddProgressFromNoResults}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+            >
+              ➕ Add Progress Report
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Progress
+                  <div className="text-xs text-gray-400 font-normal mt-1">
+                    (Click to add new)
+                  </div>
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Work Details
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Vessel & Work Order
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Report Date
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Notes
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Reported By
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Evidence
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Created
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {workProgress.map((item) => {
+                const workDetailsId = item.work_details.id;
+                const isCompleted = !canAddProgress(workDetailsId);
+                const maxProgress =
+                  maxProgressByWorkDetail[workDetailsId] ||
+                  item.progress_percentage;
+
+                return (
+                  <tr key={item.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <ProgressCell
+                        item={item}
+                        isCompleted={isCompleted}
+                        maxProgress={maxProgress}
+                        onAddProgress={handleAddProgressFromCurrent}
+                        getProgressColor={getProgressColor}
+                        getProgressIcon={getProgressIcon}
+                      />
+                    </td>
+                    <td className="px-6 py-4">
+                      <WorkDetailsCell
+                        workDetails={item.work_details}
+                        isCompleted={isCompleted}
+                      />
+                    </td>
+                    <td className="px-6 py-4">
+                      <VesselWorkOrderCell
+                        vessel={item.work_details.work_order.vessel}
+                        shipyardWoNumber={
+                          item.work_details.work_order.shipyard_wo_number
+                        }
+                      />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      📅 {formatDate(item.report_date)}
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      <NotesCell notes={item.notes} />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <ReportedByCell profiles={item.profiles} />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <EvidenceCell
+                        storagePath={item.storage_path}
+                        onClick={handleEvidenceClick}
+                      />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
+                      {formatDateTime(item.created_at)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {renderPagination()}
       </div>
     );
-  }
+  };
+
+  // ==================== MAIN RENDER ====================
 
   return (
     <div className={`${embedded ? "" : "p-8"}`}>
@@ -1078,546 +1424,233 @@ export default function WorkProgressTable({
                 Track detailed progress reports for work activities
               </p>
             </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => navigate("/add-work-progress")}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-              >
-                ➕ Add Progress Report
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Hierarchical Filters */}
-      {!workDetailsId && (
-        <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">
-              🔍 Filter Progress Reports
-            </h3>
-            {(selectedVesselId > 0 ||
-              selectedWorkOrderId > 0 ||
-              selectedWorkDetailsIdFilter > 0) && (
-              <button
-                onClick={clearFilters}
-                className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
-              >
-                🔄 Clear Filters
-              </button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Vessel Filter with Search */}
-            <div className="relative" ref={vesselDropdownRef}>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                🚢 Vessel
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={vesselSearchTerm}
-                  onChange={handleVesselSearch}
-                  onFocus={() => setShowVesselDropdown(true)}
-                  placeholder="Search vessel..."
-                  disabled={loadingVessels}
-                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                {vesselSearchTerm && (
-                  <button
-                    onClick={handleClearVesselSearch}
-                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-
-              {/* Vessel Dropdown */}
-              {showVesselDropdown && filteredVesselsForSearch.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {filteredVesselsForSearch.map((vessel) => (
-                    <div
-                      key={vessel.id}
-                      onClick={() => handleVesselSelectFromDropdown(vessel)}
-                      className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                        selectedVesselId === vessel.id ? "bg-blue-100" : ""
-                      }`}
-                    >
-                      <div className="font-medium text-gray-900 text-sm">
-                        {vessel.name}
-                      </div>
-                      <div className="text-xs text-gray-600">
-                        {vessel.type} • {vessel.company}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Work Order Filter with Search */}
-            <div className="relative" ref={workOrderDropdownRef}>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                📋 Work Order
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={workOrderSearchTerm}
-                  onChange={handleWorkOrderSearch}
-                  onFocus={() => setShowWorkOrderDropdown(true)}
-                  placeholder={
-                    selectedVesselId === 0
-                      ? "Select vessel first"
-                      : "Search work order..."
-                  }
-                  disabled={loadingWorkOrders || selectedVesselId === 0}
-                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50"
-                />
-                {workOrderSearchTerm && (
-                  <button
-                    onClick={handleClearWorkOrderSearch}
-                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-
-              {/* Work Order Dropdown */}
-              {showWorkOrderDropdown &&
-                selectedVesselId > 0 &&
-                filteredWorkOrdersForSearch.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {filteredWorkOrdersForSearch.map((workOrder) => (
-                      <div
-                        key={workOrder.id}
-                        onClick={() =>
-                          handleWorkOrderSelectFromDropdown(workOrder)
-                        }
-                        className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                          selectedWorkOrderId === workOrder.id
-                            ? "bg-blue-100"
-                            : ""
-                        }`}
-                      >
-                        <div className="font-medium text-gray-900 text-sm">
-                          {workOrder.shipyard_wo_number}
-                        </div>
-                        <div className="text-xs text-gray-600">
-                          {workOrder.vessel.name} - {workOrder.vessel.type}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-            </div>
-
-            {/* Work Details Filter with Search */}
-            <div className="relative" ref={workDetailsDropdownRef}>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                🔧 Work Details
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={workDetailsSearchTerm}
-                  onChange={handleWorkDetailsSearch}
-                  onFocus={() => setShowWorkDetailsDropdown(true)}
-                  placeholder={
-                    selectedWorkOrderId === 0
-                      ? "Select work order first"
-                      : "Search work details..."
-                  }
-                  disabled={loadingWorkDetails || selectedWorkOrderId === 0}
-                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50"
-                />
-                {workDetailsSearchTerm && (
-                  <button
-                    onClick={handleClearWorkDetailsSearch}
-                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-
-              {/* Work Details Dropdown */}
-              {showWorkDetailsDropdown &&
-                selectedWorkOrderId > 0 &&
-                filteredWorkDetailsForSearch.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {filteredWorkDetailsForSearch.map((workDetails) => (
-                      <div
-                        key={workDetails.id}
-                        onClick={() =>
-                          handleWorkDetailsSelectFromDropdown(workDetails)
-                        }
-                        className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                          selectedWorkDetailsIdFilter === workDetails.id
-                            ? "bg-blue-100"
-                            : ""
-                        }`}
-                      >
-                        <div className="font-medium text-gray-900 text-sm">
-                          {workDetails.description.substring(0, 50)}
-                          {workDetails.description.length > 50 ? "..." : ""}
-                        </div>
-                        <div className="text-xs text-gray-600">
-                          📍 {workDetails.location || "No location"} • 👤{" "}
-                          {workDetails.pic}
-                        </div>
-                        {workDetails.work_location && (
-                          <div className="text-xs text-blue-600 mt-1">
-                            📌 {workDetails.work_location}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Loading State */}
-      {loading && (
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <span className="ml-3 text-gray-600">Loading work progress...</span>
-        </div>
-      )}
-
-      {/* No Results */}
-      {!loading && workProgress.length === 0 && (
-        <div className="text-center py-12">
-          <div className="text-6xl mb-4">📊</div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            No Progress Reports Found
-          </h3>
-          <p className="text-gray-500 mb-4">
-            {selectedVesselId > 0 ||
-            selectedWorkOrderId > 0 ||
-            selectedWorkDetailsIdFilter > 0
-              ? "No progress reports match your current filters."
-              : "No progress reports have been recorded yet."}
-          </p>
-
-          {/* Enhanced context message based on filters */}
-          {selectedWorkDetailsIdFilter > 0 && (
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg max-w-md mx-auto">
-              <p className="text-sm text-blue-800">
-                <strong>Selected Work Details:</strong>{" "}
-                {workDetailsList
-                  .find((wd) => wd.id === selectedWorkDetailsIdFilter)
-                  ?.description.substring(0, 50)}
-                ...
-              </p>
-              <p className="text-xs text-blue-600 mt-1">
-                Click "Add First Progress Report" to create the initial progress
-                report for this work item.
-              </p>
-            </div>
-          )}
-
-          {selectedWorkOrderId > 0 && !selectedWorkDetailsIdFilter && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg max-w-md mx-auto">
-              <p className="text-sm text-green-800">
-                <strong>Selected Work Order:</strong>{" "}
-                {
-                  workOrders.find((wo) => wo.id === selectedWorkOrderId)
-                    ?.shipyard_wo_number
-                }
-              </p>
-              <p className="text-xs text-green-600 mt-1">
-                You can add progress for any work details in this work order.
-              </p>
-            </div>
-          )}
-
-          {selectedVesselId > 0 && !selectedWorkOrderId && (
-            <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg max-w-md mx-auto">
-              <p className="text-sm text-purple-800">
-                <strong>Selected Vessel:</strong>{" "}
-                {vessels.find((v) => v.id === selectedVesselId)?.name}
-              </p>
-              <p className="text-xs text-purple-600 mt-1">
-                You can add progress for any work details on this vessel.
-              </p>
-            </div>
-          )}
-
-          <div className="flex gap-3 justify-center">
-            {(selectedVesselId > 0 ||
-              selectedWorkOrderId > 0 ||
-              selectedWorkDetailsIdFilter > 0) && (
-              <button
-                onClick={clearFilters}
-                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                Clear Filters
-              </button>
-            )}
             <button
-              onClick={handleAddProgressFromNoResults}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+              onClick={() => navigate("/add-work-progress")}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
             >
-              ➕{" "}
-              {selectedWorkDetailsIdFilter > 0
-                ? "Add First Progress Report"
-                : "Add Progress Report"}
+              ➕ Add Progress Report
             </button>
           </div>
         </div>
       )}
 
-      {/* Results Table */}
-      {!loading && workProgress.length > 0 && (
-        <>
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Progress
-                      <div className="text-xs text-gray-400 font-normal mt-1">
-                        (Click to add new)
-                      </div>
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Work Details
-                    </th>
-                    {!selectedWorkDetailsIdFilter && (
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Vessel & Work Order
-                      </th>
-                    )}
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Report Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Notes
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Reported By
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Evidence
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Created
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {workProgress.map((item) => {
-                    const workDetailsId = item.work_details.id;
-                    const isCompleted = !canAddProgress(workDetailsId);
-                    const maxProgress =
-                      maxProgressByWorkDetail[workDetailsId] ||
-                      item.progress_percentage;
+      {renderFilterSection()}
+      {renderContent()}
+    </div>
+  );
+}
 
-                    return (
-                      <tr key={item.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {/* Updated Clickable Progress Cell */}
-                          {isCompleted ? (
-                            // Disabled state for completed work
-                            <div
-                              className="w-full text-left p-2 rounded-lg bg-gray-50 border border-gray-200 cursor-not-allowed opacity-75"
-                              title="Work detail is completed (100%). No more progress can be added."
-                            >
-                              <div className="flex items-center">
-                                <span className="text-lg mr-2">
-                                  {getProgressIcon(item.progress_percentage)}
-                                </span>
-                                <span
-                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getProgressColor(
-                                    item.progress_percentage
-                                  )}`}
-                                >
-                                  {item.progress_percentage}%
-                                </span>
-                                <span className="ml-2 text-xs text-gray-400">
-                                  ✅ Completed
-                                </span>
-                              </div>
-                              {/* Progress Bar */}
-                              <div className="mt-1 w-20">
-                                <div className="bg-gray-200 rounded-full h-1.5">
-                                  <div
-                                    className="bg-green-600 h-1.5 rounded-full"
-                                    style={{
-                                      width: `${Math.min(
-                                        Math.max(item.progress_percentage, 0),
-                                        100
-                                      )}%`,
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            // Clickable state for non-completed work
-                            <button
-                              onClick={() => handleAddProgressFromCurrent(item)}
-                              className="w-full text-left group cursor-pointer hover:bg-blue-50 rounded-lg p-2 transition-all duration-200 border border-transparent hover:border-blue-200"
-                              title={`Click to add new progress report based on this data (Current max: ${maxProgress}%)`}
-                            >
-                              <div className="flex items-center">
-                                <span className="text-lg mr-2">
-                                  {getProgressIcon(item.progress_percentage)}
-                                </span>
-                                <span
-                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getProgressColor(
-                                    item.progress_percentage
-                                  )} group-hover:scale-105 transition-transform`}
-                                >
-                                  {item.progress_percentage}%
-                                </span>
-                                {maxProgress > item.progress_percentage && (
-                                  <span className="ml-1 text-xs text-orange-600">
-                                    (Max: {maxProgress}%)
-                                  </span>
-                                )}
-                                <span className="ml-2 text-xs text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  ➕ Add new
-                                </span>
-                              </div>
-                              {/* Progress Bar */}
-                              <div className="mt-1 w-20">
-                                <div className="bg-gray-200 rounded-full h-1.5">
-                                  <div
-                                    className="bg-blue-600 h-1.5 rounded-full transition-all duration-300 group-hover:bg-blue-700"
-                                    style={{
-                                      width: `${Math.min(
-                                        Math.max(item.progress_percentage, 0),
-                                        100
-                                      )}%`,
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            </button>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center">
-                            <div className="text-sm font-medium text-gray-900">
-                              {item.work_details.description}
-                            </div>
-                            {isCompleted && (
-                              <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                ✅ Complete
-                              </span>
-                            )}
-                          </div>
-                          {item.work_details.location && (
-                            <div className="text-sm text-gray-500">
-                              📍{" "}
-                              {typeof item.work_details.location === "string"
-                                ? item.work_details.location
-                                : (
-                                    item.work_details.location as {
-                                      id: number;
-                                      location: string;
-                                    }
-                                  ).location}
-                            </div>
-                          )}
-                          {item.work_details.work_location && (
-                            <div className="text-xs text-gray-600 mt-0.5 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 inline-block">
-                              📌 {item.work_details.work_location}
-                            </div>
-                          )}
-                        </td>
-                        {!selectedWorkDetailsIdFilter && (
-                          <td className="px-6 py-4">
-                            <div className="text-sm text-gray-900">
-                              🚢 {item.work_details.work_order.vessel.name}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              📋{" "}
-                              {item.work_details.work_order.shipyard_wo_number}
-                            </div>
-                            <div className="text-xs text-gray-400">
-                              {item.work_details.work_order.vessel.type}
-                            </div>
-                          </td>
-                        )}
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          📅 {formatDate(item.report_date)}
-                        </td>
-                        <td className="px-6 py-4 text-sm">
-                          {item.notes ? (
-                            <div className="max-w-xs">
-                              <div
-                                className="text-gray-900 line-clamp-2"
-                                title={item.notes}
-                              >
-                                {item.notes}
-                              </div>
-                              {item.notes.length > 60 && (
-                                <button
-                                  onClick={() =>
-                                    alert(`Notes:\n\n${item.notes}`)
-                                  }
-                                  className="text-blue-600 hover:text-blue-800 text-xs mt-1"
-                                >
-                                  Read more
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-gray-400 italic">
-                              No notes
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            {item.profiles?.name || "Unknown User"}
-                          </div>
-                          {item.profiles?.email && (
-                            <div className="text-xs text-gray-500">
-                              {item.profiles.email}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          {item.storage_path ? (
-                            <button
-                              onClick={() =>
-                                handleEvidenceClick(item.storage_path)
-                              }
-                              className="text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer hover:underline"
-                            >
-                              📷 View Evidence
-                            </button>
-                          ) : (
-                            <span className="text-gray-400">No evidence</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
-                          {formatDateTime(item.created_at)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+// ==================== HELPER COMPONENTS ====================
 
-            {/* Pagination */}
-            {renderPagination()}
+function FilterPill({
+  label,
+  value,
+  onRemove,
+}: {
+  label: string;
+  value: string;
+  onRemove: () => void;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+      {label}: {value}
+      <button onClick={onRemove} className="hover:text-blue-900 font-bold">
+        ✕
+      </button>
+    </span>
+  );
+}
+
+function ProgressCell({
+  item,
+  isCompleted,
+  maxProgress,
+  onAddProgress,
+  getProgressColor,
+  getProgressIcon,
+}: {
+  item: WorkProgressWithDetails;
+  isCompleted: boolean;
+  maxProgress: number;
+  onAddProgress: (item: WorkProgressWithDetails) => void;
+  getProgressColor: (progress: number) => string;
+  getProgressIcon: (progress: number) => string;
+}) {
+  if (isCompleted) {
+    return (
+      <div className="w-full text-left p-2 rounded-lg bg-gray-50 border border-gray-200 cursor-not-allowed opacity-75">
+        <div className="flex items-center">
+          <span className="text-lg mr-2">
+            {getProgressIcon(item.progress_percentage)}
+          </span>
+          <span
+            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getProgressColor(
+              item.progress_percentage
+            )}`}
+          >
+            {item.progress_percentage}%
+          </span>
+          <span className="ml-2 text-xs text-gray-400">✅ Completed</span>
+        </div>
+        <div className="mt-1 w-20">
+          <div className="bg-gray-200 rounded-full h-1.5">
+            <div
+              className="bg-green-600 h-1.5 rounded-full"
+              style={{ width: `${item.progress_percentage}%` }}
+            />
           </div>
-        </>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => onAddProgress(item)}
+      className="w-full text-left group cursor-pointer hover:bg-blue-50 rounded-lg p-2 transition-all border border-transparent hover:border-blue-200"
+      title={`Click to add new progress report (Current max: ${maxProgress}%)`}
+    >
+      <div className="flex items-center">
+        <span className="text-lg mr-2">
+          {getProgressIcon(item.progress_percentage)}
+        </span>
+        <span
+          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getProgressColor(
+            item.progress_percentage
+          )} group-hover:scale-105 transition-transform`}
+        >
+          {item.progress_percentage}%
+        </span>
+        {maxProgress > item.progress_percentage && (
+          <span className="ml-1 text-xs text-orange-600">
+            (Max: {maxProgress}%)
+          </span>
+        )}
+        <span className="ml-2 text-xs text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+          ➕ Add new
+        </span>
+      </div>
+      <div className="mt-1 w-20">
+        <div className="bg-gray-200 rounded-full h-1.5">
+          <div
+            className="bg-blue-600 h-1.5 rounded-full transition-all group-hover:bg-blue-700"
+            style={{ width: `${item.progress_percentage}%` }}
+          />
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function WorkDetailsCell({
+  workDetails,
+  isCompleted,
+}: {
+  workDetails: WorkProgressWithDetails["work_details"];
+  isCompleted: boolean;
+}) {
+  const locationText = workDetails.location
+    ? typeof workDetails.location === "string"
+      ? workDetails.location
+      : (workDetails.location as { id: number; location: string }).location
+    : "";
+
+  return (
+    <div>
+      <div className="flex items-center">
+        <div className="text-sm font-medium text-gray-900">
+          {workDetails.description}
+        </div>
+        {isCompleted && (
+          <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            ✅ Complete
+          </span>
+        )}
+      </div>
+      {locationText && (
+        <div className="text-sm text-gray-500">📍 {locationText}</div>
+      )}
+      {workDetails.work_location && (
+        <div className="text-xs text-gray-600 mt-0.5 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 inline-block">
+          📌 {workDetails.work_location}
+        </div>
       )}
     </div>
+  );
+}
+
+function VesselWorkOrderCell({
+  vessel,
+  shipyardWoNumber,
+}: {
+  vessel: { name: string; type: string };
+  shipyardWoNumber: string;
+}) {
+  return (
+    <div>
+      <div className="text-sm text-gray-900">🚢 {vessel.name}</div>
+      <div className="text-sm text-gray-500">📋 {shipyardWoNumber}</div>
+      <div className="text-xs text-gray-400">{vessel.type}</div>
+    </div>
+  );
+}
+
+function NotesCell({ notes }: { notes?: string }) {
+  if (!notes) {
+    return <span className="text-gray-400 italic">No notes</span>;
+  }
+
+  return (
+    <div className="max-w-xs">
+      <div className="text-gray-900 line-clamp-2" title={notes}>
+        {notes}
+      </div>
+      {notes.length > 60 && (
+        <button
+          onClick={() => alert(`Notes:\n\n${notes}`)}
+          className="text-blue-600 hover:text-blue-800 text-xs mt-1"
+        >
+          Read more
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ReportedByCell({
+  profiles,
+}: {
+  profiles?: { name: string; email: string };
+}) {
+  return (
+    <div>
+      <div className="text-sm text-gray-900">
+        {profiles?.name || "Unknown User"}
+      </div>
+      {profiles?.email && (
+        <div className="text-xs text-gray-500">{profiles.email}</div>
+      )}
+    </div>
+  );
+}
+
+function EvidenceCell({
+  storagePath,
+  onClick,
+}: {
+  storagePath?: string;
+  onClick: (storagePath?: string) => void;
+}) {
+  if (!storagePath) {
+    return <span className="text-gray-400">No evidence</span>;
+  }
+
+  return (
+    <button
+      onClick={() => onClick(storagePath)}
+      className="text-blue-600 hover:text-blue-800 flex items-center gap-1 hover:underline"
+    >
+      📷 View Evidence
+    </button>
   );
 }
