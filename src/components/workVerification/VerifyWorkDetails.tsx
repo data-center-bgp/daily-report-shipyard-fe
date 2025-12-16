@@ -71,6 +71,7 @@ export default function VerifyWorkDetails() {
   const [verificationDate, setVerificationDate] = useState(
     new Date().toISOString().split("T")[0]
   );
+  const [verificationNotes, setVerificationNotes] = useState("");
   const [expandedSections, setExpandedSections] = useState({
     workDetails: true,
     workOrder: false,
@@ -241,10 +242,10 @@ export default function VerifyWorkDetails() {
       }
 
       const { error } = await supabase.from("work_verification").insert({
-        work_verification: true,
         verification_date: verificationDate,
         work_details_id: workDetails.id,
         user_id: userProfile.id,
+        verification_notes: verificationNotes.trim() || null,
       });
 
       if (error) throw error;
@@ -261,7 +262,13 @@ export default function VerifyWorkDetails() {
             verificationDate
           ).toLocaleDateString()}\nWork Order: ${
             workDetails.work_order?.shipyard_wo_number || "N/A"
-          }\nVessel: ${workDetails.work_order?.vessel?.name || "N/A"}`,
+          }\nVessel: ${workDetails.work_order?.vessel?.name || "N/A"}${
+            verificationNotes.trim()
+              ? `\nNotes: ${verificationNotes.substring(0, 100)}${
+                  verificationNotes.length > 100 ? "..." : ""
+                }`
+              : ""
+          }`,
         },
       });
     } catch (err) {
@@ -393,6 +400,9 @@ export default function VerifyWorkDetails() {
               <div className="flex items-center space-x-2 bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-700 px-3 py-1 rounded-full text-sm border border-emerald-200 shadow-sm">
                 <div className="w-2 h-2 bg-gradient-to-r from-emerald-400 to-green-500 rounded-full animate-pulse"></div>
                 <span className="font-medium">100% Complete</span>
+              </div>
+              <div className="flex items-center space-x-2 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 px-3 py-1 rounded-full text-sm border border-blue-200 shadow-sm">
+                <span className="font-medium">Ready for BASTP</span>
               </div>
             </div>
           </div>
@@ -611,6 +621,36 @@ export default function VerifyWorkDetails() {
                   <p className="text-xs text-slate-500 mt-1 font-medium">
                     Date when work was verified on-site
                   </p>
+                </div>
+
+                {/* Verification Notes - NEW FIELD */}
+                <div>
+                  <label
+                    htmlFor="verification-notes"
+                    className="block text-sm font-semibold text-slate-700 mb-2"
+                  >
+                    Verification Notes
+                    <span className="text-slate-400 font-normal ml-1">
+                      (Optional)
+                    </span>
+                  </label>
+                  <textarea
+                    id="verification-notes"
+                    value={verificationNotes}
+                    onChange={(e) => setVerificationNotes(e.target.value)}
+                    rows={4}
+                    maxLength={500}
+                    placeholder="Add any observations, issues found, or additional comments from site verification..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm shadow-sm bg-white resize-none"
+                  />
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-xs text-slate-500 font-medium">
+                      Additional comments or observations
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {verificationNotes.length}/500
+                    </p>
+                  </div>
                 </div>
 
                 {/* Action Buttons */}

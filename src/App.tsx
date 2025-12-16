@@ -25,6 +25,11 @@ import { AddWorkProgress, WorkProgressTable } from "./components/workProgress";
 import { InvoiceList, AddInvoice, EditInvoice } from "./components/invoice";
 import { ExportData } from "./components/exportData";
 
+// BASTP Components
+import BASTP from "./components/bastp/BASTP";
+import CreateBASTP from "./components/bastp/CreateBASTP";
+import BASTPDetails from "./components/bastp/BASTPDetails";
+
 function AppRoutes() {
   const { user, loading, signOut } = useAuth();
 
@@ -102,6 +107,12 @@ function AppRoutes() {
           path="/work-verification/verify/:workDetailsId"
           element={<VerifyWorkDetails />}
         />
+
+        {/* BASTP Routes */}
+        <Route path="/bastp" element={<BASTP />} />
+        <Route path="/bastp/create" element={<CreateBASTP />} />
+        <Route path="/bastp/edit/:bastpId" element={<CreateBASTP />} />
+        <Route path="/bastp/:bastpId" element={<BASTPDetails />} />
 
         {/* Invoice Routes */}
         <Route path="/invoices" element={<InvoiceList />} />
