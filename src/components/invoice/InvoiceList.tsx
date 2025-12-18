@@ -1,368 +1,206 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase, type WorkOrder } from "../../lib/supabase";
-
-interface InvoiceDetails {
-  id: number;
-  created_at: string;
-  updated_at: string;
-  deleted_at?: string;
-  wo_document_collection_date?: string;
-  invoice_number?: string;
-  faktur_number?: string;
-  due_date?: string;
-  delivery_date?: string;
-  collection_date?: string;
-  receiver_name?: string;
-  payment_price?: number;
-  payment_status: boolean;
-  payment_date?: string;
-  remarks?: string;
-  work_order_id: number;
-  user_id: number;
-  work_order?: {
-    id: number;
-    customer_wo_number?: string;
-    shipyard_wo_number?: string;
-    vessel?: {
-      id: number;
-      name: string;
-      type: string;
-      company: string;
-    };
-  };
-  invoice_work_details?: Array<{
-    id: number;
-    work_details_id: number;
-    work_details: {
-      id: number;
-      description: string;
-      location?: string;
-      pic?: string;
-    };
-  }>;
-}
-
-// Add interface for work progress items
-interface WorkProgressItem {
-  progress_percentage: number;
-  report_date: string;
-  evidence_url?: string;
-  storage_path?: string;
-  created_at: string;
-}
-
-// Add interface for work verification items
-interface WorkVerificationItem {
-  work_verification: boolean;
-  verification_date?: string;
-}
-
-// Add interface for raw work details from Supabase
-interface RawWorkDetail {
-  id: number;
-  description: string;
-  location?: string;
-  pic?: string;
-  planned_start_date?: string;
-  target_close_date?: string;
-  actual_start_date?: string;
-  actual_close_date?: string;
-  work_progress: WorkProgressItem[];
-  work_verification: WorkVerificationItem[];
-}
-
-interface WorkDetailsWithProgress {
-  id: number;
-  description: string;
-  location?: string;
-  pic?: string;
-  planned_start_date?: string;
-  target_close_date?: string;
-  actual_start_date?: string;
-  actual_close_date?: string;
-  current_progress: number;
-  latest_progress_date?: string;
-  progress_count: number;
-  verification_status: boolean;
-  verification_date?: string;
-  work_progress: WorkProgressItem[];
-  is_invoiced: boolean;
-}
-
-interface WorkOrderWithInvoices extends WorkOrder {
-  vessel: {
-    id: number;
-    name: string;
-    type: string;
-    company: string;
-  };
-  work_details: WorkDetailsWithProgress[];
-  overall_progress: number;
-  has_progress_data: boolean;
-  verification_status: boolean;
-  is_fully_completed: boolean;
-  completion_date?: string;
-  invoices: InvoiceDetails[]; // Changed from single invoice to array
-  has_invoices: boolean;
-  total_invoiced_amount: number;
-  total_work_details: number;
-  invoiced_work_details: number;
-  available_work_details: number;
-}
+import { supabase } from "../../lib/supabase";
+import type { Invoice } from "../../types/invoiceTypes";
+import type { BASTPWithDetails } from "../../types/bastp.types";
 
 export default function InvoiceList() {
   const navigate = useNavigate();
 
-  const [workOrders, setWorkOrders] = useState<WorkOrderWithInvoices[]>([]);
-  const [allInvoices, setAllInvoices] = useState<InvoiceDetails[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [readyBASTPs, setReadyBASTPs] = useState<BASTPWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Filter states
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "ready" | "invoiced" | "paid" | "unpaid"
-  >("all");
-  const [viewMode, setViewMode] = useState<"work-orders" | "invoices">(
+  const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "unpaid">(
+    "all"
+  );
+  const [viewMode, setViewMode] = useState<"invoices" | "ready-bastp">(
     "invoices"
   );
 
-  const fetchInvoiceData = useCallback(async () => {
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  // Document viewer states
+  const [viewingDocument, setViewingDocument] = useState(false);
+  const [documentUrl, setDocumentUrl] = useState<string | null>(null);
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [currentBastpNumber, setCurrentBastpNumber] = useState<string>("");
+  const [currentStoragePath, setCurrentStoragePath] = useState<string>("");
+
+  const fetchInvoices = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch all invoices with their work details
-      const { data: invoiceData, error: invoiceError } = await supabase
+      const { data, error: fetchError } = await supabase
         .from("invoice_details")
         .select(
           `
-          *,
-          invoice_work_details (
-            id,
-            work_details_id,
-            work_details (
-              id,
-              description,
-              location,
-              pic
-            )
-          ),
-          work_order (
-            *,
-            vessel (
-              id,
-              name,
-              type,
-              company
-            )
-          )
-        `
+    *,
+    bastp:bastp_id (
+      id,
+      number,
+      date,
+      delivery_date,
+      status,
+      storage_path,
+      bastp_upload_date,
+      vessel:vessel_id (
+        id,
+        name,
+        type,
+        company
+      )
+    ),
+    profiles:user_id (
+      id,
+      name,
+      email
+    ),
+    invoice_work_details (
+      id,
+      work_details_id,
+      payment_price,
+      work_details:work_details_id (
+        id,
+        description,
+        quantity,
+        uom
+      )
+    )
+  `
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
 
-      if (invoiceError) throw invoiceError;
+      if (fetchError) throw fetchError;
 
-      // Fetch all work orders with details (for partial invoicing tracking)
-      const { data: workOrderData, error: woError } = await supabase
-        .from("work_order")
-        .select(
-          `
-          *,
-          work_details (
-            *,
-            work_progress (
-              progress_percentage,
-              report_date,
-              evidence_url,
-              storage_path,
-              created_at
-            ),
-            work_verification (
-              work_verification,
-              verification_date
-            ),
-            invoice_work_details (
-              id,
-              invoice_details_id
-            )
-          ),
-          vessel (
-            id,
-            name,
-            type,
-            company
-          )
-        `
-        )
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-
-      if (woError) throw woError;
-
-      setAllInvoices(invoiceData || []);
-
-      // Process work orders with invoice information
-      const processedWorkOrders = (workOrderData || []).map((wo) => {
-        const workDetails: RawWorkDetail[] = wo.work_details || [];
-
-        // Get invoices for this work order
-        const workOrderInvoices = (invoiceData || []).filter(
-          (invoice: InvoiceDetails) => invoice.work_order_id === wo.id
-        );
-
-        // Get invoiced work detail IDs
-        const invoicedWorkDetailIds = new Set<number>();
-        workOrderInvoices.forEach((invoice: InvoiceDetails) => {
-          invoice.invoice_work_details?.forEach((iwd) => {
-            invoicedWorkDetailIds.add(iwd.work_details_id);
-          });
-        });
-
-        const workDetailsWithProgress: WorkDetailsWithProgress[] =
-          workDetails.map((detail: RawWorkDetail) => {
-            const progressRecords: WorkProgressItem[] =
-              detail.work_progress || [];
-            const verificationRecords: WorkVerificationItem[] =
-              detail.work_verification || [];
-
-            if (progressRecords.length === 0) {
-              return {
-                ...detail,
-                current_progress: 0,
-                latest_progress_date: undefined,
-                progress_count: 0,
-                verification_status: verificationRecords.some(
-                  (v: WorkVerificationItem) => v.work_verification === true
-                ),
-                verification_date: verificationRecords.find(
-                  (v: WorkVerificationItem) => v.work_verification === true
-                )?.verification_date,
-                is_invoiced: invoicedWorkDetailIds.has(detail.id),
-              };
-            }
-
-            const sortedProgress = progressRecords.sort(
-              (a: WorkProgressItem, b: WorkProgressItem) =>
-                new Date(b.report_date).getTime() -
-                new Date(a.report_date).getTime()
-            );
-
-            const latestProgress = sortedProgress[0]?.progress_percentage || 0;
-            const latestProgressDate = sortedProgress[0]?.report_date;
-
-            return {
-              ...detail,
-              current_progress: latestProgress,
-              latest_progress_date: latestProgressDate,
-              progress_count: progressRecords.length,
-              verification_status: verificationRecords.some(
-                (v: WorkVerificationItem) => v.work_verification === true
-              ),
-              verification_date: verificationRecords.find(
-                (v: WorkVerificationItem) => v.work_verification === true
-              )?.verification_date,
-              is_invoiced: invoicedWorkDetailIds.has(detail.id),
-            };
-          });
-
-        let overallProgress = 0;
-        let hasProgressData = false;
-
-        if (workDetailsWithProgress.length > 0) {
-          const totalProgress = workDetailsWithProgress.reduce(
-            (sum: number, detail: WorkDetailsWithProgress) =>
-              sum + (detail.current_progress || 0),
+      // Calculate total amount for each invoice
+      const invoicesWithTotal = (data || []).map((invoice) => ({
+        ...invoice,
+        total_amount:
+          invoice.invoice_work_details?.reduce(
+            (sum: number, item: any) => sum + (item.payment_price || 0),
             0
-          );
-          overallProgress = Math.round(
-            totalProgress / workDetailsWithProgress.length
-          );
-          hasProgressData = workDetailsWithProgress.some(
-            (detail: WorkDetailsWithProgress) => detail.current_progress > 0
-          );
-        }
+          ) || 0,
+      }));
 
-        const isFullyCompleted =
-          workDetailsWithProgress.length > 0 &&
-          workDetailsWithProgress.every(
-            (detail: WorkDetailsWithProgress) => detail.current_progress === 100
-          );
-
-        const verificationStatus = workDetailsWithProgress.some(
-          (detail: WorkDetailsWithProgress) => detail.verification_status
-        );
-
-        let completionDate: string | undefined;
-        if (isFullyCompleted) {
-          const completedDetails = workDetailsWithProgress.filter(
-            (d: WorkDetailsWithProgress) => d.current_progress === 100
-          );
-          const latestCompletionDates = completedDetails
-            .filter((d: WorkDetailsWithProgress) => d.latest_progress_date)
-            .map((d: WorkDetailsWithProgress) => d.latest_progress_date!)
-            .sort(
-              (a: string, b: string) =>
-                new Date(b).getTime() - new Date(a).getTime()
-            );
-
-          completionDate = latestCompletionDates[0];
-        }
-
-        // Calculate invoice statistics
-        const totalInvoicedAmount = workOrderInvoices.reduce(
-          (sum, invoice) => sum + (invoice.payment_price || 0),
-          0
-        );
-
-        const totalWorkDetails = workDetailsWithProgress.length;
-        const invoicedWorkDetails = workDetailsWithProgress.filter(
-          (detail) => detail.is_invoiced
-        ).length;
-        const availableWorkDetails = workDetailsWithProgress.filter(
-          (detail) => detail.current_progress === 100 && !detail.is_invoiced
-        ).length;
-
-        return {
-          ...wo,
-          work_details: workDetailsWithProgress,
-          overall_progress: overallProgress,
-          has_progress_data: hasProgressData,
-          verification_status: verificationStatus,
-          is_fully_completed: isFullyCompleted,
-          completion_date: completionDate,
-          invoices: workOrderInvoices,
-          has_invoices: workOrderInvoices.length > 0,
-          total_invoiced_amount: totalInvoicedAmount,
-          total_work_details: totalWorkDetails,
-          invoiced_work_details: invoicedWorkDetails,
-          available_work_details: availableWorkDetails,
-        };
-      });
-
-      // Filter to show work orders with some progress or invoices
-      const relevantWorkOrders = processedWorkOrders.filter(
-        (wo) => wo.has_progress_data || wo.has_invoices
-      );
-
-      setWorkOrders(relevantWorkOrders);
+      setInvoices(invoicesWithTotal);
     } catch (err) {
-      console.error("Error fetching invoice data:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to load invoice data"
-      );
+      console.error("Error fetching invoices:", err);
+      setError(err instanceof Error ? err.message : "Failed to load invoices");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchInvoiceData();
-  }, [fetchInvoiceData]);
+  const fetchReadyBASTPs = useCallback(async () => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from("bastp")
+        .select(
+          `
+    *,
+    vessel:vessel_id (
+      id,
+      name,
+      type,
+      company
+    ),
+    bastp_work_details (
+      id,
+      work_details:work_details_id (
+        id,
+        description,
+        quantity,
+        uom,
+        location:location_id (
+          id,
+          location
+        )
+      )
+    )
+  `
+        )
+        .eq("status", "READY_FOR_INVOICE")
+        .eq("is_invoiced", false)
+        .is("deleted_at", null)
+        .order("date", { ascending: false });
 
-  const handleCreateInvoice = (workOrderId: number) => {
-    navigate(`/invoices/add?work_order_id=${workOrderId}`);
-  };
+      if (fetchError) throw fetchError;
+      setReadyBASTPs(data || []);
+    } catch (err) {
+      console.error("Error fetching ready BASTPs:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchInvoices();
+    fetchReadyBASTPs();
+  }, [fetchInvoices, fetchReadyBASTPs]);
+
+  // Filtering
+  const filteredInvoices = useMemo(() => {
+    let filtered = invoices;
+
+    // Status filter
+    if (statusFilter === "paid") {
+      filtered = filtered.filter((inv) => inv.payment_status === true);
+    } else if (statusFilter === "unpaid") {
+      filtered = filtered.filter((inv) => inv.payment_status === false);
+    }
+
+    // Search filter
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (inv) =>
+          inv.invoice_number?.toLowerCase().includes(searchLower) ||
+          inv.faktur_number?.toLowerCase().includes(searchLower) ||
+          inv.bastp?.number?.toLowerCase().includes(searchLower) ||
+          inv.bastp?.vessel?.name?.toLowerCase().includes(searchLower) ||
+          inv.bastp?.vessel?.company?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return filtered;
+  }, [invoices, statusFilter, searchTerm]);
+
+  const filteredBASTPs = useMemo(() => {
+    if (!searchTerm) return readyBASTPs;
+
+    const searchLower = searchTerm.toLowerCase();
+    return readyBASTPs.filter(
+      (bastp) =>
+        bastp.number?.toLowerCase().includes(searchLower) ||
+        bastp.vessel?.name?.toLowerCase().includes(searchLower) ||
+        bastp.vessel?.company?.toLowerCase().includes(searchLower)
+    );
+  }, [readyBASTPs, searchTerm]);
+
+  // Pagination
+  const paginatedInvoices = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredInvoices.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredInvoices, currentPage]);
+
+  const totalPages = Math.ceil(filteredInvoices.length / itemsPerPage);
+
+  // Stats
+  const stats = useMemo(
+    () => ({
+      total: invoices.length,
+      paid: invoices.filter((inv) => inv.payment_status).length,
+      unpaid: invoices.filter((inv) => !inv.payment_status).length,
+      ready: readyBASTPs.length,
+    }),
+    [invoices, readyBASTPs]
+  );
 
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return "-";
@@ -373,161 +211,70 @@ export default function InvoiceList() {
     });
   };
 
-  const formatCurrency = (amount: number | null | undefined) => {
-    if (!amount) return "-";
+  const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("id-ID", {
       style: "currency",
       currency: "IDR",
+      minimumFractionDigits: 0,
     }).format(amount);
   };
 
-  const getDaysUntilDue = (dueDate: string | null | undefined) => {
-    if (!dueDate) return null;
-    const due = new Date(dueDate);
-    const today = new Date();
-    const diffTime = due.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-  };
-
-  const getDueDateStatus = (
-    dueDate: string | null | undefined,
-    isPaid: boolean
+  // View document with modal
+  const handleViewDocument = async (
+    storagePath: string | null,
+    bastpNumber: string
   ) => {
-    if (isPaid)
-      return { status: "paid", color: "text-green-600", text: "Paid" };
+    if (!storagePath) {
+      alert("No document available");
+      return;
+    }
 
-    const days = getDaysUntilDue(dueDate);
-    if (days === null)
-      return { status: "unknown", color: "text-gray-500", text: "No due date" };
+    try {
+      setViewingDocument(true);
+      setCurrentBastpNumber(bastpNumber);
+      setCurrentStoragePath(storagePath);
 
-    if (days < 0)
-      return {
-        status: "overdue",
-        color: "text-red-600",
-        text: `${Math.abs(days)} days overdue`,
-      };
-    if (days === 0)
-      return {
-        status: "due-today",
-        color: "text-orange-600",
-        text: "Due today",
-      };
-    if (days <= 7)
-      return {
-        status: "due-soon",
-        color: "text-yellow-600",
-        text: `Due in ${days} days`,
-      };
-    return {
-      status: "normal",
-      color: "text-gray-600",
-      text: `Due in ${days} days`,
-    };
+      // Generate fresh signed URL (valid for 5 minutes)
+      const { data, error } = await supabase.storage
+        .from("bastp")
+        .createSignedUrl(storagePath, 300);
+
+      if (error) throw error;
+
+      // Set document URL and open modal
+      setDocumentUrl(data.signedUrl);
+      setShowDocumentModal(true);
+    } catch (err) {
+      console.error("Error accessing document:", err);
+      alert("❌ Failed to view document. Please try again.");
+    } finally {
+      setViewingDocument(false);
+    }
   };
 
-  // Filtering logic for invoices view
-  const filteredInvoices = allInvoices.filter((invoice) => {
-    // Search filter
-    const matchesSearch =
-      searchTerm === "" ||
-      invoice.invoice_number
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      invoice.faktur_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice.receiver_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice.work_order?.customer_wo_number
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      invoice.work_order?.shipyard_wo_number
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      invoice.work_order?.vessel?.name
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      invoice.work_order?.vessel?.company
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase());
+  // Update handleCloseModal (around line 252):
+  const handleCloseModal = () => {
+    setShowDocumentModal(false);
+    setDocumentUrl(null);
+    setCurrentBastpNumber("");
+    setCurrentStoragePath("");
+  };
 
-    // Status filter
-    let matchesStatus = false;
-    switch (statusFilter) {
-      case "all":
-        matchesStatus = true;
-        break;
-      case "paid":
-        matchesStatus = invoice.payment_status === true;
-        break;
-      case "unpaid":
-        matchesStatus = invoice.payment_status === false;
-        break;
-      case "invoiced":
-        matchesStatus = true; // All items in this view are invoiced
-        break;
-      default:
-        matchesStatus = true;
-    }
-
-    return matchesSearch && matchesStatus;
-  });
-
-  // Filtering logic for work orders view
-  const filteredWorkOrders = workOrders.filter((wo) => {
-    // Search filter
-    const matchesSearch =
-      searchTerm === "" ||
-      wo.customer_wo_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      wo.shipyard_wo_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      wo.vessel?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      wo.vessel?.company?.toLowerCase().includes(searchTerm.toLowerCase());
-
-    // Status filter
-    let matchesStatus = false;
-    switch (statusFilter) {
-      case "all":
-        matchesStatus = true;
-        break;
-      case "ready":
-        matchesStatus = wo.available_work_details > 0;
-        break;
-      case "invoiced":
-        matchesStatus = wo.has_invoices;
-        break;
-      case "paid":
-        matchesStatus = wo.invoices.some(
-          (invoice) => invoice.payment_status === true
-        );
-        break;
-      case "unpaid":
-        matchesStatus = wo.invoices.some(
-          (invoice) => invoice.payment_status === false
-        );
-        break;
-      default:
-        matchesStatus = true;
-    }
-
-    return matchesSearch && matchesStatus;
-  });
-
-  // Calculate stats
-  const totalInvoices = allInvoices.length;
-  const paidInvoices = allInvoices.filter(
-    (invoice) => invoice.payment_status === true
-  ).length;
-  const unpaidInvoices = allInvoices.filter(
-    (invoice) => invoice.payment_status === false
-  ).length;
-  const readyForInvoicing = workOrders.filter(
-    (wo) => wo.available_work_details > 0
-  ).length;
+  // Detect file type
+  const getFileType = (storagePath: string | undefined) => {
+    if (!storagePath) return "unknown";
+    const extension = storagePath.split(".").pop()?.toLowerCase();
+    if (["pdf"].includes(extension || "")) return "pdf";
+    if (["jpg", "jpeg", "png", "gif"].includes(extension || "")) return "image";
+    return "unknown";
+  };
 
   if (loading) {
     return (
       <div className="p-8">
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <span className="ml-3 text-gray-600">Loading invoice data...</span>
+          <span className="ml-3 text-gray-600">Loading invoices...</span>
         </div>
       </div>
     );
@@ -542,503 +289,483 @@ export default function InvoiceList() {
             Invoice Management
           </h1>
           <p className="text-gray-600 mt-2">
-            Manage invoices and track financial status with partial invoicing
-            support
+            Manage invoices from verified BASTP
           </p>
-        </div>
-
-        <div className="flex gap-3">
-          <button
-            onClick={fetchInvoiceData}
-            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"
-            disabled={loading}
-          >
-            {loading ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-            ) : (
-              "🔄"
-            )}
-            Refresh
-          </button>
-          <button
-            onClick={() => navigate("/invoices/add")}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-          >
-            ➕ Create Invoice
-          </button>
         </div>
       </div>
 
-      {/* Error Message */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <span className="text-red-600 mr-2">⚠️</span>
-            <p className="text-red-700 font-medium">{error}</p>
-          </div>
+          <p className="text-red-700">{error}</p>
         </div>
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">
-                Total Invoices
-              </p>
-              <p className="text-2xl font-bold text-gray-900">
-                {totalInvoices}
-              </p>
-            </div>
-            <span className="text-blue-500 text-2xl">📄</span>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500">
+          <p className="text-xs font-medium text-gray-600">Total Invoices</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
         </div>
-
-        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Paid Invoices</p>
-              <p className="text-2xl font-bold text-gray-900">{paidInvoices}</p>
-            </div>
-            <span className="text-green-500 text-2xl">✅</span>
-          </div>
+        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
+          <p className="text-xs font-medium text-gray-600">Paid</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.paid}</p>
         </div>
-
-        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">
-                Unpaid Invoices
-              </p>
-              <p className="text-2xl font-bold text-gray-900">
-                {unpaidInvoices}
-              </p>
-            </div>
-            <span className="text-red-500 text-2xl">⏳</span>
-          </div>
+        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-red-500">
+          <p className="text-xs font-medium text-gray-600">Unpaid</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.unpaid}</p>
         </div>
-
-        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-orange-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">
-                Ready for Invoice
-              </p>
-              <p className="text-2xl font-bold text-gray-900">
-                {readyForInvoicing}
-              </p>
-            </div>
-            <span className="text-orange-500 text-2xl">🏁</span>
-          </div>
+        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-orange-500">
+          <p className="text-xs font-medium text-gray-600">Ready for Invoice</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.ready}</p>
         </div>
       </div>
 
-      {/* View Mode Toggle and Filters */}
+      {/* View Mode Tabs */}
       <div className="bg-white rounded-lg shadow">
-        <div className="p-6 border-b border-gray-200">
-          {/* View Mode Toggle */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex bg-gray-100 rounded-lg p-1">
-              <button
-                onClick={() => setViewMode("invoices")}
-                className={`px-4 py-2 rounded-md font-medium text-sm transition-colors ${
-                  viewMode === "invoices"
-                    ? "bg-white text-blue-700 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                📄 All Invoices ({totalInvoices})
-              </button>
-              <button
-                onClick={() => setViewMode("work-orders")}
-                className={`px-4 py-2 rounded-md font-medium text-sm transition-colors ${
-                  viewMode === "work-orders"
-                    ? "bg-white text-blue-700 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                🚢 By Work Order ({workOrders.length})
-              </button>
-            </div>
+        <div className="border-b border-gray-200">
+          <nav className="flex -mb-px">
+            <button
+              onClick={() => setViewMode("invoices")}
+              className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                viewMode === "invoices"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              💰 Invoices ({stats.total})
+            </button>
+            <button
+              onClick={() => setViewMode("ready-bastp")}
+              className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                viewMode === "ready-bastp"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              📋 Ready for Invoice ({stats.ready})
+            </button>
+          </nav>
+        </div>
 
-            <div className="relative">
+        {/* Filters */}
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
               <input
                 type="text"
-                placeholder="Search..."
+                placeholder="Search by invoice number, BASTP, vessel..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-              <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
             </div>
-          </div>
-
-          {/* Status Filters */}
-          <div className="flex space-x-4">
-            <button
-              onClick={() => setStatusFilter("all")}
-              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                statusFilter === "all"
-                  ? "bg-blue-100 text-blue-700"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              All
-            </button>
-            {viewMode === "work-orders" && (
-              <button
-                onClick={() => setStatusFilter("ready")}
-                className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                  statusFilter === "ready"
-                    ? "bg-green-100 text-green-700"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
+            {viewMode === "invoices" && (
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as any)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                Ready ({readyForInvoicing})
-              </button>
+                <option value="all">All Status</option>
+                <option value="paid">Paid</option>
+                <option value="unpaid">Unpaid</option>
+              </select>
             )}
-            <button
-              onClick={() => setStatusFilter("unpaid")}
-              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                statusFilter === "unpaid"
-                  ? "bg-red-100 text-red-700"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Unpaid ({unpaidInvoices})
-            </button>
-            <button
-              onClick={() => setStatusFilter("paid")}
-              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                statusFilter === "paid"
-                  ? "bg-green-100 text-green-700"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Paid ({paidInvoices})
-            </button>
           </div>
         </div>
 
         {/* Content */}
-        <div className="p-6">
-          {viewMode === "invoices" ? (
-            // Individual Invoices View
-            <div className="overflow-x-auto">
-              {filteredInvoices.length > 0 ? (
+        {viewMode === "invoices" ? (
+          <div className="overflow-x-auto">
+            {paginatedInvoices.length > 0 ? (
+              <>
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Invoice Details
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Invoice Info
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Work Order & Vessel
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        BASTP & Vessel
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Work Details Covered
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Document
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Payment Info
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Dates
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status & Due
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Amount
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Payment
+                      </th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
                         Actions
                       </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredInvoices.map((invoice) => (
+                    {paginatedInvoices.map((invoice) => (
                       <tr key={invoice.id} className="hover:bg-gray-50">
-                        {/* Invoice Details */}
-                        <td className="px-4 py-4">
-                          <div className="space-y-1">
-                            <div className="text-sm font-medium text-gray-900">
-                              {invoice.invoice_number || `INV-${invoice.id}`}
+                        <td className="px-6 py-4">
+                          <div className="text-sm">
+                            <div className="font-medium text-gray-900">
+                              {invoice.invoice_number || (
+                                <span className="text-gray-400">
+                                  No invoice #
+                                </span>
+                              )}
                             </div>
-                            <div className="text-sm text-gray-600">
-                              Faktur: {invoice.faktur_number || "-"}
-                            </div>
-                            {invoice.receiver_name && (
+                            {invoice.faktur_number && (
                               <div className="text-xs text-gray-500">
-                                To: {invoice.receiver_name}
+                                Faktur: {invoice.faktur_number}
                               </div>
                             )}
-                            <div className="text-xs text-gray-400">
-                              Created: {formatDate(invoice.created_at)}
+                            <div className="text-xs text-gray-500 mt-1">
+                              {invoice.invoice_work_details?.length || 0} work
+                              detail(s)
                             </div>
                           </div>
                         </td>
-
-                        {/* Work Order & Vessel */}
-                        <td className="px-4 py-4">
-                          <div className="space-y-1">
-                            <div className="text-sm font-medium text-gray-900">
-                              WO:{" "}
-                              {invoice.work_order?.customer_wo_number ||
-                                invoice.work_order?.shipyard_wo_number ||
-                                `WO-${invoice.work_order_id}`}
-                            </div>
-                            <div className="text-sm font-semibold text-blue-900">
-                              {invoice.work_order?.vessel?.name || "-"}
+                        <td className="px-6 py-4">
+                          <div className="text-sm">
+                            <div className="font-medium text-gray-900">
+                              {invoice.bastp?.number}
                             </div>
                             <div className="text-xs text-gray-500">
-                              {invoice.work_order?.vessel?.type} •{" "}
-                              {invoice.work_order?.vessel?.company}
+                              {invoice.bastp?.vessel?.name}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              {invoice.bastp?.vessel?.company}
                             </div>
                           </div>
                         </td>
-
-                        {/* Work Details Covered */}
-                        <td className="px-4 py-4">
-                          <div className="space-y-1">
-                            <div className="text-sm font-medium text-gray-900">
-                              {invoice.invoice_work_details?.length || 0} work
-                              details
-                            </div>
-                            {invoice.invoice_work_details &&
-                              invoice.invoice_work_details.length > 0 && (
-                                <div className="text-xs text-gray-600 space-y-1">
-                                  {invoice.invoice_work_details
-                                    .slice(0, 2)
-                                    .map((iwd) => (
-                                      <div
-                                        key={iwd.id}
-                                        className="truncate max-w-48"
-                                      >
-                                        • {iwd.work_details?.description}
-                                      </div>
-                                    ))}
-                                  {invoice.invoice_work_details.length > 2 && (
-                                    <div className="text-xs text-gray-500">
-                                      +{invoice.invoice_work_details.length - 2}{" "}
-                                      more...
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                        <td className="px-6 py-4">
+                          {invoice.bastp?.storage_path ? (
+                            <button
+                              onClick={() =>
+                                handleViewDocument(
+                                  invoice.bastp?.storage_path || null,
+                                  invoice.bastp?.number || ""
+                                )
+                              }
+                              disabled={viewingDocument}
+                              className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              📄 View BASTP
+                            </button>
+                          ) : (
+                            <span className="text-xs text-gray-400">
+                              No document
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm space-y-1">
+                            {invoice.due_date && (
+                              <div className="text-xs">
+                                <span className="text-gray-500">Due:</span>{" "}
+                                <span className="font-medium">
+                                  {formatDate(invoice.due_date)}
+                                </span>
+                              </div>
+                            )}
+                            {invoice.collection_date && (
+                              <div className="text-xs text-gray-500">
+                                Collected: {formatDate(invoice.collection_date)}
+                              </div>
+                            )}
                           </div>
                         </td>
-
-                        {/* Payment Info */}
-                        <td className="px-4 py-4">
-                          <div className="space-y-2">
-                            <div className="text-base font-bold text-gray-900">
-                              {formatCurrency(invoice.payment_price)}
-                            </div>
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-bold text-gray-900">
+                            {formatCurrency(invoice.total_amount || 0)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col gap-2">
                             <span
                               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                invoice.payment_status === true
+                                invoice.payment_status
                                   ? "bg-green-100 text-green-800"
                                   : "bg-red-100 text-red-800"
                               }`}
                             >
-                              {invoice.payment_status === true
-                                ? "✅ Paid"
-                                : "⏳ Unpaid"}
+                              {invoice.payment_status ? "✓ Paid" : "⏳ Unpaid"}
                             </span>
                             {invoice.payment_date && (
-                              <div className="text-xs text-green-600">
-                                💰 Paid: {formatDate(invoice.payment_date)}
+                              <div className="text-xs text-gray-500">
+                                {formatDate(invoice.payment_date)}
                               </div>
                             )}
                           </div>
                         </td>
-
-                        {/* Status & Due */}
-                        <td className="px-4 py-4">
-                          <div className="space-y-2">
-                            <div className="text-sm font-medium text-gray-900">
-                              Due: {formatDate(invoice.due_date)}
-                            </div>
-                            <div
-                              className={`text-xs font-medium ${
-                                getDueDateStatus(
-                                  invoice.due_date,
-                                  invoice.payment_status === true
-                                ).color
-                              }`}
-                            >
-                              {
-                                getDueDateStatus(
-                                  invoice.due_date,
-                                  invoice.payment_status === true
-                                ).text
-                              }
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Actions */}
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="flex flex-col gap-1">
-                            <button
-                              onClick={() =>
-                                navigate(`/invoices/${invoice.id}/edit`)
-                              }
-                              className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 transition-colors text-center"
-                              title="Edit Invoice"
-                            >
-                              ✏️ Edit
-                            </button>
-                            <button
-                              onClick={() =>
-                                navigate(
-                                  `/vessel/${invoice.work_order?.vessel?.id}/work-orders`
-                                )
-                              }
-                              className="text-gray-600 hover:text-gray-900 transition-colors text-xs text-center"
-                              title="View Work Details"
-                            >
-                              📋 View Work
-                            </button>
-                          </div>
+                        <td className="px-6 py-4 text-center">
+                          <button
+                            onClick={() => navigate(`/invoices/${invoice.id}`)}
+                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                          >
+                            View Details →
+                          </button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              ) : (
-                <div className="text-center py-12">
-                  <span className="text-gray-400 text-4xl mb-4 block">📄</span>
-                  <p className="text-gray-500 text-lg mb-2">
-                    No invoices found
-                  </p>
-                  <p className="text-gray-400 text-sm mb-4">
-                    {searchTerm || statusFilter !== "all"
-                      ? "Try adjusting your search or filters."
-                      : "Create your first invoice to get started."}
-                  </p>
-                  <button
-                    onClick={() => navigate("/invoices/add")}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    📄 Create Invoice
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            // Work Orders View (existing logic but updated)
-            <div className="space-y-4">
-              {filteredWorkOrders.length > 0 ? (
-                filteredWorkOrders.map((wo) => (
-                  <div key={wo.id} className="bg-gray-50 rounded-lg p-6">
-                    {/* Work Order Header */}
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-4 mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            WO:{" "}
-                            {wo.customer_wo_number ||
-                              wo.shipyard_wo_number ||
-                              `WO-${wo.id}`}
-                          </h3>
-                          <span className="text-sm font-medium text-blue-900">
-                            {wo.vessel?.name} ({wo.vessel?.company})
-                          </span>
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          Progress: {wo.overall_progress}% • Total Work Details:{" "}
-                          {wo.total_work_details} • Invoiced:{" "}
-                          {wo.invoiced_work_details} • Available:{" "}
-                          {wo.available_work_details}
-                        </div>
-                      </div>
 
-                      {wo.available_work_details > 0 && (
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                    <div className="text-sm text-gray-700">
+                      Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
+                      {Math.min(
+                        currentPage * itemsPerPage,
+                        filteredInvoices.length
+                      )}{" "}
+                      of {filteredInvoices.length} results
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() =>
+                          setCurrentPage((p) => Math.max(1, p - 1))
+                        }
+                        disabled={currentPage === 1}
+                        className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Previous
+                      </button>
+                      <span className="px-3 py-1 text-sm text-gray-700">
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <button
+                        onClick={() =>
+                          setCurrentPage((p) => Math.min(totalPages, p + 1))
+                        }
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-12">
+                <span className="text-gray-400 text-4xl mb-4 block">💰</span>
+                <p className="text-gray-500 text-lg mb-4">No invoices found</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Ready BASTP Table */
+          <div className="overflow-x-auto">
+            {filteredBASTPs.length > 0 ? (
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      BASTP Info
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Vessel
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Document
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Dates
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Work Details
+                    </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredBASTPs.map((bastp) => (
+                    <tr key={bastp.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <div className="text-sm">
+                          <div className="font-medium text-gray-900">
+                            {bastp.number}
+                          </div>
+                          <div className="text-xs text-green-600 font-medium mt-1">
+                            ✓ Ready for Invoice
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm">
+                          <div className="font-medium text-gray-900">
+                            {bastp.vessel?.name}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {bastp.vessel?.type}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {bastp.vessel?.company}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {bastp.storage_path ? (
+                          <button
+                            onClick={() =>
+                              handleViewDocument(
+                                bastp.storage_path || null,
+                                bastp.number
+                              )
+                            }
+                            disabled={viewingDocument}
+                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            📄 View BASTP
+                          </button>
+                        ) : (
+                          <span className="text-xs text-gray-400">
+                            No document
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm space-y-1">
+                          <div className="text-xs">
+                            <span className="text-gray-500">BASTP:</span>{" "}
+                            <span className="font-medium">
+                              {formatDate(bastp.date)}
+                            </span>
+                          </div>
+                          {bastp.delivery_date && (
+                            <div className="text-xs text-gray-500">
+                              Delivery: {formatDate(bastp.delivery_date)}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm font-medium text-gray-900">
+                          {bastp.bastp_work_details?.length || 0} work detail(s)
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
                         <button
-                          onClick={() => handleCreateInvoice(wo.id)}
-                          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                          onClick={() =>
+                            navigate(`/invoices/create/${bastp.id}`)
+                          }
+                          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
                         >
                           ➕ Create Invoice
                         </button>
-                      )}
-                    </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="text-center py-12">
+                <span className="text-gray-400 text-4xl mb-4 block">📋</span>
+                <p className="text-gray-500 text-lg mb-4">
+                  No BASTP ready for invoicing
+                </p>
+                <p className="text-gray-400 text-sm">
+                  BASTPs must be verified and have document uploaded
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
-                    {/* Invoices for this Work Order */}
-                    {wo.invoices.length > 0 ? (
-                      <div className="space-y-3">
-                        <h4 className="font-medium text-gray-900">
-                          Invoices ({wo.invoices.length}):
-                        </h4>
-                        <div className="grid gap-3">
-                          {wo.invoices.map((invoice) => (
-                            <div
-                              key={invoice.id}
-                              className="bg-white rounded-lg p-4 border"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-4 mb-2">
-                                    <span className="font-medium text-gray-900">
-                                      {invoice.invoice_number ||
-                                        `INV-${invoice.id}`}
-                                    </span>
-                                    <span className="text-lg font-bold text-gray-900">
-                                      {formatCurrency(invoice.payment_price)}
-                                    </span>
-                                    <span
-                                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                        invoice.payment_status === true
-                                          ? "bg-green-100 text-green-800"
-                                          : "bg-red-100 text-red-800"
-                                      }`}
-                                    >
-                                      {invoice.payment_status === true
-                                        ? "✅ Paid"
-                                        : "⏳ Unpaid"}
-                                    </span>
-                                  </div>
-                                  <div className="text-sm text-gray-600">
-                                    Created: {formatDate(invoice.created_at)} •
-                                    Due: {formatDate(invoice.due_date)} • Work
-                                    Details:{" "}
-                                    {invoice.invoice_work_details?.length || 0}
-                                  </div>
-                                </div>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() =>
-                                      navigate(`/invoices/${invoice.id}/edit`)
-                                    }
-                                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors"
-                                  >
-                                    ✏️ Edit
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-center py-6 text-gray-500">
-                        <p>No invoices created for this work order yet.</p>
-                      </div>
-                    )}
-                  </div>
-                ))
+      {/* Document Viewer Modal */}
+      {showDocumentModal && documentUrl && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] flex flex-col shadow-2xl">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">
+                📄 BASTP Document - {currentBastpNumber}
+              </h3>
+              <button
+                onClick={handleCloseModal}
+                className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-hidden bg-gray-100 p-4">
+              {getFileType(currentStoragePath) === "pdf" ? (
+                <div className="w-full h-[70vh] bg-white rounded-lg overflow-hidden">
+                  <iframe
+                    src={`${documentUrl}#view=FitH`}
+                    className="w-full h-full border-0"
+                    title="BASTP Document Viewer"
+                    style={{ minHeight: "70vh" }}
+                  />
+                </div>
+              ) : getFileType(currentStoragePath) === "image" ? (
+                <div className="flex items-center justify-center h-full">
+                  <img
+                    src={documentUrl}
+                    alt="BASTP Document"
+                    className="max-w-full max-h-full object-contain"
+                  />
+                </div>
               ) : (
-                <div className="text-center py-12">
-                  <span className="text-gray-400 text-4xl mb-4 block">🚢</span>
-                  <p className="text-gray-500 text-lg mb-2">
-                    No work orders found
-                  </p>
-                  <p className="text-gray-400 text-sm mb-4">
-                    {searchTerm || statusFilter !== "all"
-                      ? "Try adjusting your search or filters."
-                      : "Work orders with progress will appear here."}
-                  </p>
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <p className="text-gray-600 mb-4 text-lg">
+                      📄 Cannot preview this file type in browser
+                    </p>
+                    <a
+                      href={documentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 inline-block"
+                    >
+                      Open in New Tab
+                    </a>
+                  </div>
                 </div>
               )}
             </div>
-          )}
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-gray-200 flex justify-between items-center bg-white">
+              <p className="text-xs text-gray-500">
+                🔒 Secure signed URL - Expires in 5 minutes
+              </p>
+              <div className="flex gap-2">
+                <a
+                  href={documentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 inline-flex items-center gap-2 text-sm font-medium"
+                >
+                  🔗 New Tab
+                </a>
+                <a
+                  href={documentUrl}
+                  download={`BASTP-${currentBastpNumber}.pdf`}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 inline-flex items-center gap-2 text-sm font-medium"
+                >
+                  ⬇️ Download
+                </a>
+                <button
+                  onClick={handleCloseModal}
+                  className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm font-medium"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -22,7 +22,11 @@ import {
 import { AddWorkDetails, EditWorkDetails } from "./components/workDetails";
 import WorkOrderDetails from "./components/workDetails/WODetails";
 import { AddWorkProgress, WorkProgressTable } from "./components/workProgress";
-import { InvoiceList, AddInvoice, EditInvoice } from "./components/invoice";
+import {
+  InvoiceList,
+  InvoiceDetails,
+  ManageInvoice,
+} from "./components/invoice";
 import { ExportData } from "./components/exportData";
 
 // BASTP Components
@@ -116,8 +120,9 @@ function AppRoutes() {
 
         {/* Invoice Routes */}
         <Route path="/invoices" element={<InvoiceList />} />
-        <Route path="/invoices/add" element={<AddInvoice />} />
-        <Route path="/invoices/:id/edit" element={<EditInvoice />} />
+        <Route path="/invoices/create/:bastpId" element={<ManageInvoice />} />
+        <Route path="/invoices/edit/:invoiceId" element={<ManageInvoice />} />
+        <Route path="/invoices/:invoiceId" element={<InvoiceDetails />} />
 
         {/* Import/Export Routes */}
         <Route path="/export-data" element={<ExportData />} />

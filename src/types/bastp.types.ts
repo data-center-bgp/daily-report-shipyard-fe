@@ -50,6 +50,10 @@ export interface BASTPWithDetails extends BASTP {
           id: number;
           location: string;
         };
+        work_scope?: {
+          id: number;
+          work_scope: string;
+        };
         work_order?: {
           id: number;
           shipyard_wo_number: string;
