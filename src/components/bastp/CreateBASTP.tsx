@@ -397,11 +397,12 @@ export default function CreateBASTP() {
 
         if (updateError) throw updateError;
 
-        // Delete existing work details relations
+        // ✅ FIXED: Delete only active records (non-soft-deleted)
         const { error: deleteError } = await supabase
           .from("bastp_work_details")
           .delete()
-          .eq("bastp_id", bastpId);
+          .eq("bastp_id", bastpId)
+          .is("deleted_at", null); // ✅ Critical fix: only delete non-deleted records
 
         if (deleteError) throw deleteError;
 
