@@ -14,7 +14,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
   const [user, setUser] = useState<any>(null);
   const location = useLocation();
   const navigate = useNavigate();
-  const { canAccess } = useAuth(); // Add this hook
+  const { canAccess } = useAuth();
 
   useEffect(() => {
     // Get current user
@@ -48,7 +48,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       href: "/",
       icon: "📊",
       current: location.pathname === "/",
-      show: true, // Always show dashboard
+      show: true,
     },
     {
       name: "Work Orders",
@@ -100,7 +100,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       current:
         location.pathname === "/bastp" ||
         location.pathname.startsWith("/bastp/"),
-      show: canAccess("workOrders"), // PPIC and Manager can access
+      show: canAccess("workOrders") || canAccess("invoices"), // PPIC, Finance, and Manager can access
     },
     {
       name: "Invoices",
