@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import type { Invoice } from "../../types/invoiceTypes";
+import { useReactToPrint } from "react-to-print";
+import InvoicePrint from "./InvoicePrint";
 
 export default function InvoiceDetails() {
   const { invoiceId } = useParams<{ invoiceId: string }>();
@@ -15,6 +17,9 @@ export default function InvoiceDetails() {
   const [viewingDocument, setViewingDocument] = useState(false);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
+
+  const printRef = useRef<HTMLDivElement>(null);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   useEffect(() => {
     if (invoiceId) {
@@ -121,6 +126,27 @@ export default function InvoiceDetails() {
     }).format(amount);
   };
 
+  // Print handler
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: `Invoice-${invoice?.invoice_number || invoiceId}`,
+    pageStyle: `
+    @page {
+      size: A4;
+      margin: 0;
+    }
+    @media print {
+      body {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  `,
+  });
+
   // View document with modal
   const handleViewDocument = async () => {
     if (!invoice?.bastp?.storage_path) {
@@ -214,6 +240,12 @@ export default function InvoiceDetails() {
               📄 View BASTP
             </button>
           )}
+          <button
+            onClick={() => setShowPrintPreview(true)}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            🖨️ Print Invoice
+          </button>
           <button
             onClick={() => navigate(`/invoices/edit/${invoice.id}`)}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -610,6 +642,39 @@ export default function InvoiceDetails() {
           </div>
         </div>
       </div>
+
+      {/* Print Preview Modal */}
+      {showPrintPreview && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-5xl w-full my-8 shadow-2xl">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 sticky top-0 bg-white rounded-t-lg no-print z-10">
+              <h3 className="text-lg font-semibold text-gray-900">
+                📄 Invoice Print Preview
+              </h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={handlePrint}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  🖨️ Print
+                </button>
+                <button
+                  onClick={() => setShowPrintPreview(false)}
+                  className="text-gray-500 hover:text-gray-700 text-2xl font-bold px-2"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Content */}
+            <div className="overflow-y-auto max-h-[80vh]">
+              <InvoicePrint ref={printRef} invoice={invoice} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Document Viewer Modal */}
       {showDocumentModal && documentUrl && (
