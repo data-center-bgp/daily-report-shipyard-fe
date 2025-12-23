@@ -7,6 +7,9 @@ import type { Invoice } from "../../types/invoiceTypes";
 
 interface WorkDetailPrice {
   work_details_id: number;
+  unit_price: number;
+  quantity: number;
+  uom: string;
   payment_price: number;
 }
 
@@ -117,6 +120,7 @@ export default function ManageInvoice() {
             id,
             work_details_id,
             payment_price,
+            unit_price,
             work_details:work_details_id (
               id,
               description,
@@ -165,12 +169,26 @@ export default function ManageInvoice() {
 
       const prices: WorkDetailPrice[] = allWorkDetailIds.map(
         (workDetailId: number) => {
+          // Find existing price from invoice_work_details
           const existingPrice = data.invoice_work_details?.find(
             (item: any) => item.work_details_id === workDetailId
           );
+
+          // Get work details info
+          const workDetail = data.bastp?.bastp_work_details?.find(
+            (bwd: any) => bwd.work_details_id === workDetailId
+          )?.work_details;
+
+          const quantity = workDetail?.quantity || 0;
+          const uom = workDetail?.uom || "";
+          const unit_price = existingPrice?.unit_price || 0;
+
           return {
             work_details_id: workDetailId,
-            payment_price: existingPrice?.payment_price || 0,
+            unit_price: unit_price,
+            quantity: quantity,
+            uom: uom,
+            payment_price: unit_price * quantity,
           };
         }
       );
@@ -257,9 +275,12 @@ export default function ManageInvoice() {
       // Initialize work detail prices with 0
       const initialPrices: WorkDetailPrice[] =
         data.bastp_work_details
-          ?.filter((item: { work_details_id: number }) => item.work_details_id)
-          ?.map((item: { work_details_id: number }) => ({
+          ?.filter((item: any) => item.work_details_id)
+          ?.map((item: any) => ({
             work_details_id: item.work_details_id,
+            unit_price: 0,
+            quantity: item.work_details?.quantity || 0,
+            uom: item.work_details?.uom || "",
             payment_price: 0,
           })) || [];
       setWorkDetailPrices(initialPrices);
@@ -278,29 +299,21 @@ export default function ManageInvoice() {
     }
   };
 
-  const handlePriceChange = (work_details_id: number, value: string) => {
-    // Remove all non-numeric characters using regex
+  const handleUnitPriceChange = (work_details_id: number, value: string) => {
+    // Remove all non-numeric characters
     const numericValue = value.replace(/\D/g, "");
 
     // If empty string, set to 0
-    if (numericValue === "") {
-      setWorkDetailPrices((prev) =>
-        prev.map((item) =>
-          item.work_details_id === work_details_id
-            ? { ...item, payment_price: 0 }
-            : item
-        )
-      );
-      return;
-    }
-
-    // Convert to number
-    const numPrice = parseInt(numericValue, 10);
+    const unit_price = numericValue === "" ? 0 : parseInt(numericValue, 10);
 
     setWorkDetailPrices((prev) =>
       prev.map((item) =>
         item.work_details_id === work_details_id
-          ? { ...item, payment_price: numPrice }
+          ? {
+              ...item,
+              unit_price: unit_price,
+              payment_price: unit_price * item.quantity, // Auto-calculate
+            }
           : item
       )
     );
@@ -323,10 +336,10 @@ export default function ManageInvoice() {
       return;
     }
 
-    // Validate that at least one work detail has a price
-    const hasPrice = workDetailPrices.some((item) => item.payment_price > 0);
+    // Validate that at least one work detail has a unit price
+    const hasPrice = workDetailPrices.some((item) => item.unit_price > 0);
     if (!hasPrice) {
-      setError("Please set at least one work detail price");
+      setError("Please set at least one work detail unit price");
       return;
     }
 
@@ -364,20 +377,23 @@ export default function ManageInvoice() {
 
         if (deleteError) throw deleteError;
 
-        // Insert updated work details (only with price > 0)
+        // ✅ Fixed: Insert with unit_price and payment_price
         const workDetailsToInsert = workDetailPrices
-          .filter((item) => item.payment_price > 0)
+          .filter((item) => item.unit_price > 0)
           .map((item) => ({
             invoice_details_id: Number(invoiceId),
             work_details_id: item.work_details_id,
+            unit_price: item.unit_price,
             payment_price: item.payment_price,
           }));
 
-        const { error: insertError } = await supabase
-          .from("invoice_work_details")
-          .insert(workDetailsToInsert);
+        if (workDetailsToInsert.length > 0) {
+          const { error: insertError } = await supabase
+            .from("invoice_work_details")
+            .insert(workDetailsToInsert);
 
-        if (insertError) throw insertError;
+          if (insertError) throw insertError;
+        }
 
         setSuccess("✅ Invoice updated successfully!");
         setTimeout(() => navigate(`/invoices/${invoiceId}`), 1500);
@@ -405,20 +421,23 @@ export default function ManageInvoice() {
 
         if (invoiceError) throw invoiceError;
 
-        // Create invoice_work_details records (only for items with price > 0)
+        // ✅ Fixed: Insert with unit_price and payment_price
         const workDetailsToInsert = workDetailPrices
-          .filter((item) => item.payment_price > 0)
+          .filter((item) => item.unit_price > 0)
           .map((item) => ({
             invoice_details_id: invoiceData.id,
             work_details_id: item.work_details_id,
+            unit_price: item.unit_price,
             payment_price: item.payment_price,
           }));
 
-        const { error: detailsError } = await supabase
-          .from("invoice_work_details")
-          .insert(workDetailsToInsert);
+        if (workDetailsToInsert.length > 0) {
+          const { error: detailsError } = await supabase
+            .from("invoice_work_details")
+            .insert(workDetailsToInsert);
 
-        if (detailsError) throw detailsError;
+          if (detailsError) throw detailsError;
+        }
 
         // Update BASTP status to INVOICED
         const { error: bastpUpdateError } = await supabase
@@ -866,15 +885,16 @@ export default function ManageInvoice() {
         </div>
 
         {/* Work Details Pricing Section */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            Work Details Pricing
-          </h2>
-          <p className="text-sm text-gray-600 mb-4">
-            Set the payment price for each work detail. You can leave items at 0
-            if they're not part of this invoice.
-          </p>
-
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-900">
+              💰 Work Details Pricing
+            </h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Enter unit price for each work detail. Payment price will be
+              calculated automatically (Unit Price × Quantity)
+            </p>
+          </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -885,10 +905,16 @@ export default function ManageInvoice() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Location
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
                     Quantity
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                    UOM
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Unit Price (IDR)
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                     Payment Price (IDR)
                   </th>
                 </tr>
@@ -911,6 +937,15 @@ export default function ManageInvoice() {
                             <div className="text-xs text-gray-500 mt-1">
                               {item.work_details?.work_scope?.work_scope || "-"}
                             </div>
+                            {item.work_details?.work_order && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                WO:{" "}
+                                {
+                                  item.work_details.work_order
+                                    .shipyard_wo_number
+                                }
+                              </div>
+                            )}
                           </div>
                         </td>
                         <td className="px-4 py-4">
@@ -918,10 +953,14 @@ export default function ManageInvoice() {
                             {item.work_details?.location?.location || "-"}
                           </div>
                         </td>
-                        <td className="px-4 py-4">
-                          <div className="text-sm text-gray-900">
-                            {item.work_details?.quantity}{" "}
-                            {item.work_details?.uom}
+                        <td className="px-4 py-4 text-center">
+                          <div className="text-sm font-medium text-gray-900">
+                            {item.work_details?.quantity}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <div className="text-sm text-gray-600">
+                            {item.work_details?.uom || "-"}
                           </div>
                         </td>
                         <td className="px-4 py-4">
@@ -929,23 +968,25 @@ export default function ManageInvoice() {
                             type="text"
                             inputMode="numeric"
                             pattern="[0-9]*"
-                            value={priceItem?.payment_price || ""}
+                            value={
+                              priceItem?.unit_price === 0
+                                ? ""
+                                : priceItem?.unit_price.toString()
+                            }
                             onChange={(e) =>
-                              handlePriceChange(
+                              handleUnitPriceChange(
                                 item.work_details_id,
                                 e.target.value
                               )
                             }
                             onFocus={(e) => {
-                              // Select all text on focus for easier editing
                               e.target.select();
                             }}
                             onPaste={(e) => {
-                              // Clean pasted content - only allow numbers
                               e.preventDefault();
                               const pasteData = e.clipboardData.getData("text");
                               const numericValue = pasteData.replace(/\D/g, "");
-                              handlePriceChange(
+                              handleUnitPriceChange(
                                 item.work_details_id,
                                 numericValue
                               );
@@ -954,13 +995,24 @@ export default function ManageInvoice() {
                             placeholder="0"
                           />
                         </td>
+                        <td className="px-4 py-4 text-right">
+                          <div className="text-sm font-bold text-blue-900">
+                            {formatCurrency(priceItem?.payment_price || 0)}
+                          </div>
+                          {priceItem && priceItem.unit_price > 0 && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              {formatCurrency(priceItem.unit_price)} ×{" "}
+                              {priceItem.quantity}
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     );
                   })
                 ) : (
                   <tr>
                     <td
-                      colSpan={4}
+                      colSpan={6}
                       className="px-4 py-8 text-center text-gray-500"
                     >
                       No work details available
@@ -971,12 +1023,12 @@ export default function ManageInvoice() {
               <tfoot className="bg-gray-50">
                 <tr>
                   <td
-                    colSpan={3}
+                    colSpan={5}
                     className="px-4 py-4 text-right font-semibold text-gray-900"
                   >
                     Total Amount:
                   </td>
-                  <td className="px-4 py-4">
+                  <td className="px-4 py-4 text-right">
                     <div className="text-xl font-bold text-blue-900">
                       {formatCurrency(calculateTotalAmount())}
                     </div>

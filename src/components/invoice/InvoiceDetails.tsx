@@ -60,6 +60,7 @@ export default function InvoiceDetails() {
           invoice_work_details (
             id,
             work_details_id,
+            unit_price,
             payment_price,
             work_details:work_details_id (
               id,
@@ -381,11 +382,17 @@ export default function InvoiceDetails() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                       Schedule
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
                       Quantity
                     </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                      UOM
+                    </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Price
+                      Unit Price
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Amount
                     </th>
                   </tr>
                 </thead>
@@ -495,17 +502,28 @@ export default function InvoiceDetails() {
                             )}
                         </div>
                       </td>
-                      <td className="px-4 py-4">
+                      <td className="px-4 py-4 text-center">
                         <div className="text-sm font-medium text-gray-900">
-                          {item.work_details?.quantity}{" "}
-                          <span className="text-gray-600">
-                            {item.work_details?.uom}
-                          </span>
+                          {item.work_details?.quantity}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <div className="text-sm text-gray-600">
+                          {item.work_details?.uom || "-"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-right">
+                        <div className="text-sm text-gray-900">
+                          {formatCurrency(item.unit_price)}
                         </div>
                       </td>
                       <td className="px-4 py-4 text-right">
                         <div className="text-sm font-bold text-blue-900">
                           {formatCurrency(item.payment_price)}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {formatCurrency(item.unit_price)} ×{" "}
+                          {item.work_details?.quantity}
                         </div>
                       </td>
                     </tr>
@@ -514,7 +532,7 @@ export default function InvoiceDetails() {
                 <tfoot className="bg-gray-50">
                   <tr>
                     <td
-                      colSpan={4}
+                      colSpan={6}
                       className="px-4 py-4 text-right font-semibold text-gray-900"
                     >
                       Total Amount:
