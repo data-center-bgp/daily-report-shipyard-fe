@@ -1,3 +1,5 @@
+import type { GeneralService } from "./generalService.types";
+
 export type BASTPStatus =
   | "DRAFT"
   | "VERIFIED"
@@ -23,7 +25,8 @@ export interface BASTP {
   invoiced_date?: string | null;
   total_work_details: number;
   vessel_id: number;
-  user_id: number; // PPIC who created
+  user_id: number;
+  general_services?: GeneralService[];
 }
 
 export interface BASTPWorkDetails {

@@ -2,6 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase, type Vessel, type WorkDetails } from "../../lib/supabase";
 import type { BASTP } from "../../types/bastp.types";
+import type {
+  GeneralServiceType,
+  GeneralServiceInput,
+} from "../../types/generalService.types";
 
 interface WorkDetailsWithProgress extends WorkDetails {
   current_progress?: number;
@@ -50,6 +54,13 @@ export default function CreateBASTP() {
   const [searchTerm, setSearchTerm] = useState("");
   const [uploadingDocument, setUploadingDocument] = useState(false);
 
+  // General services states
+  const [serviceTypes, setServiceTypes] = useState<GeneralServiceType[]>([]);
+  const [selectedServices, setSelectedServices] = useState<
+    GeneralServiceInput[]
+  >([]);
+  const [loadingServiceTypes, setLoadingServiceTypes] = useState(false);
+
   // Fetch vessels
   const fetchVessels = useCallback(async () => {
     try {
@@ -64,6 +75,25 @@ export default function CreateBASTP() {
     } catch (err) {
       console.error("Error fetching vessels:", err);
       setError("Failed to load vessels");
+    }
+  }, []);
+
+  // Fetch service types
+  const fetchServiceTypes = useCallback(async () => {
+    try {
+      setLoadingServiceTypes(true);
+      const { data, error } = await supabase
+        .from("general_service_types")
+        .select("*")
+        .order("display_order", { ascending: true });
+
+      if (error) throw error;
+      setServiceTypes(data || []);
+    } catch (err) {
+      console.error("Error fetching service types:", err);
+      setError("Failed to load service types");
+    } finally {
+      setLoadingServiceTypes(false);
     }
   }, []);
 
@@ -97,6 +127,20 @@ export default function CreateBASTP() {
                 )
               )
             )
+          ),
+          general_services (
+            id,
+            service_type_id,
+            total_days,
+            unit_price,
+            payment_price,
+            remarks,
+            service_type:service_type_id (
+              id,
+              service_name,
+              service_code,
+              display_order
+            )
           )
         `
         )
@@ -118,6 +162,15 @@ export default function CreateBASTP() {
       const workDetailsFromBastp =
         data.bastp_work_details?.map((bwd: any) => bwd.work_details) || [];
       setSelectedWorkDetails(workDetailsFromBastp);
+
+      // Set selected general services
+      const servicesFromBastp =
+        data.general_services?.map((gs: any) => ({
+          service_type_id: gs.service_type_id,
+          total_days: gs.total_days,
+          remarks: gs.remarks || "",
+        })) || [];
+      setSelectedServices(servicesFromBastp);
     } catch (err) {
       console.error("Error fetching BASTP:", err);
       setError("Failed to load BASTP data");
@@ -241,24 +294,80 @@ export default function CreateBASTP() {
     }
   }, [formData.vessel_id, bastpId, selectedWorkDetails]);
 
+  // Load initial data
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      await fetchVessels();
+
+      // Load vessels and service types in parallel
+      await Promise.all([fetchVessels(), fetchServiceTypes()]);
+
+      // Then load BASTP data (which depends on service types being loaded)
       if (isEditMode) {
         await fetchExistingBastp();
       }
+
       setLoading(false);
     };
-    loadData();
-  }, [fetchVessels, fetchExistingBastp, isEditMode]);
 
+    loadData();
+  }, [fetchVessels, fetchServiceTypes, fetchExistingBastp, isEditMode]);
+
+  // Fetch work details when vessel changes
   useEffect(() => {
     if (formData.vessel_id) {
       fetchAvailableWorkDetails();
     }
   }, [fetchAvailableWorkDetails]);
 
+  // Handle service selection toggle
+  const handleToggleService = (serviceTypeId: number) => {
+    setSelectedServices((prev) => {
+      const exists = prev.find((s) => s.service_type_id === serviceTypeId);
+      if (exists) {
+        return prev.filter((s) => s.service_type_id !== serviceTypeId);
+      } else {
+        return [
+          ...prev,
+          {
+            service_type_id: serviceTypeId,
+            total_days: 0,
+            remarks: "",
+          },
+        ];
+      }
+    });
+  };
+
+  // Handle service days change
+  const handleServiceDaysChange = (serviceTypeId: number, days: string) => {
+    const numericValue = days.replace(/\D/g, "");
+    const totalDays = numericValue === "" ? 0 : parseInt(numericValue, 10);
+
+    setSelectedServices((prev) =>
+      prev.map((service) =>
+        service.service_type_id === serviceTypeId
+          ? { ...service, total_days: totalDays }
+          : service
+      )
+    );
+  };
+
+  // Handle service remarks change
+  const handleServiceRemarksChange = (
+    serviceTypeId: number,
+    remarks: string
+  ) => {
+    setSelectedServices((prev) =>
+      prev.map((service) =>
+        service.service_type_id === serviceTypeId
+          ? { ...service, remarks }
+          : service
+      )
+    );
+  };
+
+  // Handle add work detail
   const handleAddWorkDetail = (workDetail: WorkDetailsWithProgress) => {
     setSelectedWorkDetails((prev) => [...prev, workDetail]);
     setAvailableWorkDetails((prev) =>
@@ -266,6 +375,7 @@ export default function CreateBASTP() {
     );
   };
 
+  // Handle remove work detail
   const handleRemoveWorkDetail = (workDetail: WorkDetailsWithProgress) => {
     setSelectedWorkDetails((prev) =>
       prev.filter((wd) => wd.id !== workDetail.id)
@@ -273,6 +383,7 @@ export default function CreateBASTP() {
     setAvailableWorkDetails((prev) => [...prev, workDetail]);
   };
 
+  // Handle document upload
   const handleDocumentUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -319,11 +430,11 @@ export default function CreateBASTP() {
 
       if (uploadError) throw uploadError;
 
-      // Update BASTP record - only save storage_path, not URL
+      // Update BASTP record
       const { error: updateError } = await supabase
         .from("bastp")
         .update({
-          storage_path: filePath, // ✅ Only save path
+          storage_path: filePath,
           bastp_upload_date: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -349,6 +460,7 @@ export default function CreateBASTP() {
     }
   };
 
+  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -358,7 +470,13 @@ export default function CreateBASTP() {
     }
 
     if (selectedWorkDetails.length === 0) {
-      setError("Please select at least one work detail");
+      setError("Please select at least one completed work detail");
+      return;
+    }
+
+    // Only validate services in CREATE mode, not in EDIT mode (for backward compatibility)
+    if (!isEditMode && selectedServices.length === 0) {
+      setError("Please select at least one general service");
       return;
     }
 
@@ -366,23 +484,21 @@ export default function CreateBASTP() {
       setSubmitting(true);
       setError(null);
 
-      // Get current user
       const {
         data: { user },
-        error: userError,
       } = await supabase.auth.getUser();
-      if (userError || !user) throw new Error("User not authenticated");
+      if (!user) throw new Error("User not authenticated");
 
-      const { data: userProfile, error: profileError } = await supabase
+      const { data: profile } = await supabase
         .from("profiles")
         .select("id")
         .eq("auth_user_id", user.id)
         .single();
 
-      if (profileError) throw profileError;
+      if (!profile) throw new Error("User profile not found");
 
       if (isEditMode && bastpId) {
-        // Update existing BASTP
+        // ========== UPDATE MODE ==========
         const { error: updateError } = await supabase
           .from("bastp")
           .update({
@@ -390,38 +506,57 @@ export default function CreateBASTP() {
             date: formData.date,
             delivery_date: formData.delivery_date,
             vessel_id: formData.vessel_id,
-            total_work_details: selectedWorkDetails.length,
             updated_at: new Date().toISOString(),
           })
           .eq("id", bastpId);
 
         if (updateError) throw updateError;
 
-        // ✅ FIXED: Delete only active records (non-soft-deleted)
-        const { error: deleteError } = await supabase
+        // Delete existing work details
+        await supabase
           .from("bastp_work_details")
           .delete()
-          .eq("bastp_id", bastpId)
-          .is("deleted_at", null); // ✅ Critical fix: only delete non-deleted records
+          .eq("bastp_id", bastpId);
 
-        if (deleteError) throw deleteError;
-
-        // Insert new work details relations
-        const bastpWorkDetailsData = selectedWorkDetails.map((wd) => ({
-          bastp_id: Number(bastpId),
+        // Insert updated work details
+        const workDetailsToInsert = selectedWorkDetails.map((wd) => ({
+          bastp_id: parseInt(bastpId),
           work_details_id: wd.id,
         }));
 
-        const { error: insertError } = await supabase
+        const { error: workDetailsError } = await supabase
           .from("bastp_work_details")
-          .insert(bastpWorkDetailsData);
+          .insert(workDetailsToInsert);
 
-        if (insertError) throw insertError;
+        if (workDetailsError) throw workDetailsError;
 
-        alert("✅ BASTP updated successfully!");
+        // Delete existing general services
+        await supabase
+          .from("general_services")
+          .delete()
+          .eq("bastp_id", bastpId);
+
+        // Only insert general services if there are any selected
+        if (selectedServices.length > 0) {
+          const servicesToInsert = selectedServices.map((service) => ({
+            bastp_id: parseInt(bastpId),
+            service_type_id: service.service_type_id,
+            total_days: service.total_days,
+            unit_price: 0,
+            payment_price: 0,
+            remarks: service.remarks || null,
+          }));
+
+          const { error: servicesError } = await supabase
+            .from("general_services")
+            .insert(servicesToInsert);
+
+          if (servicesError) throw servicesError;
+        }
+
         navigate(`/bastp/${bastpId}`);
       } else {
-        // Create new BASTP
+        // ========== CREATE MODE ==========
         const { data: bastpData, error: bastpError } = await supabase
           .from("bastp")
           .insert({
@@ -429,33 +564,47 @@ export default function CreateBASTP() {
             date: formData.date,
             delivery_date: formData.delivery_date,
             vessel_id: formData.vessel_id,
-            user_id: userProfile.id,
+            user_id: profile.id,
             status: "DRAFT",
-            total_work_details: selectedWorkDetails.length,
             is_invoiced: false,
+            total_work_details: selectedWorkDetails.length,
           })
           .select()
           .single();
 
         if (bastpError) throw bastpError;
 
-        // Insert work details relations
-        const bastpWorkDetailsData = selectedWorkDetails.map((wd) => ({
+        // Insert work details
+        const workDetailsToInsert = selectedWorkDetails.map((wd) => ({
           bastp_id: bastpData.id,
           work_details_id: wd.id,
         }));
 
-        const { error: insertError } = await supabase
+        const { error: workDetailsError } = await supabase
           .from("bastp_work_details")
-          .insert(bastpWorkDetailsData);
+          .insert(workDetailsToInsert);
 
-        if (insertError) throw insertError;
+        if (workDetailsError) throw workDetailsError;
 
-        alert(
-          "✅ BASTP created successfully! You can now upload the document."
-        );
-        // Navigate to edit page to allow document upload
-        navigate(`/bastp/edit/${bastpData.id}`);
+        // Insert general services (required in create mode)
+        if (selectedServices.length > 0) {
+          const servicesToInsert = selectedServices.map((service) => ({
+            bastp_id: bastpData.id,
+            service_type_id: service.service_type_id,
+            total_days: service.total_days,
+            unit_price: 0,
+            payment_price: 0,
+            remarks: service.remarks || null,
+          }));
+
+          const { error: servicesError } = await supabase
+            .from("general_services")
+            .insert(servicesToInsert);
+
+          if (servicesError) throw servicesError;
+        }
+
+        navigate(`/bastp/${bastpData.id}`);
       }
     } catch (err) {
       console.error("Error saving BASTP:", err);
@@ -465,6 +614,7 @@ export default function CreateBASTP() {
     }
   };
 
+  // Filter available work details
   const filteredAvailableWork = availableWorkDetails.filter((wd) => {
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
@@ -600,6 +750,148 @@ export default function CreateBASTP() {
               />
             </div>
           </div>
+        </div>
+
+        {/* General Services Section */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">
+              🛠️ General Services
+            </h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Select the general services used for this vessel and specify the
+              number of days
+            </p>
+          </div>
+
+          {loadingServiceTypes ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="text-gray-600 mt-2">Loading services...</p>
+            </div>
+          ) : serviceTypes.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-gray-500">No service types available</p>
+              <button
+                type="button"
+                onClick={() => fetchServiceTypes()}
+                className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
+              >
+                🔄 Retry Loading
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {serviceTypes.map((serviceType) => {
+                const isSelected = selectedServices.some(
+                  (s) => s.service_type_id === serviceType.id
+                );
+                const serviceData = selectedServices.find(
+                  (s) => s.service_type_id === serviceType.id
+                );
+
+                return (
+                  <div
+                    key={serviceType.id}
+                    className={`border rounded-lg p-4 transition-colors ${
+                      isSelected
+                        ? "border-blue-500 bg-blue-50"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="flex items-start gap-4">
+                      {/* Checkbox */}
+                      <div className="flex items-center pt-1">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleService(serviceType.id)}
+                          className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      {/* Service Info */}
+                      <div className="flex-1">
+                        <label className="font-medium text-gray-900 cursor-pointer">
+                          {serviceType.service_name}
+                        </label>
+
+                        {/* Days Input - Only show if selected */}
+                        {isSelected && (
+                          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Total Days{" "}
+                                <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={
+                                  serviceData?.total_days === 0
+                                    ? ""
+                                    : serviceData?.total_days || ""
+                                }
+                                onChange={(e) =>
+                                  handleServiceDaysChange(
+                                    serviceType.id,
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="Enter number of days"
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Remarks (Optional)
+                              </label>
+                              <input
+                                type="text"
+                                value={serviceData?.remarks || ""}
+                                onChange={(e) =>
+                                  handleServiceRemarksChange(
+                                    serviceType.id,
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="Add notes..."
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Summary */}
+          {selectedServices.length > 0 && (
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-900">
+                ✓ Selected {selectedServices.length} service(s) • Total Days:{" "}
+                {selectedServices.reduce((sum, s) => sum + s.total_days, 0)}
+              </p>
+            </div>
+          )}
+
+          {/* No services selected warning */}
+          {selectedServices.length === 0 &&
+            !loadingServiceTypes &&
+            serviceTypes.length > 0 && (
+              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  {isEditMode
+                    ? "⚠️ No general services selected."
+                    : "⚠️ Please select at least one general service"}
+                </p>
+              </div>
+            )}
         </div>
 
         {/* Document Upload (Edit Mode Only) */}
@@ -778,30 +1070,25 @@ export default function CreateBASTP() {
           </div>
         )}
 
-        {/* Submit Button */}
-        <div className="flex items-center justify-end gap-4">
-          <button
-            type="button"
-            onClick={() => navigate("/bastp")}
-            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-          >
-            Cancel
-          </button>
+        {/* Submit Buttons */}
+        <div className="flex gap-3">
           <button
             type="submit"
             disabled={submitting || selectedWorkDetails.length === 0}
-            className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-2 rounded-lg hover:from-blue-600 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
           >
-            {submitting ? (
-              <span className="flex items-center gap-2">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                {isEditMode ? "Updating..." : "Creating..."}
-              </span>
-            ) : isEditMode ? (
-              "Update BASTP"
-            ) : (
-              "Create BASTP"
-            )}
+            {submitting
+              ? "Saving..."
+              : isEditMode
+              ? "Update BASTP"
+              : "Create BASTP"}
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/bastp")}
+            className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+          >
+            Cancel
           </button>
         </div>
       </form>

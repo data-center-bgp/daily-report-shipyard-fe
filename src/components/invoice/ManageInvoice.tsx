@@ -13,6 +13,14 @@ interface WorkDetailPrice {
   payment_price: number;
 }
 
+interface GeneralServicePrice {
+  service_type_id: number;
+  total_days: number;
+  unit_price: number;
+  payment_price: number;
+  remarks: string;
+}
+
 export default function ManageInvoice() {
   const { bastpId, invoiceId } = useParams<{
     bastpId?: string;
@@ -54,6 +62,10 @@ export default function ManageInvoice() {
   const [workDetailPrices, setWorkDetailPrices] = useState<WorkDetailPrice[]>(
     []
   );
+
+  const [generalServicePrices, setGeneralServicePrices] = useState<
+    GeneralServicePrice[]
+  >([]);
 
   useEffect(() => {
     if (isEditMode && invoiceId) {
@@ -114,6 +126,19 @@ export default function ManageInvoice() {
                   customer_wo_number
                 )
               )
+            ),
+            general_services (
+              id,
+              service_type_id,
+              total_days,
+              unit_price,
+              payment_price,
+              remarks,
+              service_type:service_type_id (
+                id,
+                service_name,
+                display_order
+              )
             )
           ),
           invoice_work_details (
@@ -161,7 +186,7 @@ export default function ManageInvoice() {
         remarks: data.remarks || "",
       });
 
-      // Populate work detail prices - ensure all BASTP work details are included
+      // Populate work detail prices
       const allWorkDetailIds =
         data.bastp?.bastp_work_details
           ?.map((item: any) => item.work_details_id)
@@ -169,12 +194,10 @@ export default function ManageInvoice() {
 
       const prices: WorkDetailPrice[] = allWorkDetailIds.map(
         (workDetailId: number) => {
-          // Find existing price from invoice_work_details
           const existingPrice = data.invoice_work_details?.find(
             (item: any) => item.work_details_id === workDetailId
           );
 
-          // Get work details info
           const workDetail = data.bastp?.bastp_work_details?.find(
             (bwd: any) => bwd.work_details_id === workDetailId
           )?.work_details;
@@ -194,6 +217,18 @@ export default function ManageInvoice() {
       );
 
       setWorkDetailPrices(prices);
+
+      // Populate general service prices
+      const servicePrices: GeneralServicePrice[] =
+        data.bastp?.general_services?.map((service: any) => ({
+          service_type_id: service.service_type_id,
+          total_days: service.total_days,
+          unit_price: service.unit_price || 0,
+          payment_price: service.payment_price || 0,
+          remarks: service.remarks || "",
+        })) || [];
+
+      setGeneralServicePrices(servicePrices);
     } catch (err) {
       console.error("Error fetching invoice:", err);
       setError(err instanceof Error ? err.message : "Failed to load invoice");
@@ -244,6 +279,17 @@ export default function ManageInvoice() {
               customer_wo_number
             )
           )
+        ),
+        general_services (
+          id,
+          service_type_id,
+          total_days,
+          remarks,
+          service_type:service_type_id (
+            id,
+            service_name,
+            display_order
+          )
         )
       `
         )
@@ -252,7 +298,7 @@ export default function ManageInvoice() {
 
       if (fetchError) throw fetchError;
 
-      // ✅ Check if already invoiced
+      // Check if already invoiced
       if (data.is_invoiced) {
         setError("This BASTP has already been invoiced");
         setLoading(false);
@@ -285,6 +331,17 @@ export default function ManageInvoice() {
           })) || [];
       setWorkDetailPrices(initialPrices);
 
+      // Initialize general service prices with 0
+      const initialServicePrices: GeneralServicePrice[] =
+        data.general_services?.map((service: any) => ({
+          service_type_id: service.service_type_id,
+          total_days: service.total_days,
+          unit_price: 0,
+          payment_price: 0,
+          remarks: service.remarks || "",
+        })) || [];
+      setGeneralServicePrices(initialServicePrices);
+
       // Pre-fill some fields from BASTP
       setFormData((prev) => ({
         ...prev,
@@ -300,10 +357,7 @@ export default function ManageInvoice() {
   };
 
   const handleUnitPriceChange = (work_details_id: number, value: string) => {
-    // Remove all non-numeric characters
     const numericValue = value.replace(/\D/g, "");
-
-    // If empty string, set to 0
     const unit_price = numericValue === "" ? 0 : parseInt(numericValue, 10);
 
     setWorkDetailPrices((prev) =>
@@ -312,20 +366,51 @@ export default function ManageInvoice() {
           ? {
               ...item,
               unit_price: unit_price,
-              payment_price: unit_price * item.quantity, // Auto-calculate
+              payment_price: unit_price * item.quantity,
             }
           : item
       )
     );
 
-    // Clear error when user starts editing prices
     if (error && error.includes("work detail price")) {
       setError(null);
     }
   };
 
+  const handleServiceUnitPriceChange = (
+    service_type_id: number,
+    value: string
+  ) => {
+    const numericValue = value.replace(/\D/g, "");
+    const unit_price = numericValue === "" ? 0 : parseInt(numericValue, 10);
+
+    setGeneralServicePrices((prev) =>
+      prev.map((item) =>
+        item.service_type_id === service_type_id
+          ? {
+              ...item,
+              unit_price: unit_price,
+              payment_price: unit_price * item.total_days,
+            }
+          : item
+      )
+    );
+
+    if (error && error.includes("service price")) {
+      setError(null);
+    }
+  };
+
   const calculateTotalAmount = () => {
-    return workDetailPrices.reduce((sum, item) => sum + item.payment_price, 0);
+    const workTotal = workDetailPrices.reduce(
+      (sum, item) => sum + item.payment_price,
+      0
+    );
+    const serviceTotal = generalServicePrices.reduce(
+      (sum, item) => sum + item.payment_price,
+      0
+    );
+    return workTotal + serviceTotal;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -337,9 +422,15 @@ export default function ManageInvoice() {
     }
 
     // Validate that at least one work detail has a unit price
-    const hasPrice = workDetailPrices.some((item) => item.unit_price > 0);
-    if (!hasPrice) {
-      setError("Please set at least one work detail unit price");
+    const hasWorkPrice = workDetailPrices.some((item) => item.unit_price > 0);
+    const hasServicePrice = generalServicePrices.some(
+      (item) => item.unit_price > 0
+    );
+
+    if (!hasWorkPrice && !hasServicePrice) {
+      setError(
+        "Please set at least one work detail price or general service price"
+      );
       return;
     }
 
@@ -377,7 +468,7 @@ export default function ManageInvoice() {
 
         if (deleteError) throw deleteError;
 
-        // ✅ Fixed: Insert with unit_price and payment_price
+        // Insert work details
         const workDetailsToInsert = workDetailPrices
           .filter((item) => item.unit_price > 0)
           .map((item) => ({
@@ -393,6 +484,20 @@ export default function ManageInvoice() {
             .insert(workDetailsToInsert);
 
           if (insertError) throw insertError;
+        }
+
+        // Update general services in BASTP
+        for (const service of generalServicePrices) {
+          const { error: serviceError } = await supabase
+            .from("general_services")
+            .update({
+              unit_price: service.unit_price,
+              payment_price: service.payment_price,
+            })
+            .eq("bastp_id", bastp?.id)
+            .eq("service_type_id", service.service_type_id);
+
+          if (serviceError) throw serviceError;
         }
 
         setSuccess("✅ Invoice updated successfully!");
@@ -421,7 +526,7 @@ export default function ManageInvoice() {
 
         if (invoiceError) throw invoiceError;
 
-        // ✅ Fixed: Insert with unit_price and payment_price
+        // Insert work details
         const workDetailsToInsert = workDetailPrices
           .filter((item) => item.unit_price > 0)
           .map((item) => ({
@@ -437,6 +542,20 @@ export default function ManageInvoice() {
             .insert(workDetailsToInsert);
 
           if (detailsError) throw detailsError;
+        }
+
+        // Update general services in BASTP
+        for (const service of generalServicePrices) {
+          const { error: serviceError } = await supabase
+            .from("general_services")
+            .update({
+              unit_price: service.unit_price,
+              payment_price: service.payment_price,
+            })
+            .eq("bastp_id", bastpId)
+            .eq("service_type_id", service.service_type_id);
+
+          if (serviceError) throw serviceError;
         }
 
         // Update BASTP status to INVOICED
@@ -527,14 +646,12 @@ export default function ManageInvoice() {
     try {
       setViewingDocument(true);
 
-      // Generate fresh signed URL (valid for 5 minutes)
       const { data, error: signedUrlError } = await supabase.storage
         .from("bastp")
-        .createSignedUrl(bastp.storage_path, 300); // 5 minutes
+        .createSignedUrl(bastp.storage_path, 300);
 
       if (signedUrlError) throw signedUrlError;
 
-      // Set document URL and open modal
       setDocumentUrl(data.signedUrl);
       setShowDocumentModal(true);
     } catch (err) {
@@ -545,13 +662,11 @@ export default function ManageInvoice() {
     }
   };
 
-  // Close modal
   const handleCloseModal = () => {
     setShowDocumentModal(false);
     setDocumentUrl(null);
   };
 
-  // Detect file type
   const getFileType = (storagePath: string | null | undefined) => {
     if (!storagePath) return "unknown";
     const extension = storagePath.split(".").pop()?.toLowerCase();
@@ -1020,22 +1135,166 @@ export default function ManageInvoice() {
                   </tr>
                 )}
               </tbody>
-              <tfoot className="bg-gray-50">
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-4 text-right font-semibold text-gray-900"
-                  >
-                    Total Amount:
-                  </td>
-                  <td className="px-4 py-4 text-right">
-                    <div className="text-xl font-bold text-blue-900">
-                      {formatCurrency(calculateTotalAmount())}
-                    </div>
-                  </td>
-                </tr>
-              </tfoot>
             </table>
+          </div>
+        </div>
+
+        {/* General Services Pricing Section */}
+        {bastp?.general_services && Array.isArray(bastp.general_services) && bastp.general_services.length > 0 && (
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">
+                🛠️ General Services Pricing
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Enter unit price (per day) for each service. Payment price will
+                be calculated automatically (Unit Price × Total Days)
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Service Name
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                      Total Days
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Unit Price (IDR/day)
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Payment Price (IDR)
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Remarks
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {bastp.general_services
+                    .sort(
+                      (a: any, b: any) =>
+                        (a.service_type?.display_order || 0) -
+                        (b.service_type?.display_order || 0)
+                    )
+                    .map((service: any) => {
+                      const priceItem = generalServicePrices.find(
+                        (p) => p.service_type_id === service.service_type_id
+                      );
+
+                      return (
+                        <tr key={service.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-4">
+                            <div className="text-sm font-medium text-gray-900">
+                              {service.service_type?.service_name}
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                              {service.total_days} day
+                              {service.total_days !== 1 ? "s" : ""}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={
+                                priceItem?.unit_price === 0
+                                  ? ""
+                                  : priceItem?.unit_price.toString()
+                              }
+                              onChange={(e) =>
+                                handleServiceUnitPriceChange(
+                                  service.service_type_id,
+                                  e.target.value
+                                )
+                              }
+                              onFocus={(e) => {
+                                e.target.select();
+                              }}
+                              onPaste={(e) => {
+                                e.preventDefault();
+                                const pasteData =
+                                  e.clipboardData.getData("text");
+                                const numericValue = pasteData.replace(
+                                  /\D/g,
+                                  ""
+                                );
+                                handleServiceUnitPriceChange(
+                                  service.service_type_id,
+                                  numericValue
+                                );
+                              }}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right"
+                              placeholder="0"
+                            />
+                          </td>
+                          <td className="px-4 py-4 text-right">
+                            <div className="text-sm font-bold text-green-900">
+                              {formatCurrency(priceItem?.payment_price || 0)}
+                            </div>
+                            {priceItem && priceItem.unit_price > 0 && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                {formatCurrency(priceItem.unit_price)} ×{" "}
+                                {priceItem.total_days}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="text-sm text-gray-600">
+                              {service.remarks || "-"}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Total Summary */}
+        <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-lg shadow-lg p-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                Grand Total Invoice Amount
+              </h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Work Details + General Services
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-3xl font-bold text-blue-900">
+                {formatCurrency(calculateTotalAmount())}
+              </div>
+              <div className="text-sm text-gray-600 mt-1">
+                <span className="text-blue-700">
+                  Work:{" "}
+                  {formatCurrency(
+                    workDetailPrices.reduce(
+                      (sum, item) => sum + item.payment_price,
+                      0
+                    )
+                  )}
+                </span>
+                {" + "}
+                <span className="text-green-700">
+                  Services:{" "}
+                  {formatCurrency(
+                    generalServicePrices.reduce(
+                      (sum, item) => sum + item.payment_price,
+                      0
+                    )
+                  )}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 

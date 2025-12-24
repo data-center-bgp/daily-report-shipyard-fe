@@ -50,6 +50,19 @@ export default function InvoiceDetails() {
               name,
               type,
               company
+            ),
+            general_services (
+              id,
+              service_type_id,
+              total_days,
+              unit_price,
+              payment_price,
+              remarks,
+              service_type:service_type_id (
+                id,
+                service_name,
+                display_order
+              )
             )
           ),
           profiles:user_id (
@@ -94,12 +107,20 @@ export default function InvoiceDetails() {
 
       if (fetchError) throw fetchError;
 
-      // Calculate total amount
-      const total =
+      // Calculate total amount (work details + general services)
+      const workTotal =
         data.invoice_work_details?.reduce(
           (sum: number, item: any) => sum + (item.payment_price || 0),
           0
         ) || 0;
+
+      const servicesTotal =
+        data.bastp?.general_services?.reduce(
+          (sum: number, service: any) => sum + (service.payment_price || 0),
+          0
+        ) || 0;
+
+      const total = workTotal + servicesTotal;
 
       setInvoice({ ...data, total_amount: total });
     } catch (err) {
@@ -125,6 +146,25 @@ export default function InvoiceDetails() {
       currency: "IDR",
       minimumFractionDigits: 0,
     }).format(amount);
+  };
+
+  // Calculate subtotals
+  const calculateWorkDetailsTotal = () => {
+    return (
+      invoice?.invoice_work_details?.reduce(
+        (sum: number, item: any) => sum + (item.payment_price || 0),
+        0
+      ) || 0
+    );
+  };
+
+  const calculateGeneralServicesTotal = () => {
+    return (
+      invoice?.bastp?.general_services?.reduce(
+        (sum: number, service: any) => sum + (service.payment_price || 0),
+        0
+      ) || 0
+    );
   };
 
   // Print handler
@@ -535,16 +575,135 @@ export default function InvoiceDetails() {
                       colSpan={6}
                       className="px-4 py-4 text-right font-semibold text-gray-900"
                     >
-                      Total Amount:
+                      Subtotal (Work Details):
                     </td>
                     <td className="px-4 py-4 text-right">
-                      <div className="text-lg font-bold text-blue-900">
-                        {formatCurrency(invoice.total_amount || 0)}
+                      <div className="text-base font-bold text-blue-900">
+                        {formatCurrency(calculateWorkDetailsTotal())}
                       </div>
                     </td>
                   </tr>
                 </tfoot>
               </table>
+            </div>
+          </div>
+
+          {/* General Services Pricing */}
+          {invoice.bastp?.general_services &&
+            invoice.bastp.general_services.length > 0 && (
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                  🛠️ General Services & Pricing
+                </h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Service Name
+                        </th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                          Total Days
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                          Unit Price (per day)
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                          Amount
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Remarks
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {invoice.bastp.general_services
+                        .sort(
+                          (a: any, b: any) =>
+                            (a.service_type?.display_order || 0) -
+                            (b.service_type?.display_order || 0)
+                        )
+                        .map((service: any) => (
+                          <tr key={service.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-4">
+                              <div className="text-sm font-medium text-gray-900">
+                                {service.service_type?.service_name}
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                                {service.total_days} day
+                                {service.total_days !== 1 ? "s" : ""}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 text-right">
+                              <div className="text-sm text-gray-900">
+                                {formatCurrency(service.unit_price)}
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-right">
+                              <div className="text-sm font-bold text-green-900">
+                                {formatCurrency(service.payment_price)}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                {formatCurrency(service.unit_price)} ×{" "}
+                                {service.total_days}
+                              </div>
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="text-sm text-gray-600">
+                                {service.remarks || "-"}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                    <tfoot className="bg-gray-50">
+                      <tr>
+                        <td
+                          colSpan={3}
+                          className="px-4 py-4 text-right font-semibold text-gray-900"
+                        >
+                          Subtotal (General Services):
+                        </td>
+                        <td className="px-4 py-4 text-right">
+                          <div className="text-base font-bold text-green-900">
+                            {formatCurrency(calculateGeneralServicesTotal())}
+                          </div>
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            )}
+
+          {/* Grand Total */}
+          <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-lg shadow-lg p-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Grand Total Invoice Amount
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Work Details + General Services
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="text-3xl font-bold text-blue-900">
+                  {formatCurrency(invoice.total_amount || 0)}
+                </div>
+                <div className="text-sm text-gray-600 mt-1">
+                  <span className="text-blue-700">
+                    Work: {formatCurrency(calculateWorkDetailsTotal())}
+                  </span>
+                  {" + "}
+                  <span className="text-green-700">
+                    Services: {formatCurrency(calculateGeneralServicesTotal())}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
