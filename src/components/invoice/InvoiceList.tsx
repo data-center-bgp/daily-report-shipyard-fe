@@ -41,56 +41,59 @@ export default function InvoiceList() {
         .from("invoice_details")
         .select(
           `
-    *,
-    bastp:bastp_id (
-      id,
-      number,
-      date,
-      delivery_date,
-      status,
-      storage_path,
-      bastp_upload_date,
-      vessel:vessel_id (
-        id,
-        name,
-        type,
-        company
-      )
-    ),
-    profiles:user_id (
-      id,
-      name,
-      email
-    ),
-    invoice_work_details (
-      id,
-      work_details_id,
-      payment_price,
-      work_details:work_details_id (
-        id,
-        description,
-        quantity,
-        uom
-      )
-    )
-  `
+          *,
+          bastp:bastp_id (
+            id,
+            number,
+            date,
+            delivery_date,
+            status,
+            storage_path,
+            bastp_upload_date,
+            vessel:vessel_id (
+              id,
+              name,
+              type,
+              company
+            ),
+            general_services (
+              id,
+              service_type_id,
+              total_days,
+              unit_price,
+              payment_price,
+              remarks,
+              service_type:service_type_id (
+                id,
+                service_name,
+                display_order
+              )
+            )
+          ),
+          profiles:user_id (
+            id,
+            name,
+            email
+          ),
+          invoice_work_details (
+            id,
+            work_details_id,
+            payment_price,
+            work_details:work_details_id (
+              id,
+              description,
+              quantity,
+              uom
+            )
+          )
+        `
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
 
       if (fetchError) throw fetchError;
 
-      // Calculate total amount for each invoice
-      const invoicesWithTotal = (data || []).map((invoice) => ({
-        ...invoice,
-        total_amount:
-          invoice.invoice_work_details?.reduce(
-            (sum: number, item: any) => sum + (item.payment_price || 0),
-            0
-          ) || 0,
-      }));
-
-      setInvoices(invoicesWithTotal);
+      setInvoices(data || []);
     } catch (err) {
       console.error("Error fetching invoices:", err);
       setError(err instanceof Error ? err.message : "Failed to load invoices");
@@ -105,27 +108,27 @@ export default function InvoiceList() {
         .from("bastp")
         .select(
           `
-    *,
-    vessel:vessel_id (
-      id,
-      name,
-      type,
-      company
-    ),
-    bastp_work_details (
-      id,
-      work_details:work_details_id (
-        id,
-        description,
-        quantity,
-        uom,
-        location:location_id (
-          id,
-          location
-        )
-      )
-    )
-  `
+          *,
+          vessel:vessel_id (
+            id,
+            name,
+            type,
+            company
+          ),
+          bastp_work_details (
+            id,
+            work_details:work_details_id (
+              id,
+              description,
+              quantity,
+              uom,
+              location:location_id (
+                id,
+                location
+              )
+            )
+          )
+        `
         )
         .eq("status", "READY_FOR_INVOICE")
         .eq("is_invoiced", false)
@@ -252,7 +255,6 @@ export default function InvoiceList() {
     }
   };
 
-  // Update handleCloseModal (around line 252):
   const handleCloseModal = () => {
     setShowDocumentModal(false);
     setDocumentUrl(null);
@@ -478,8 +480,13 @@ export default function InvoiceList() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="text-sm font-bold text-gray-900">
-                            {formatCurrency(invoice.total_amount || 0)}
+                          <div className="text-sm">
+                            <div className="font-bold text-gray-900">
+                              {formatCurrency(invoice.total_price_after || 0)}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              After Tax
+                            </div>
                           </div>
                         </td>
                         <td className="px-6 py-4">

@@ -50,7 +50,10 @@ export interface Invoice {
   payment_status: boolean;
   payment_date?: string | null;
   remarks?: string | null;
-  total_amount?: number;
+  total_price_before?: number;
+  ppn?: number;
+  pph_23?: number;
+  total_price_after?: number;
   bastp?: {
     id: number;
     number: string;

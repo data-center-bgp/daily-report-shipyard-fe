@@ -413,6 +413,22 @@ export default function ManageInvoice() {
     return workTotal + serviceTotal;
   };
 
+  const calculateTotalPriceBefore = () => {
+    return calculateTotalAmount();
+  };
+
+  const calculatePPN = () => {
+    return calculateTotalPriceBefore() * 0.11; // 11% PPN
+  };
+
+  const calculatePPH23 = () => {
+    return calculateTotalPriceBefore() * 0.02; // 2% PPh 23
+  };
+
+  const calculateTotalPriceAfter = () => {
+    return calculateTotalPriceBefore() + calculatePPN() - calculatePPH23();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -434,6 +450,12 @@ export default function ManageInvoice() {
       return;
     }
 
+    // Calculate totals
+    const total_price_before = calculateTotalPriceBefore();
+    const ppn = calculatePPN();
+    const pph_23 = calculatePPH23();
+    const total_price_after = calculateTotalPriceAfter();
+
     try {
       setSaving(true);
       setError(null);
@@ -454,6 +476,10 @@ export default function ManageInvoice() {
             payment_status: formData.payment_status,
             payment_date: formData.payment_date || null,
             remarks: formData.remarks || null,
+            total_price_before: total_price_before,
+            ppn: ppn,
+            pph_23: pph_23,
+            total_price_after: total_price_after,
             updated_at: new Date().toISOString(),
           })
           .eq("id", invoiceId);
@@ -520,6 +546,10 @@ export default function ManageInvoice() {
             payment_status: formData.payment_status,
             payment_date: formData.payment_date || null,
             remarks: formData.remarks || null,
+            total_price_before: total_price_before,
+            ppn: ppn,
+            pph_23: pph_23,
+            total_price_after: total_price_after,
           })
           .select()
           .single();
@@ -999,6 +1029,127 @@ export default function ManageInvoice() {
           </div>
         </div>
 
+        {/* General Services Pricing Section */}
+        {bastp?.general_services &&
+          Array.isArray(bastp.general_services) &&
+          bastp.general_services.length > 0 && (
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b border-gray-200">
+                <h2 className="text-xl font-semibold text-gray-900">
+                  🛠️ General Services Pricing
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Enter unit price (per day) for each service. Payment price
+                  will be calculated automatically (Unit Price × Total Days)
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Service Name
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                        Total Days
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Unit Price (IDR/day)
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Payment Price (IDR)
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Remarks
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {bastp.general_services
+                      .sort(
+                        (a: any, b: any) =>
+                          (a.service_type?.display_order || 0) -
+                          (b.service_type?.display_order || 0)
+                      )
+                      .map((service: any) => {
+                        const priceItem = generalServicePrices.find(
+                          (p) => p.service_type_id === service.service_type_id
+                        );
+
+                        return (
+                          <tr key={service.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-4">
+                              <div className="text-sm font-medium text-gray-900">
+                                {service.service_type?.service_name}
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                                {service.total_days} day
+                                {service.total_days !== 1 ? "s" : ""}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                value={
+                                  priceItem?.unit_price === 0
+                                    ? ""
+                                    : priceItem?.unit_price.toString()
+                                }
+                                onChange={(e) =>
+                                  handleServiceUnitPriceChange(
+                                    service.service_type_id,
+                                    e.target.value
+                                  )
+                                }
+                                onFocus={(e) => {
+                                  e.target.select();
+                                }}
+                                onPaste={(e) => {
+                                  e.preventDefault();
+                                  const pasteData =
+                                    e.clipboardData.getData("text");
+                                  const numericValue = pasteData.replace(
+                                    /\D/g,
+                                    ""
+                                  );
+                                  handleServiceUnitPriceChange(
+                                    service.service_type_id,
+                                    numericValue
+                                  );
+                                }}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right"
+                                placeholder="0"
+                              />
+                            </td>
+                            <td className="px-4 py-4 text-right">
+                              <div className="text-sm font-bold text-green-900">
+                                {formatCurrency(priceItem?.payment_price || 0)}
+                              </div>
+                              {priceItem && priceItem.unit_price > 0 && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {formatCurrency(priceItem.unit_price)} ×{" "}
+                                  {priceItem.total_days}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="text-sm text-gray-600">
+                                {service.remarks || "-"}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
         {/* Work Details Pricing Section */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-6 border-b border-gray-200">
@@ -1139,167 +1290,94 @@ export default function ManageInvoice() {
           </div>
         </div>
 
-        {/* General Services Pricing Section */}
-        {bastp?.general_services && Array.isArray(bastp.general_services) && bastp.general_services.length > 0 && (
-          <div className="bg-white rounded-lg shadow">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">
-                🛠️ General Services Pricing
-              </h2>
-              <p className="text-sm text-gray-600 mt-1">
-                Enter unit price (per day) for each service. Payment price will
-                be calculated automatically (Unit Price × Total Days)
-              </p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Service Name
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                      Total Days
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Unit Price (IDR/day)
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Payment Price (IDR)
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Remarks
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {bastp.general_services
-                    .sort(
-                      (a: any, b: any) =>
-                        (a.service_type?.display_order || 0) -
-                        (b.service_type?.display_order || 0)
-                    )
-                    .map((service: any) => {
-                      const priceItem = generalServicePrices.find(
-                        (p) => p.service_type_id === service.service_type_id
-                      );
-
-                      return (
-                        <tr key={service.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-4">
-                            <div className="text-sm font-medium text-gray-900">
-                              {service.service_type?.service_name}
-                            </div>
-                          </td>
-                          <td className="px-4 py-4 text-center">
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                              {service.total_days} day
-                              {service.total_days !== 1 ? "s" : ""}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4">
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              value={
-                                priceItem?.unit_price === 0
-                                  ? ""
-                                  : priceItem?.unit_price.toString()
-                              }
-                              onChange={(e) =>
-                                handleServiceUnitPriceChange(
-                                  service.service_type_id,
-                                  e.target.value
-                                )
-                              }
-                              onFocus={(e) => {
-                                e.target.select();
-                              }}
-                              onPaste={(e) => {
-                                e.preventDefault();
-                                const pasteData =
-                                  e.clipboardData.getData("text");
-                                const numericValue = pasteData.replace(
-                                  /\D/g,
-                                  ""
-                                );
-                                handleServiceUnitPriceChange(
-                                  service.service_type_id,
-                                  numericValue
-                                );
-                              }}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right"
-                              placeholder="0"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-right">
-                            <div className="text-sm font-bold text-green-900">
-                              {formatCurrency(priceItem?.payment_price || 0)}
-                            </div>
-                            {priceItem && priceItem.unit_price > 0 && (
-                              <div className="text-xs text-gray-500 mt-1">
-                                {formatCurrency(priceItem.unit_price)} ×{" "}
-                                {priceItem.total_days}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="text-sm text-gray-600">
-                              {service.remarks || "-"}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
         {/* Total Summary */}
-        <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-lg shadow-lg p-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">
-                Grand Total Invoice Amount
-              </h3>
-              <p className="text-sm text-gray-600 mt-1">
-                Work Details + General Services
-              </p>
-            </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold text-blue-900">
-                {formatCurrency(calculateTotalAmount())}
+        <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-lg shadow-lg p-6 mt-6">
+          <div className="space-y-4">
+            {/* Subtotals */}
+            <div className="flex justify-between items-center pb-4 border-b border-gray-300">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Invoice Breakdown
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Work Details + General Services
+                </p>
               </div>
-              <div className="text-sm text-gray-600 mt-1">
-                <span className="text-blue-700">
-                  Work:{" "}
-                  {formatCurrency(
-                    workDetailPrices.reduce(
-                      (sum, item) => sum + item.payment_price,
-                      0
-                    )
-                  )}
+              <div className="text-right">
+                <div className="text-sm text-gray-600 space-y-1">
+                  <div className="flex justify-between gap-8">
+                    <span className="text-blue-700">Work Details:</span>
+                    <span className="font-medium">
+                      {formatCurrency(
+                        workDetailPrices.reduce(
+                          (sum, item) => sum + item.payment_price,
+                          0
+                        )
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-8">
+                    <span className="text-green-700">General Services:</span>
+                    <span className="font-medium">
+                      {formatCurrency(
+                        generalServicePrices.reduce(
+                          (sum, item) => sum + item.payment_price,
+                          0
+                        )
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Total Before Tax */}
+            <div className="flex justify-between items-center py-2">
+              <div className="text-base font-semibold text-gray-900">
+                Subtotal (Before Tax)
+              </div>
+              <div className="text-2xl font-bold text-blue-900">
+                {formatCurrency(calculateTotalPriceBefore())}
+              </div>
+            </div>
+
+            {/* Tax Breakdown */}
+            <div className="bg-white/50 rounded-lg p-4 space-y-2">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-700">PPN (11% of Subtotal)</span>
+                <span className="font-medium text-green-900">
+                  + {formatCurrency(calculatePPN())}
                 </span>
-                {" + "}
-                <span className="text-green-700">
-                  Services:{" "}
-                  {formatCurrency(
-                    generalServicePrices.reduce(
-                      (sum, item) => sum + item.payment_price,
-                      0
-                    )
-                  )}
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-700">PPh 23 (2% of Subtotal)</span>
+                <span className="font-medium text-red-900">
+                  - {formatCurrency(calculatePPH23())}
                 </span>
+              </div>
+            </div>
+
+            {/* Grand Total */}
+            <div className="flex justify-between items-center pt-4 border-t-2 border-gray-400">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">
+                  Grand Total (After Tax)
+                </h3>
+                <p className="text-xs text-gray-600 mt-1">
+                  Subtotal + PPN - PPh 23
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="text-3xl font-bold text-green-900">
+                  {formatCurrency(calculateTotalPriceAfter())}
+                </div>
               </div>
             </div>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center mt-6">
           {isEditMode && (
             <button
               type="button"
@@ -1322,7 +1400,7 @@ export default function ManageInvoice() {
             </button>
             <button
               type="submit"
-              disabled={saving || calculateTotalAmount() === 0}
+              disabled={saving || calculateTotalPriceBefore() === 0}
               className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {saving ? (
