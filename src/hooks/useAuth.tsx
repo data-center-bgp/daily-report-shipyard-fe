@@ -48,18 +48,41 @@ export function useAuth() {
 }
 
 const FEATURE_ACCESS = {
-  dashboard: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "FINANCE"],
-  workOrders: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"],
-  workDetails: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"],
-  progress: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"],
-  vessels: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"],
-  invoices: ["MASTER", "FINANCE"],
+  dashboard: [
+    "MASTER",
+    "PPIC",
+    "PRODUCTION",
+    "OPERATION",
+    "ADMIN",
+    "FINANCE",
+    "MANAGER",
+  ],
+  workOrders: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "MANAGER"],
+  workDetails: [
+    "MASTER",
+    "PPIC",
+    "PRODUCTION",
+    "OPERATION",
+    "ADMIN",
+    "MANAGER",
+  ],
+  progress: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "MANAGER"],
+  vessels: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "MANAGER"],
+  invoices: ["MASTER", "FINANCE", "MANAGER"],
   createInvoice: ["MASTER", "FINANCE"],
   editInvoice: ["MASTER", "FINANCE"],
   userManagement: ["MASTER"],
   systemSettings: ["MASTER"],
-  reports: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "FINANCE"],
-  exportData: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"],
+  reports: [
+    "MASTER",
+    "PPIC",
+    "PRODUCTION",
+    "OPERATION",
+    "ADMIN",
+    "FINANCE",
+    "MANAGER",
+  ],
+  exportData: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "MANAGER"],
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
