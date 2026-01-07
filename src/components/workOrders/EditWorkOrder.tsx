@@ -6,6 +6,7 @@ import {
   type Vessel,
   type Kapro,
 } from "../../lib/supabase";
+import { ActivityLogService } from "../../services/activityLogService";
 
 interface WorkOrderWithVessel extends WorkOrder {
   vessel?: Vessel;
@@ -272,6 +273,13 @@ export default function EditWorkOrder() {
     setError(null);
 
     try {
+      // Get old data first for activity log
+      const { data: oldData } = await supabase
+        .from("work_order")
+        .select("*")
+        .eq("id", parseInt(workOrderId))
+        .single();
+
       const updateData = {
         vessel_id: parseInt(formData.vessel_id.toString()),
         shipyard_wo_number: formData.shipyard_wo_number.trim(),
@@ -302,6 +310,17 @@ export default function EditWorkOrder() {
       if (!data) {
         throw new Error("No data returned from work order update");
       }
+
+      // Log the activity
+      await ActivityLogService.logActivity({
+        action: "update",
+        tableName: "work_order",
+        recordId: data.id,
+        oldData: oldData || undefined,
+        newData: data,
+        description: `Updated work order ${data.shipyard_wo_number}`,
+      });
+
       // Navigate back to vessel work orders or dashboard
       const vesselId = formData.vessel_id;
       if (vesselId) {

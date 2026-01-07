@@ -32,11 +32,11 @@ export function RoleGuard({
 
 // Pre-made role guards for common use cases
 export const MasterOnly = ({ children }: { children: React.ReactNode }) => (
-  <RoleGuard roles="MASTER" children={children} />
+  <RoleGuard roles={["MASTER", "MANAGER"]} children={children} />
 );
 
 export const FinanceAccess = ({ children }: { children: React.ReactNode }) => (
-  <RoleGuard roles={["MASTER", "FINANCE"]} children={children} />
+  <RoleGuard roles={["MASTER", "MANAGER", "FINANCE"]} children={children} />
 );
 
 export const OperationsAccess = ({
@@ -45,7 +45,7 @@ export const OperationsAccess = ({
   children: React.ReactNode;
 }) => (
   <RoleGuard
-    roles={["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"]}
+    roles={["MASTER", "MANAGER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"]}
     children={children}
   />
 );

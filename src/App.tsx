@@ -28,11 +28,10 @@ import {
   ManageInvoice,
 } from "./components/invoice";
 import { ExportData } from "./components/exportData";
-
-// BASTP Components
 import BASTP from "./components/bastp/BASTP";
 import CreateBASTP from "./components/bastp/CreateBASTP";
 import BASTPDetails from "./components/bastp/BASTPDetails";
+import ActivityLogPage from "./components/activityLog/ActivityLogPage";
 
 function AppRoutes() {
   const { user, loading, signOut } = useAuth();
@@ -123,6 +122,9 @@ function AppRoutes() {
         <Route path="/invoices/create/:bastpId" element={<ManageInvoice />} />
         <Route path="/invoices/edit/:invoiceId" element={<ManageInvoice />} />
         <Route path="/invoices/:invoiceId" element={<InvoiceDetails />} />
+
+        {/* Activity Log Routes */}
+        <Route path="/activity-logs" element={<ActivityLogPage />} />
 
         {/* Import/Export Routes */}
         <Route path="/export-data" element={<ExportData />} />

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase, type Vessel, type Kapro } from "../../lib/supabase";
+import { ActivityLogService } from "../../services/activityLogService";
 
 export default function AddWorkOrder() {
   const navigate = useNavigate();
@@ -300,16 +301,26 @@ export default function AddWorkOrder() {
       const { data, error } = await supabase
         .from("work_order")
         .insert([submitData])
-        .select();
+        .select()
+        .single();
 
       if (error) {
         console.error("Database error:", error);
         throw new Error(`Database error: ${error.message}`);
       }
 
-      if (!data || data.length === 0) {
+      if (!data) {
         throw new Error("No data returned from work order creation");
       }
+
+      // Log the activity
+      await ActivityLogService.logActivity({
+        action: "create",
+        tableName: "work_order",
+        recordId: data.id,
+        newData: data,
+        description: `Created work order ${data.shipyard_wo_number}`,
+      });
 
       navigate("/work-orders", {
         state: { message: "Work order created successfully!" },

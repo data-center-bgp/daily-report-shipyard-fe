@@ -125,3 +125,24 @@ export interface User {
   email: string;
   created_at: string;
 }
+
+export interface ActivityLog {
+  id: number;
+  created_at: string;
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  action: "create" | "update" | "delete" | "restore";
+  table_name: string;
+  record_id: number;
+  old_data?: Record<string, any>;
+  new_data?: Record<string, any>;
+  changes?: Record<string, { old: any; new: any }>;
+  ip_address?: string;
+  user_agent?: string;
+  description?: string;
+}
+
+export interface ActivityLogWithProfile extends ActivityLog {
+  profile?: Profile;
+}

@@ -113,6 +113,15 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       show: canAccess("invoices"), // Only show for MASTER and FINANCE
     },
     {
+      name: "Activity Logs",
+      href: "/activity-logs",
+      icon: "📜",
+      current:
+        location.pathname === "/activity-logs" ||
+        location.pathname.startsWith("/activity-logs/"),
+      show: canAccess("exportData"), //
+    },
+    {
       name: "Export Data",
       href: "/export-data",
       icon: "📥",
