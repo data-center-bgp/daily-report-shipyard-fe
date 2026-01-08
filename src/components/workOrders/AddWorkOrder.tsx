@@ -2,10 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase, type Vessel, type Kapro } from "../../lib/supabase";
 import { ActivityLogService } from "../../services/activityLogService";
+import { useAuth } from "../../hooks/useAuth";
 
 export default function AddWorkOrder() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { isReadOnly } = useAuth();
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [kapros, setKapros] = useState<Kapro[]>([]);
   const [loadingVessels, setLoadingVessels] = useState(true);
@@ -70,6 +72,13 @@ export default function AddWorkOrder() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  useEffect(() => {
+    if (isReadOnly) {
+      alert("You don't have permission to create work orders");
+      navigate("/work-orders");
+    }
+  }, [isReadOnly, navigate]);
 
   // Get current user on component mount
   useEffect(() => {

@@ -5,6 +5,7 @@ import {
   type WorkOrderWithDetails,
   type WorkDetailsWithProgress,
 } from "../../lib/supabase";
+import { useAuth } from "../../hooks/useAuth";
 
 interface VesselData {
   id: number;
@@ -39,6 +40,7 @@ interface WorkOrderWithProgress
 export default function VesselWorkOrders() {
   const { vesselId } = useParams<{ vesselId: string }>();
   const navigate = useNavigate();
+  const { isReadOnly } = useAuth();
 
   const [vessel, setVessel] = useState<VesselData | null>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrderWithProgress[]>([]);
@@ -56,7 +58,7 @@ export default function VesselWorkOrders() {
   >("shipyard_wo_date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
-  // ✅ NEW: Delete Modal State
+  // Delete Modal State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [workOrderToDelete, setWorkOrderToDelete] =
     useState<WorkOrderWithProgress | null>(null);
@@ -242,6 +244,10 @@ export default function VesselWorkOrders() {
   };
 
   const handleAddWorkOrder = () => {
+    if (isReadOnly) {
+      alert("You don't have permission to add work orders");
+      return;
+    }
     navigate("/add-work-order", {
       state: { preselectedVesselId: vesselId },
     });
@@ -251,13 +257,15 @@ export default function VesselWorkOrders() {
     navigate(`/edit-work-order/${workOrder.id}`);
   };
 
-  // ✅ NEW: Open delete modal
   const handleDeleteWorkOrder = (workOrder: WorkOrderWithProgress) => {
+    if (isReadOnly) {
+      alert("You don't have permission to delete work orders");
+      return;
+    }
     setWorkOrderToDelete(workOrder);
     setShowDeleteModal(true);
   };
 
-  // ✅ NEW: Confirm delete action
   const confirmDelete = async () => {
     if (!workOrderToDelete) return;
 
@@ -296,7 +304,6 @@ export default function VesselWorkOrders() {
     }
   };
 
-  // ✅ NEW: Cancel delete action
   const cancelDelete = () => {
     setShowDeleteModal(false);
     setWorkOrderToDelete(null);
@@ -372,7 +379,6 @@ export default function VesselWorkOrders() {
     );
   };
 
-  // ✅ NEW: Delete Confirmation Modal
   const renderDeleteModal = () => {
     if (!showDeleteModal || !workOrderToDelete) return null;
 
@@ -484,26 +490,54 @@ export default function VesselWorkOrders() {
 
   return (
     <div className="p-8 space-y-6">
-      {/* ✅ DELETE MODAL */}
+      {/* Delete Modal */}
       {renderDeleteModal()}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate("/work-orders")}
-            className="text-blue-600 hover:text-blue-800 flex items-center gap-2 transition-colors font-medium"
-          >
-            ← Back to Dashboard
-          </button>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate("/work-orders")}
+              className="text-blue-600 hover:text-blue-800 flex items-center gap-2 transition-colors font-medium"
+            >
+              ← Back to Dashboard
+            </button>
+          </div>
+
+          {/* Read-Only Badge */}
+          {isReadOnly && (
+            <span className="px-3 py-1.5 bg-yellow-100 text-yellow-800 text-sm font-medium rounded-full border border-yellow-200 flex items-center gap-1.5">
+              🔒 Read Only Access
+            </span>
+          )}
+
+          {/* Add Work Order Button - Hide for MANAGER */}
+          {!isReadOnly && (
+            <button
+              onClick={handleAddWorkOrder}
+              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 font-medium shadow-md"
+            >
+              ➕ Add Work Order
+            </button>
+          )}
         </div>
 
-        <button
-          onClick={handleAddWorkOrder}
-          className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 font-medium"
-        >
-          ➕ Add Work Order
-        </button>
+        {/* Read-Only Info Banner */}
+        {isReadOnly && (
+          <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <span className="text-yellow-600 text-xl">ℹ️</span>
+              <div>
+                <p className="font-semibold text-yellow-900">Read-Only Mode</p>
+                <p className="text-sm text-yellow-700 mt-1">
+                  You can view work orders but cannot create, edit, or delete
+                  them.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Vessel Info Card */}
@@ -519,6 +553,7 @@ export default function VesselWorkOrders() {
               {filteredWorkOrders.length} work order
               {filteredWorkOrders.length !== 1 ? "s" : ""}
               {searchTerm && ` (filtered from ${workOrders.length})`}
+              {isReadOnly && " • Viewing only"}
             </p>
           </div>
         </div>
@@ -769,18 +804,28 @@ export default function VesselWorkOrders() {
                         <div className="flex space-x-2">
                           <button
                             onClick={() => handleEditWorkOrder(wo)}
-                            className="text-green-600 hover:text-green-900 transition-colors p-1 rounded hover:bg-green-50"
-                            title="Edit Work Order"
+                            className={`${
+                              isReadOnly
+                                ? "text-blue-600 hover:text-blue-900"
+                                : "text-green-600 hover:text-green-900"
+                            } transition-colors p-1 rounded hover:bg-gray-50`}
+                            title={
+                              isReadOnly ? "View Work Order" : "Edit Work Order"
+                            }
                           >
-                            ✏️
+                            {isReadOnly ? "👁️" : "✏️"}
                           </button>
-                          <button
-                            onClick={() => handleDeleteWorkOrder(wo)}
-                            className="text-red-600 hover:text-red-900 transition-colors p-1 rounded hover:bg-red-50"
-                            title="Delete Work Order"
-                          >
-                            🗑️
-                          </button>
+
+                          {/* Hide Delete button for MANAGER */}
+                          {!isReadOnly && (
+                            <button
+                              onClick={() => handleDeleteWorkOrder(wo)}
+                              className="text-red-600 hover:text-red-900 transition-colors p-1 rounded hover:bg-red-50"
+                              title="Delete Work Order"
+                            >
+                              🗑️
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -959,14 +1004,16 @@ export default function VesselWorkOrders() {
                                 <div className="text-center py-8 text-gray-500">
                                   <div className="text-4xl mb-2">📝</div>
                                   <p>No work details added yet</p>
-                                  <button
-                                    onClick={() =>
-                                      navigate(`/work-order/${wo.id}`)
-                                    }
-                                    className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
-                                  >
-                                    Add work details →
-                                  </button>
+                                  {!isReadOnly && (
+                                    <button
+                                      onClick={() =>
+                                        navigate(`/work-order/${wo.id}`)
+                                      }
+                                      className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
+                                    >
+                                      Add work details →
+                                    </button>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -1002,12 +1049,14 @@ export default function VesselWorkOrders() {
                 <p className="text-gray-400 text-sm mb-4">
                   This vessel doesn't have any work orders yet.
                 </p>
-                <button
-                  onClick={handleAddWorkOrder}
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"
-                >
-                  ➕ Add Work Order for {vessel.name}
-                </button>
+                {!isReadOnly && (
+                  <button
+                    onClick={handleAddWorkOrder}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"
+                  >
+                    ➕ Add Work Order for {vessel.name}
+                  </button>
+                )}
               </>
             )}
           </div>

@@ -6,6 +6,7 @@ import {
   type WorkOrder,
   type Vessel,
 } from "../../lib/supabase";
+import { useAuth } from "../../hooks/useAuth";
 
 interface WorkDetailsWithProgress extends WorkDetails {
   current_progress?: number;
@@ -65,6 +66,7 @@ interface BASTPs {
 
 export default function WorkVerification() {
   const navigate = useNavigate();
+  const { isReadOnly } = useAuth();
 
   const [completedWorkDetails, setCompletedWorkDetails] = useState<
     WorkDetailsWithProgress[]
@@ -147,6 +149,14 @@ export default function WorkVerification() {
     setVesselSearchTerm("");
     setSelectedVesselId(0);
     setShowVesselDropdown(false);
+  };
+
+  const handleVerifyClick = (workDetailsId: number) => {
+    if (isReadOnly) {
+      alert("❌ You don't have permission to verify work details.");
+      return;
+    }
+    navigate(`/work-verification/verify/${workDetailsId}`);
   };
 
   const fetchData = useCallback(async () => {
@@ -477,7 +487,9 @@ export default function WorkVerification() {
             Work Verification
           </h1>
           <p className="text-gray-600 mt-2">
-            Verify completed work details (100% progress) • Grouped by BASTP
+            {isReadOnly
+              ? "View completed work details (100% progress) • Grouped by BASTP"
+              : "Verify completed work details (100% progress) • Grouped by BASTP"}
           </p>
         </div>
         <button
@@ -680,9 +692,11 @@ export default function WorkVerification() {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                         Progress
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                        Action
-                      </th>
+                      {!isReadOnly && (
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Action
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -740,16 +754,16 @@ export default function WorkVerification() {
                             </span>
                           )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <button
-                            onClick={() =>
-                              navigate(`/work-verification/verify/${wd.id}`)
-                            }
-                            className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
-                          >
-                            Verify
-                          </button>
-                        </td>
+                        {!isReadOnly && (
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <button
+                              onClick={() => handleVerifyClick(wd.id)}
+                              className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                            >
+                              Verify
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -862,9 +876,11 @@ export default function WorkVerification() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                   Progress
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                  Action
-                                </th>
+                                {!isReadOnly && (
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                    Action
+                                  </th>
+                                )}
                               </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
@@ -922,18 +938,16 @@ export default function WorkVerification() {
                                       </span>
                                     )}
                                   </td>
-                                  <td className="px-6 py-4 whitespace-nowrap">
-                                    <button
-                                      onClick={() =>
-                                        navigate(
-                                          `/work-verification/verify/${wd.id}`
-                                        )
-                                      }
-                                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
-                                    >
-                                      Verify
-                                    </button>
-                                  </td>
+                                  {!isReadOnly && (
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                      <button
+                                        onClick={() => handleVerifyClick(wd.id)}
+                                        className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                                      >
+                                        Verify
+                                      </button>
+                                    </td>
+                                  )}
                                 </tr>
                               ))}
                             </tbody>

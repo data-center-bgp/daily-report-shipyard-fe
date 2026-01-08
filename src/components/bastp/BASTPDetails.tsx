@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import type { BASTPWithDetails } from "../../types/bastp.types";
+import { useAuth } from "../../hooks/useAuth";
 
 export default function BASTPDetails() {
   const navigate = useNavigate();
+  const { isReadOnly } = useAuth();
   const { bastpId } = useParams<{ bastpId: string }>();
 
   const [bastp, setBastp] = useState<BASTPWithDetails | null>(null);
@@ -256,12 +258,14 @@ export default function BASTPDetails() {
           <p className="text-gray-600 mt-2">{bastp.number}</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate(`/bastp/edit/${bastp.id}`)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-          >
-            ✏️ Edit
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={() => navigate(`/bastp/edit/${bastp.id}`)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+            >
+              ✏️ Edit
+            </button>
+          )}
           <button
             onClick={() => navigate("/bastp")}
             className="text-blue-600 hover:text-blue-800"
@@ -586,79 +590,81 @@ export default function BASTPDetails() {
       </div>
 
       {/* General Services Section */}
-      {bastp?.general_services && Array.isArray(bastp.general_services) && bastp.general_services.length > 0 && (
-        <div className="bg-white rounded-lg shadow">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">
-              🛠️ General Services
-            </h2>
-            <p className="text-sm text-gray-600 mt-1">
-              Services used during vessel work
-            </p>
-          </div>
-          <div className="p-6">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      #
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Service Name
-                    </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                      Total Days
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Remarks
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {bastp.general_services
-                    .sort(
-                      (a: any, b: any) =>
-                        (a.service_type?.display_order || 0) -
-                        (b.service_type?.display_order || 0)
-                    )
-                    .map((service: any, index: number) => (
-                      <tr key={service.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {index + 1}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {service.service_type?.service_name}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                            {service.total_days} day
-                            {service.total_days !== 1 ? "s" : ""}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm text-gray-600">
-                            {service.remarks || "-"}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Info Notice */}
-            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-800">
-                💡 <strong>Note:</strong> Pricing information is managed by
-                Finance during invoice creation.
+      {bastp?.general_services &&
+        Array.isArray(bastp.general_services) &&
+        bastp.general_services.length > 0 && (
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">
+                🛠️ General Services
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Services used during vessel work
               </p>
             </div>
+            <div className="p-6">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        #
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Service Name
+                      </th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                        Total Days
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Remarks
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {bastp.general_services
+                      .sort(
+                        (a: any, b: any) =>
+                          (a.service_type?.display_order || 0) -
+                          (b.service_type?.display_order || 0)
+                      )
+                      .map((service: any, index: number) => (
+                        <tr key={service.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {index + 1}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-medium text-gray-900">
+                              {service.service_type?.service_name}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                              {service.total_days} day
+                              {service.total_days !== 1 ? "s" : ""}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm text-gray-600">
+                              {service.remarks || "-"}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Info Notice */}
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  💡 <strong>Note:</strong> Pricing information is managed by
+                  Finance during invoice creation.
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* Document Viewer Modal */}
       {showDocumentModal && documentUrl && (

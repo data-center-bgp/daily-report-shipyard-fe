@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { openProgressEvidence } from "../../utils/progressEvidenceHandler";
 import type { WorkProgressWithDetails } from "../../types/progressTypes";
+import { useAuth } from "../../hooks/useAuth";
 
 // ==================== INTERFACES ====================
 
@@ -205,6 +206,7 @@ export default function WorkProgressTable({
   embedded = false,
 }: WorkProgressTableProps) {
   const navigate = useNavigate();
+  const { isReadOnly } = useAuth();
 
   // ==================== STATE - Data ====================
   const [workProgress, setWorkProgress] = useState<WorkProgressWithDetails[]>(
@@ -637,6 +639,10 @@ export default function WorkProgressTable({
   const handleAddProgressFromCurrent = async (
     progressItem: WorkProgressWithDetails
   ) => {
+    if (isReadOnly) {
+      alert("❌ You don't have permission to add progress reports.");
+      return;
+    }
     const workDetailsId = progressItem.work_details.id;
 
     if (!canAddProgress(workDetailsId)) {
@@ -722,6 +728,10 @@ export default function WorkProgressTable({
   };
 
   const handleAddProgressFromNoResults = () => {
+    if (isReadOnly) {
+      alert("❌ You don't have permission to add progress reports.");
+      return;
+    }
     navigate("/add-work-progress");
   };
 
@@ -1299,12 +1309,14 @@ export default function WorkProgressTable({
                 Clear Filters
               </button>
             )}
-            <button
-              onClick={handleAddProgressFromNoResults}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
-            >
-              ➕ Add Progress Report
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={handleAddProgressFromNoResults}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+              >
+                ➕ Add Progress Report
+              </button>
+            )}
           </div>
         </div>
       );
@@ -1318,9 +1330,11 @@ export default function WorkProgressTable({
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Progress
-                  <div className="text-xs text-gray-400 font-normal mt-1">
-                    (Click to add new)
-                  </div>
+                  {!isReadOnly && (
+                    <div className="text-xs text-gray-400 font-normal mt-1">
+                      (Click to add new)
+                    </div>
+                  )}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Work Details
@@ -1363,6 +1377,7 @@ export default function WorkProgressTable({
                         onAddProgress={handleAddProgressFromCurrent}
                         getProgressColor={getProgressColor}
                         getProgressIcon={getProgressIcon}
+                        isReadOnly={isReadOnly}
                       />
                     </td>
                     <td className="px-6 py-4">
@@ -1424,12 +1439,14 @@ export default function WorkProgressTable({
                 Track detailed progress reports for work activities
               </p>
             </div>
-            <button
-              onClick={() => navigate("/add-work-progress")}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
-            >
-              ➕ Add Progress Report
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={() => navigate("/add-work-progress")}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+              >
+                ➕ Add Progress Report
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -1468,6 +1485,7 @@ function ProgressCell({
   onAddProgress,
   getProgressColor,
   getProgressIcon,
+  isReadOnly,
 }: {
   item: WorkProgressWithDetails;
   isCompleted: boolean;
@@ -1475,8 +1493,9 @@ function ProgressCell({
   onAddProgress: (item: WorkProgressWithDetails) => void;
   getProgressColor: (progress: number) => string;
   getProgressIcon: (progress: number) => string;
+  isReadOnly: boolean;
 }) {
-  if (isCompleted) {
+  if (isCompleted || isReadOnly) {
     return (
       <div className="w-full text-left p-2 rounded-lg bg-gray-50 border border-gray-200 cursor-not-allowed opacity-75">
         <div className="flex items-center">

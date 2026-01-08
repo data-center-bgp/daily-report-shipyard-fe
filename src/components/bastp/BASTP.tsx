@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import type { BASTPWithDetails, BASTPStatus } from "../../types/bastp.types";
+import { useAuth } from "../../hooks/useAuth";
 
 export default function BASTP() {
   const navigate = useNavigate();
+  const { isReadOnly } = useAuth();
   const [bastps, setBastps] = useState<BASTPWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -212,12 +214,14 @@ export default function BASTP() {
           </p>
         </div>
 
-        <button
-          onClick={() => navigate("/bastp/create")}
-          className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-3 rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
-        >
-          ➕ Create BASTP
-        </button>
+        {!isReadOnly && (
+          <button
+            onClick={() => navigate("/bastp/create")}
+            className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-3 rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
+          >
+            ➕ Create BASTP
+          </button>
+        )}
       </div>
 
       {/* Error Message */}
@@ -370,12 +374,14 @@ export default function BASTP() {
                       >
                         View
                       </button>
-                      <button
-                        onClick={() => navigate(`/bastp/edit/${bastp.id}`)}
-                        className="text-indigo-600 hover:text-indigo-900"
-                      >
-                        Edit
-                      </button>
+                      {!isReadOnly && (
+                        <button
+                          onClick={() => navigate(`/bastp/edit/${bastp.id}`)}
+                          className="text-indigo-600 hover:text-indigo-900"
+                        >
+                          Edit
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -386,12 +392,14 @@ export default function BASTP() {
           <div className="text-center py-12">
             <span className="text-gray-400 text-4xl mb-4 block">📋</span>
             <p className="text-gray-500 text-lg">No BASTPs found</p>
-            <button
-              onClick={() => navigate("/bastp/create")}
-              className="mt-4 text-blue-600 hover:text-blue-800"
-            >
-              Create your first BASTP
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={() => navigate("/bastp/create")}
+                className="mt-4 text-blue-600 hover:text-blue-800"
+              >
+                Create your first BASTP
+              </button>
+            )}
           </div>
         )}
       </div>

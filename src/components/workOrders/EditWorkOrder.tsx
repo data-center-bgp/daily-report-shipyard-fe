@@ -7,6 +7,7 @@ import {
   type Kapro,
 } from "../../lib/supabase";
 import { ActivityLogService } from "../../services/activityLogService";
+import { useAuth } from "../../hooks/useAuth";
 
 interface WorkOrderWithVessel extends WorkOrder {
   vessel?: Vessel;
@@ -16,6 +17,7 @@ interface WorkOrderWithVessel extends WorkOrder {
 export default function EditWorkOrder() {
   const navigate = useNavigate();
   const { workOrderId } = useParams<{ workOrderId: string }>();
+  const { isReadOnly } = useAuth();
 
   const [workOrder, setWorkOrder] = useState<WorkOrderWithVessel | null>(null);
   const [vessels, setVessels] = useState<Vessel[]>([]);
@@ -31,12 +33,9 @@ export default function EditWorkOrder() {
 
   // Form data state
   const [formData, setFormData] = useState({
-    // Required fields
     vessel_id: "",
     shipyard_wo_number: "",
     shipyard_wo_date: "",
-
-    // Optional fields
     customer_wo_number: "",
     customer_wo_date: "",
     is_additional_wo: false,
@@ -199,15 +198,16 @@ export default function EditWorkOrder() {
   });
 
   const handleVesselSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isReadOnly) return; // Prevent editing in read-only mode
     setVesselSearchTerm(e.target.value);
     setShowVesselDropdown(true);
-    // Clear selection when typing
     if (formData.vessel_id) {
       setFormData((prev) => ({ ...prev, vessel_id: "" }));
     }
   };
 
   const handleVesselSelect = (vessel: Vessel) => {
+    if (isReadOnly) return; // Prevent editing in read-only mode
     setFormData((prev) => ({ ...prev, vessel_id: vessel.id.toString() }));
     setVesselSearchTerm(`${vessel.name} - ${vessel.type} (${vessel.company})`);
     setShowVesselDropdown(false);
@@ -216,6 +216,8 @@ export default function EditWorkOrder() {
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
+    if (isReadOnly) return; // Prevent editing in read-only mode
+
     const { name, value, type } = e.target;
 
     if (type === "checkbox") {
@@ -236,7 +238,6 @@ export default function EditWorkOrder() {
   };
 
   const validateForm = () => {
-    // Only these fields are required
     const required = ["vessel_id", "shipyard_wo_number", "shipyard_wo_date"];
 
     for (const field of required) {
@@ -247,7 +248,6 @@ export default function EditWorkOrder() {
       }
     }
 
-    // Validate dates if both are provided
     if (formData.customer_wo_date && formData.shipyard_wo_date) {
       const customerDate = new Date(formData.customer_wo_date);
       const shipyardDate = new Date(formData.shipyard_wo_date);
@@ -265,6 +265,11 @@ export default function EditWorkOrder() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (isReadOnly) {
+      alert("You don't have permission to edit work orders");
+      return;
+    }
+
     if (!validateForm() || !workOrderId) {
       return;
     }
@@ -273,7 +278,6 @@ export default function EditWorkOrder() {
     setError(null);
 
     try {
-      // Get old data first for activity log
       const { data: oldData } = await supabase
         .from("work_order")
         .select("*")
@@ -311,7 +315,6 @@ export default function EditWorkOrder() {
         throw new Error("No data returned from work order update");
       }
 
-      // Log the activity
       await ActivityLogService.logActivity({
         action: "update",
         tableName: "work_order",
@@ -321,7 +324,6 @@ export default function EditWorkOrder() {
         description: `Updated work order ${data.shipyard_wo_number}`,
       });
 
-      // Navigate back to vessel work orders or dashboard
       const vesselId = formData.vessel_id;
       if (vesselId) {
         navigate(`/vessel/${vesselId}/work-orders`, {
@@ -433,24 +435,31 @@ export default function EditWorkOrder() {
       <div className="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-10 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
-            <div className="flex items-center">
+            <div className="flex items-center gap-4">
               <button
                 onClick={handleCancel}
-                className="mr-4 text-slate-600 hover:text-slate-900 transition-colors p-2 rounded-lg hover:bg-slate-100"
+                className="text-slate-600 hover:text-slate-900 transition-colors p-2 rounded-lg hover:bg-slate-100"
               >
                 ← Back
               </button>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
-                  Edit Work Order
+                  {isReadOnly ? "View Work Order" : "Edit Work Order"}
                 </h1>
                 <p className="text-sm text-slate-600">
                   {workOrder.shipyard_wo_number} • {workOrder.vessel?.name}
                 </p>
               </div>
             </div>
-            <div className="text-sm text-slate-600 bg-gradient-to-r from-slate-50 to-gray-50 px-3 py-2 rounded-lg border">
-              Created: {formatDate(workOrder.created_at)}
+            <div className="flex items-center gap-3">
+              {isReadOnly && (
+                <span className="px-3 py-1.5 bg-yellow-100 text-yellow-800 text-sm font-medium rounded-full border border-yellow-200">
+                  🔒 Read Only
+                </span>
+              )}
+              <div className="text-sm text-slate-600 bg-gradient-to-r from-slate-50 to-gray-50 px-3 py-2 rounded-lg border">
+                Created: {formatDate(workOrder.created_at)}
+              </div>
             </div>
           </div>
         </div>
@@ -459,6 +468,24 @@ export default function EditWorkOrder() {
       {/* Main Content */}
       <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="bg-white shadow-lg rounded-xl border border-slate-200/50 overflow-hidden">
+          {/* Read-Only Warning Banner */}
+          {isReadOnly && (
+            <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border-b border-yellow-200 p-4">
+              <div className="flex items-start gap-3">
+                <span className="text-yellow-600 text-xl">ℹ️</span>
+                <div>
+                  <p className="font-semibold text-yellow-900">
+                    Read-Only Mode
+                  </p>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    You are viewing this work order in read-only mode. You don't
+                    have permission to make changes.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Error Message */}
           {error && (
             <div className="p-6 border-b border-slate-200">
@@ -519,19 +546,20 @@ export default function EditWorkOrder() {
                 type="text"
                 value={vesselSearchTerm}
                 onChange={handleVesselSearch}
-                onFocus={() => setShowVesselDropdown(true)}
+                onFocus={() => !isReadOnly && setShowVesselDropdown(true)}
                 placeholder="Search vessel by name, type, or company..."
-                className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors"
+                disabled={isReadOnly}
+                className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
                 required={!formData.vessel_id}
               />
-              {!formData.vessel_id && vesselSearchTerm && (
+              {!formData.vessel_id && vesselSearchTerm && !isReadOnly && (
                 <p className="text-xs text-amber-600 mt-1">
                   Please select a vessel from the dropdown
                 </p>
               )}
 
               {/* Dropdown */}
-              {showVesselDropdown && (
+              {showVesselDropdown && !isReadOnly && (
                 <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                   {filteredVessels.length > 0 ? (
                     filteredVessels.map((vessel) => (
@@ -559,12 +587,6 @@ export default function EditWorkOrder() {
                   )}
                 </div>
               )}
-
-              {vessels.length === 0 && (
-                <p className="text-sm text-amber-600 mt-1">
-                  No vessels available. Please add vessels first.
-                </p>
-              )}
             </div>
 
             {/* Required Fields */}
@@ -585,7 +607,8 @@ export default function EditWorkOrder() {
                     name="shipyard_wo_number"
                     value={formData.shipyard_wo_number}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors"
+                    disabled={isReadOnly}
+                    className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
                     placeholder="e.g., SY-2024-001"
                     required
                   />
@@ -602,7 +625,8 @@ export default function EditWorkOrder() {
                     name="shipyard_wo_date"
                     value={formData.shipyard_wo_date}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors"
+                    disabled={isReadOnly}
+                    className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
                     required
                   />
                 </div>
@@ -617,7 +641,8 @@ export default function EditWorkOrder() {
                 id="is_additional_wo"
                 checked={formData.is_additional_wo}
                 onChange={handleInputChange}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
+                disabled={isReadOnly}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
               />
               <label
                 htmlFor="is_additional_wo"
@@ -637,7 +662,8 @@ export default function EditWorkOrder() {
                 name="kapro_id"
                 value={formData.kapro_id}
                 onChange={handleInputChange}
-                className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors"
+                disabled={isReadOnly}
+                className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
               >
                 <option value="">Select Kapro</option>
                 {kapros.map((kapro) => (
@@ -646,11 +672,6 @@ export default function EditWorkOrder() {
                   </option>
                 ))}
               </select>
-              {kapros.length === 0 && (
-                <p className="text-sm text-amber-600 mt-1">
-                  No kapros available.
-                </p>
-              )}
             </div>
 
             {/* Optional Fields */}
@@ -672,7 +693,8 @@ export default function EditWorkOrder() {
                   name="work_type"
                   value={formData.work_type}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors"
+                  disabled={isReadOnly}
+                  className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
                 >
                   <option value="">Select Work Type</option>
                   <option value="Docking">Docking</option>
@@ -687,9 +709,6 @@ export default function EditWorkOrder() {
                   </option>
                   <option value="Repair">Repair</option>
                 </select>
-                <p className="text-xs text-slate-500 mt-1">
-                  Select the type of work to be performed
-                </p>
               </div>
 
               {/* Work Location */}
@@ -706,12 +725,10 @@ export default function EditWorkOrder() {
                   name="work_location"
                   value={formData.work_location}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors"
+                  disabled={isReadOnly}
+                  className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
                   placeholder="e.g., Dock 1, Workshop Area A"
                 />
-                <p className="text-xs text-slate-500 mt-1">
-                  Specify the general location where work will be performed
-                </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -729,7 +746,8 @@ export default function EditWorkOrder() {
                     name="customer_wo_number"
                     value={formData.customer_wo_number}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors"
+                    disabled={isReadOnly}
+                    className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
                     placeholder="e.g., WO-2024-001"
                   />
                 </div>
@@ -748,7 +766,8 @@ export default function EditWorkOrder() {
                     name="customer_wo_date"
                     value={formData.customer_wo_date}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors"
+                    disabled={isReadOnly}
+                    className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
                   />
                 </div>
               </div>
@@ -759,25 +778,27 @@ export default function EditWorkOrder() {
               <button
                 type="button"
                 onClick={handleCancel}
-                disabled={loading}
-                className="px-6 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-gradient-to-r hover:from-slate-50 hover:to-gray-50 transition-all duration-200 disabled:opacity-50 font-medium shadow-sm"
+                className="px-6 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-gradient-to-r hover:from-slate-50 hover:to-gray-50 transition-all duration-200 font-medium shadow-sm"
               >
-                Cancel
+                {isReadOnly ? "← Back" : "Cancel"}
               </button>
-              <button
-                type="submit"
-                disabled={loading || vessels.length === 0}
-                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-semibold shadow-lg"
-              >
-                {loading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Updating...
-                  </>
-                ) : (
-                  <>💾 Update Work Order</>
-                )}
-              </button>
+
+              {!isReadOnly && (
+                <button
+                  type="submit"
+                  disabled={loading || vessels.length === 0}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-semibold shadow-lg"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Updating...
+                    </>
+                  ) : (
+                    <>💾 Update Work Order</>
+                  )}
+                </button>
+              )}
             </div>
           </form>
         </div>

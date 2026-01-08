@@ -4,10 +4,12 @@ import { supabase } from "../../lib/supabase";
 import type { Invoice } from "../../types/invoiceTypes";
 import { useReactToPrint } from "react-to-print";
 import InvoicePrint from "./InvoicePrint";
+import { useAuth } from "../../hooks/useAuth";
 
 export default function InvoiceDetails() {
   const { invoiceId } = useParams<{ invoiceId: string }>();
   const navigate = useNavigate();
+  const { isReadOnly } = useAuth();
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
@@ -272,12 +274,14 @@ export default function InvoiceDetails() {
           >
             🖨️ Print Invoice
           </button>
-          <button
-            onClick={() => navigate(`/invoices/edit/${invoice.id}`)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            ✏️ Edit Invoice
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={() => navigate(`/invoices/edit/${invoice.id}`)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              ✏️ Edit Invoice
+            </button>
+          )}
         </div>
       </div>
 

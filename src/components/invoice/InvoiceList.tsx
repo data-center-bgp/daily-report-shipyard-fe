@@ -3,9 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import type { Invoice } from "../../types/invoiceTypes";
 import type { BASTPWithDetails } from "../../types/bastp.types";
+import { useAuth } from "../../hooks/useAuth";
 
 export default function InvoiceList() {
   const navigate = useNavigate();
+  const { isReadOnly } = useAuth();
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [readyBASTPs, setReadyBASTPs] = useState<BASTPWithDetails[]>([]);
@@ -291,7 +293,9 @@ export default function InvoiceList() {
             Invoice Management
           </h1>
           <p className="text-gray-600 mt-2">
-            Manage invoices from verified BASTP
+            {isReadOnly
+              ? "View invoices from verified BASTP"
+              : "Manage invoices from verified BASTP"}
           </p>
         </div>
       </div>
@@ -336,16 +340,18 @@ export default function InvoiceList() {
             >
               💰 Invoices ({stats.total})
             </button>
-            <button
-              onClick={() => setViewMode("ready-bastp")}
-              className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                viewMode === "ready-bastp"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              📋 Ready for Invoice ({stats.ready})
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={() => setViewMode("ready-bastp")}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  viewMode === "ready-bastp"
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                📋 Ready for Invoice ({stats.ready})
+              </button>
+            )}
           </nav>
         </div>
 
@@ -566,123 +572,126 @@ export default function InvoiceList() {
           </div>
         ) : (
           /* Ready BASTP Table */
-          <div className="overflow-x-auto">
-            {filteredBASTPs.length > 0 ? (
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      BASTP Info
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Vessel
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Document
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Dates
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Work Details
-                    </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredBASTPs.map((bastp) => (
-                    <tr key={bastp.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
-                        <div className="text-sm">
-                          <div className="font-medium text-gray-900">
-                            {bastp.number}
+          !isReadOnly && (
+            <div className="overflow-x-auto">
+              {filteredBASTPs.length > 0 ? (
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        BASTP Info
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Vessel
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Document
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Dates
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Work Details
+                      </th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredBASTPs.map((bastp) => (
+                      <tr key={bastp.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4">
+                          <div className="text-sm">
+                            <div className="font-medium text-gray-900">
+                              {bastp.number}
+                            </div>
+                            <div className="text-xs text-green-600 font-medium mt-1">
+                              ✓ Ready for Invoice
+                            </div>
                           </div>
-                          <div className="text-xs text-green-600 font-medium mt-1">
-                            ✓ Ready for Invoice
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm">
+                            <div className="font-medium text-gray-900">
+                              {bastp.vessel?.name}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {bastp.vessel?.type}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              {bastp.vessel?.company}
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm">
-                          <div className="font-medium text-gray-900">
-                            {bastp.vessel?.name}
+                        </td>
+                        <td className="px-6 py-4">
+                          {bastp.storage_path ? (
+                            <button
+                              onClick={() =>
+                                handleViewDocument(
+                                  bastp.storage_path || null,
+                                  bastp.number
+                                )
+                              }
+                              disabled={viewingDocument}
+                              className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              📄 View BASTP
+                            </button>
+                          ) : (
+                            <span className="text-xs text-gray-400">
+                              No document
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm space-y-1">
+                            <div className="text-xs">
+                              <span className="text-gray-500">BASTP:</span>{" "}
+                              <span className="font-medium">
+                                {formatDate(bastp.date)}
+                              </span>
+                            </div>
+                            {bastp.delivery_date && (
+                              <div className="text-xs text-gray-500">
+                                Delivery: {formatDate(bastp.delivery_date)}
+                              </div>
+                            )}
                           </div>
-                          <div className="text-xs text-gray-500">
-                            {bastp.vessel?.type}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-medium text-gray-900">
+                            {bastp.bastp_work_details?.length || 0} work
+                            detail(s)
                           </div>
-                          <div className="text-xs text-gray-400">
-                            {bastp.vessel?.company}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        {bastp.storage_path ? (
+                        </td>
+                        <td className="px-6 py-4 text-center">
                           <button
                             onClick={() =>
-                              handleViewDocument(
-                                bastp.storage_path || null,
-                                bastp.number
-                              )
+                              navigate(`/invoices/create/${bastp.id}`)
                             }
-                            disabled={viewingDocument}
-                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
                           >
-                            📄 View BASTP
+                            ➕ Create Invoice
                           </button>
-                        ) : (
-                          <span className="text-xs text-gray-400">
-                            No document
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm space-y-1">
-                          <div className="text-xs">
-                            <span className="text-gray-500">BASTP:</span>{" "}
-                            <span className="font-medium">
-                              {formatDate(bastp.date)}
-                            </span>
-                          </div>
-                          {bastp.delivery_date && (
-                            <div className="text-xs text-gray-500">
-                              Delivery: {formatDate(bastp.delivery_date)}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {bastp.bastp_work_details?.length || 0} work detail(s)
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() =>
-                            navigate(`/invoices/create/${bastp.id}`)
-                          }
-                          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                        >
-                          ➕ Create Invoice
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div className="text-center py-12">
-                <span className="text-gray-400 text-4xl mb-4 block">📋</span>
-                <p className="text-gray-500 text-lg mb-4">
-                  No BASTP ready for invoicing
-                </p>
-                <p className="text-gray-400 text-sm">
-                  BASTPs must be verified and have document uploaded
-                </p>
-              </div>
-            )}
-          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="text-center py-12">
+                  <span className="text-gray-400 text-4xl mb-4 block">📋</span>
+                  <p className="text-gray-500 text-lg mb-4">
+                    No BASTP ready for invoicing
+                  </p>
+                  <p className="text-gray-400 text-sm">
+                    BASTPs must be verified and have document uploaded
+                  </p>
+                </div>
+              )}
+            </div>
+          )
         )}
       </div>
 

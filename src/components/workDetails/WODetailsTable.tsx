@@ -48,7 +48,7 @@ export default function WODetailsTable({
   onRefresh,
   embedded = false,
 }: WorkDetailsTableProps) {
-  const { profile } = useAuth();
+  const { profile, isReadOnly } = useAuth();
   const navigate = useNavigate();
 
   // State Management
@@ -631,9 +631,12 @@ export default function WODetailsTable({
         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
           Progress
         </th>
-        <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
-          Actions
-        </th>
+        {/* Hide Actions column for read-only users */}
+        {!isReadOnly && (
+          <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
+            Actions
+          </th>
+        )}
       </tr>
     </thead>
   );
@@ -750,35 +753,36 @@ export default function WODetailsTable({
             </div>
           </td>
 
-          <td className="px-6 py-4 whitespace-nowrap text-center">
-            <div className="flex justify-center gap-2">
-              <button
-                onClick={() => handleEditWorkDetails(detail.id)}
-                className="text-blue-600 hover:text-blue-900 transition-colors p-1 rounded hover:bg-blue-50"
-                title="Edit"
-                aria-label={`Edit ${detail.description}`} // ✅ ADDED
-              >
-                ✏️
-              </button>
-              <button
-                onClick={() => handleDeleteWorkDetails(detail)}
-                className="text-red-600 hover:text-red-900 transition-colors p-1 rounded hover:bg-red-50"
-                title="Delete"
-                aria-label={`Delete ${detail.description}`} // ✅ ADDED
-              >
-                🗑️
-              </button>
-            </div>
-          </td>
+          {!isReadOnly && (
+            <td className="px-6 py-4 whitespace-nowrap text-center">
+              <div className="flex justify-center gap-2">
+                <button
+                  onClick={() => handleEditWorkDetails(detail.id)}
+                  className="text-blue-600 hover:text-blue-900 transition-colors p-1 rounded hover:bg-blue-50"
+                  title="Edit"
+                  aria-label={`Edit ${detail.description}`}
+                >
+                  ✏️
+                </button>
+                <button
+                  onClick={() => handleDeleteWorkDetails(detail)}
+                  className="text-red-600 hover:text-red-900 transition-colors p-1 rounded hover:bg-red-50"
+                  title="Delete"
+                  aria-label={`Delete ${detail.description}`}
+                >
+                  🗑️
+                </button>
+              </div>
+            </td>
+          )}
         </tr>
 
         {isExpanded && (
           <tr className="bg-gray-50">
-            <td colSpan={7} className="px-0 py-0">
+            <td colSpan={isReadOnly ? 6 : 7} className="px-0 py-0">
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-t border-b border-blue-200">
                 <div className="px-6 py-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {/* ... (rest of expandable content remains the same) ... */}
                     {/* Full Description */}
                     <div className="lg:col-span-2">
                       <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
@@ -948,12 +952,14 @@ export default function WODetailsTable({
                     >
                       📊 View Progress ({detail.progress_count || 0})
                     </button>
-                    <button
-                      onClick={() => handleAddProgress(detail.id)}
-                      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm"
-                    >
-                      ➕ Add Progress
-                    </button>
+                    {!isReadOnly && (
+                      <button
+                        onClick={() => handleAddProgress(detail.id)}
+                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm"
+                      >
+                        ➕ Add Progress
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1308,7 +1314,7 @@ export default function WODetailsTable({
           ? "No work details found for the selected vessel."
           : "Create work details to track and manage work tasks."}
       </p>
-      {!workDetailsSearchTerm && (
+      {!workDetailsSearchTerm && !isReadOnly && (
         <button
           onClick={handleAddWorkDetails}
           className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 inline-flex items-center gap-2 shadow-md"
@@ -1359,14 +1365,15 @@ export default function WODetailsTable({
             >
               🔄 Refresh
             </button>
-            {(profile?.role === "PPIC" || profile?.role === "MASTER") && (
-              <button
-                onClick={handleAddWorkDetails}
-                className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-2 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center gap-2 shadow-md"
-              >
-                ➕ Add Work Details
-              </button>
-            )}
+            {!isReadOnly &&
+              (profile?.role === "PPIC" || profile?.role === "MASTER") && (
+                <button
+                  onClick={handleAddWorkDetails}
+                  className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-2 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center gap-2 shadow-md"
+                >
+                  ➕ Add Work Details
+                </button>
+              )}
           </div>
         </div>
       )}
@@ -1506,6 +1513,7 @@ export default function WODetailsTable({
               </select>
 
               {embedded &&
+                !isReadOnly &&
                 (profile?.role === "PPIC" || profile?.role === "MASTER") && (
                   <button
                     onClick={handleAddWorkDetails}

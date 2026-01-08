@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase, type Kapro } from "../../lib/supabase";
+import { useAuth } from "../../hooks/useAuth";
 
 interface WorkOrderStats {
   totalWorkOrders: number;
@@ -58,6 +59,7 @@ export default function WorkOrderDashboard() {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const { isReadOnly } = useAuth();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -449,12 +451,14 @@ export default function WorkOrderDashboard() {
           >
             🔄 Refresh
           </button>
-          <button
-            onClick={handleAddWorkOrder}
-            className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-          >
-            ➕ Add Work Order
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={handleAddWorkOrder}
+              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+            >
+              ➕ Add Work Order
+            </button>
+          )}
         </div>
       </div>
 

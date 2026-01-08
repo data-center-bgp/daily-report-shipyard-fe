@@ -19,7 +19,14 @@ export interface UserProfile {
   name: string;
   email: string;
   company: string;
-  role: "MASTER" | "PPIC" | "PRODUCTION" | "OPERATION" | "ADMIN" | "FINANCE";
+  role:
+    | "MASTER"
+    | "PPIC"
+    | "PRODUCTION"
+    | "OPERATION"
+    | "ADMIN"
+    | "FINANCE"
+    | "MANAGER";
   auth_user_id: string;
 }
 
@@ -35,6 +42,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   hasRole: (roles: string | string[]) => boolean;
   canAccess: (feature: string) => boolean;
+  isReadOnly: boolean; // NEW: Simple read-only flag
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -67,10 +75,25 @@ const FEATURE_ACCESS = {
     "MANAGER",
   ],
   progress: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "MANAGER"],
+  verification: [
+    "MASTER",
+    "PPIC",
+    "PRODUCTION",
+    "OPERATION",
+    "ADMIN",
+    "MANAGER",
+  ],
+  bastp: [
+    "MASTER",
+    "PPIC",
+    "PRODUCTION",
+    "OPERATION",
+    "ADMIN",
+    "FINANCE",
+    "MANAGER",
+  ],
   vessels: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "MANAGER"],
   invoices: ["MASTER", "FINANCE", "MANAGER"],
-  createInvoice: ["MASTER", "FINANCE"],
-  editInvoice: ["MASTER", "FINANCE"],
   userManagement: ["MASTER"],
   systemSettings: ["MASTER"],
   reports: [
@@ -83,6 +106,7 @@ const FEATURE_ACCESS = {
     "MANAGER",
   ],
   exportData: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "MANAGER"],
+  activityLogs: ["MASTER", "MANAGER"],
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -91,11 +115,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // FIXED: Use ref to track if initial load is complete
   const isInitializing = useRef(true);
   const isMounted = useRef(true);
 
-  // FIXED: Stable fetchProfile with proper timeout
+  // NEW: Compute read-only status
+  const isReadOnly = profile?.role === "MANAGER";
+
   const fetchProfile = useCallback(
     async (userId: string, retryCount = 0): Promise<UserProfile | null> => {
       const MAX_RETRIES = 3;
@@ -220,7 +245,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return allowedRoles?.includes(profile.role) ?? false;
   };
 
-  // FIXED: Simplified initialization without race conditions
   useEffect(() => {
     isMounted.current = true;
 
@@ -281,19 +305,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initAuth();
 
-    // FIXED: Simplified auth listener
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted.current) return;
 
-      // Skip during initialization
       if (isInitializing.current) {
         console.log("⏭️ Skipping auth change during init:", event);
         return;
       }
 
-      // ✅ Ignore token refresh - profile already loaded
       if (event === "TOKEN_REFRESHED") {
         console.log("⏭️ Token refreshed, keeping existing profile");
         setSession(session);
@@ -306,8 +327,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
 
-      // Profile is already fetched during initAuth() and signIn()
-      // Only clear profile on sign out
       if (event === "SIGNED_OUT" || !session?.user) {
         setProfile(null);
       }
@@ -335,6 +354,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signOut,
         hasRole,
         canAccess,
+        isReadOnly, // NEW: Expose read-only flag
       }}
     >
       {children}
