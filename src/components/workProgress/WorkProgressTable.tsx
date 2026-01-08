@@ -15,95 +15,9 @@ interface VesselInfo {
   company: string;
 }
 
-interface WorkOrderInfo {
-  id: number;
-  shipyard_wo_number: string;
-  shipyard_wo_date: string;
-  vessel: VesselInfo;
-}
-
-interface WorkDetailsInfo {
-  id: number;
-  description: string;
-  location: string;
-  pic: string;
-  planned_start_date: string;
-  target_close_date: string;
-  period_close_target: string;
-  work_order: WorkOrderInfo;
-}
-
 interface WorkProgressTableProps {
   workDetailsId?: number;
   embedded?: boolean;
-}
-
-interface SupabaseVesselData {
-  id: number;
-  name: string;
-  type: string;
-  company: string;
-}
-
-interface SupabaseWorkOrderData {
-  id: number;
-  shipyard_wo_number: string;
-  shipyard_wo_date: string;
-  vessel: SupabaseVesselData | SupabaseVesselData[];
-}
-
-interface SupabaseWorkDetailsData {
-  id: number;
-  description: string;
-  location?:
-    | {
-        id: number;
-        location: string;
-      }
-    | Array<{
-        id: number;
-        location: string;
-      }>;
-  pic: string;
-  planned_start_date: string;
-  target_close_date: string;
-  period_close_target: string;
-  work_order: SupabaseWorkOrderData | SupabaseWorkOrderData[];
-}
-
-interface SupabaseWorkProgressResponse {
-  id: number;
-  progress_percentage: number;
-  report_date: string;
-  notes?: string;
-  evidence_url?: string;
-  storage_path?: string;
-  created_at: string;
-  work_details_id: number;
-  user_id?: number;
-  work_details: {
-    id: number;
-    description: string;
-    location?: {
-      id: number;
-      location: string;
-    };
-    work_order: {
-      id: number;
-      shipyard_wo_number: string;
-      customer_wo_number?: string;
-      work_type?: string;
-      work_location?: string;
-      is_additional_wo?: boolean;
-      kapro_id?: number;
-      vessel: SupabaseVesselData | SupabaseVesselData[];
-    };
-  }[];
-  profiles?: {
-    id: number;
-    name: string;
-    email: string;
-  }[];
 }
 
 interface Kapro {
@@ -121,83 +35,6 @@ interface WorkOrderFullData {
   is_additional_wo?: boolean;
   kapro_id?: number;
 }
-
-// ==================== TRANSFORMATION FUNCTIONS ====================
-
-const transformSupabaseWorkOrder = (
-  data: SupabaseWorkOrderData
-): WorkOrderInfo => {
-  return {
-    id: data.id,
-    shipyard_wo_number: data.shipyard_wo_number,
-    shipyard_wo_date: data.shipyard_wo_date,
-    vessel: Array.isArray(data.vessel) ? data.vessel[0] : data.vessel,
-  };
-};
-
-const transformSupabaseWorkDetails = (
-  data: SupabaseWorkDetailsData
-): WorkDetailsInfo => {
-  const locationValue = data.location
-    ? Array.isArray(data.location)
-      ? data.location[0]?.location || ""
-      : data.location.location || ""
-    : "";
-
-  return {
-    id: data.id,
-    description: data.description,
-    location: locationValue,
-    pic: data.pic,
-    planned_start_date: data.planned_start_date,
-    target_close_date: data.target_close_date,
-    period_close_target: data.period_close_target,
-    work_order: transformSupabaseWorkOrder(
-      Array.isArray(data.work_order) ? data.work_order[0] : data.work_order
-    ),
-  };
-};
-
-const transformSupabaseWorkProgress = (
-  data: SupabaseWorkProgressResponse
-): WorkProgressWithDetails => {
-  const workDetails = Array.isArray(data.work_details)
-    ? data.work_details[0]
-    : data.work_details;
-  const profiles = Array.isArray(data.profiles)
-    ? data.profiles[0]
-    : data.profiles;
-
-  return {
-    id: data.id,
-    progress_percentage: data.progress_percentage,
-    report_date: data.report_date,
-    notes: data.notes,
-    evidence_url: data.evidence_url,
-    storage_path: data.storage_path,
-    created_at: data.created_at,
-    work_details_id: data.work_details_id,
-    user_id: data.user_id ?? 0,
-    work_details: {
-      id: workDetails.id,
-      description: workDetails.description,
-      work_location: workDetails.work_order.work_location || "",
-      location: workDetails.location
-        ? Array.isArray(workDetails.location)
-          ? workDetails.location[0]
-          : workDetails.location
-        : undefined,
-      work_order: {
-        id: workDetails.work_order.id,
-        shipyard_wo_number: workDetails.work_order.shipyard_wo_number,
-        vessel: Array.isArray(workDetails.work_order.vessel)
-          ? workDetails.work_order.vessel[0]
-          : workDetails.work_order.vessel,
-      },
-    },
-    profiles: profiles,
-  };
-};
 
 // ==================== MAIN COMPONENT ====================
 
@@ -445,45 +282,58 @@ export default function WorkProgressTable({
       setLoading(true);
       setError(null);
 
+      // ✅ STEP 1: Fetch all profiles first using RPC function
+      const { data: allProfiles, error: profilesError } = await supabase.rpc(
+        "get_all_profiles"
+      );
+
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+      }
+
+      // Create a map for quick lookup
+      const profilesMap: Record<number, { id: number; name: string }> = {};
+      if (allProfiles) {
+        allProfiles.forEach((profile: { id: number; name: string }) => {
+          profilesMap[profile.id] = profile;
+        });
+      }
+
+      // ✅ STEP 2: Fetch work progress WITHOUT profiles join
       let query = supabase.from("work_progress").select(
         `
+        id,
+        progress_percentage,
+        report_date,
+        notes,
+        evidence_url,
+        storage_path,
+        created_at,
+        work_details_id,
+        user_id,
+        work_details!inner (
           id,
-          progress_percentage,
-          report_date,
-          notes,
-          evidence_url,
-          storage_path,
-          created_at,
-          work_details_id,
-          user_id,
-          work_details!inner (
+          description,
+          location:location_id (
             id,
-            description,
-            location:location_id (
-              id,
-              location
-            ),
-            work_order!inner (
-              id,
-              shipyard_wo_number,
-              customer_wo_number,
-              work_type,
-              work_location,
-              is_additional_wo,
-              kapro_id,
-              vessel!inner (
-                id,
-                name,
-                type
-              )
-            )
+            location
           ),
-          profiles (
+          work_order!inner (
             id,
-            name,
-            email
+            shipyard_wo_number,
+            customer_wo_number,
+            work_type,
+            work_location,
+            is_additional_wo,
+            kapro_id,
+            vessel!inner (
+              id,
+              name,
+              type
+            )
           )
-        `,
+        )
+      `,
         { count: "exact" }
       );
 
@@ -496,7 +346,6 @@ export default function WorkProgressTable({
           return;
         }
 
-        // Get work details for filtered work orders
         const workOrderIds = filteredWorkOrders.map((wo) => wo.id);
         const { data: workDetailsInOrders, error: wdError } = await supabase
           .from("work_details")
@@ -528,9 +377,45 @@ export default function WorkProgressTable({
 
       if (error) throw error;
 
-      const progressData = (data || []).map((item: any) =>
-        transformSupabaseWorkProgress(item as SupabaseWorkProgressResponse)
-      );
+      // ✅ STEP 3: Transform data and attach profiles from map
+      const progressData = (data || []).map((item: any) => {
+        const workDetails = Array.isArray(item.work_details)
+          ? item.work_details[0]
+          : item.work_details;
+
+        // ✅ Get profile from map using user_id
+        const profile = item.user_id ? profilesMap[item.user_id] : undefined;
+
+        return {
+          id: item.id,
+          progress_percentage: item.progress_percentage,
+          report_date: item.report_date,
+          notes: item.notes,
+          evidence_url: item.evidence_url,
+          storage_path: item.storage_path,
+          created_at: item.created_at,
+          work_details_id: item.work_details_id,
+          user_id: item.user_id ?? 0,
+          work_details: {
+            id: workDetails.id,
+            description: workDetails.description,
+            work_location: workDetails.work_order.work_location || "",
+            location: workDetails.location
+              ? Array.isArray(workDetails.location)
+                ? workDetails.location[0]
+                : workDetails.location
+              : undefined,
+            work_order: {
+              id: workDetails.work_order.id,
+              shipyard_wo_number: workDetails.work_order.shipyard_wo_number,
+              vessel: Array.isArray(workDetails.work_order.vessel)
+                ? workDetails.work_order.vessel[0]
+                : workDetails.work_order.vessel,
+            },
+          },
+          profiles: profile, // ✅ Now properly mapped from profilesMap
+        } as WorkProgressWithDetails;
+      });
 
       setWorkProgress(progressData);
       setTotalCount(count || 0);
@@ -657,36 +542,65 @@ export default function WorkProgressTable({
         .from("work_details")
         .select(
           `
+          id,
+          description,
+          location:location_id (
             id,
-            description,
-            location:location_id (
+            location
+          ),
+          pic,
+          planned_start_date,
+          target_close_date,
+          period_close_target,
+          work_order!inner (
+            id,
+            shipyard_wo_number,
+            shipyard_wo_date,
+            work_location,
+            vessel!inner (
               id,
-              location
-            ),
-            pic,
-            planned_start_date,
-            target_close_date,
-            period_close_target,
-            work_order!inner (
-              id,
-              shipyard_wo_number,
-              shipyard_wo_date,
-              work_location,
-              vessel!inner (
-                id,
-                name,
-                type,
-                company
-              )
+              name,
+              type,
+              company
             )
-          `
+          )
+        `
         )
         .eq("id", workDetailsId)
         .single();
 
       if (workDetailsError) throw workDetailsError;
 
-      const transformedData = transformSupabaseWorkDetails(workDetailsData);
+      // ✅ FIX: Transform the data inline instead of using deleted function
+      const workOrder = Array.isArray(workDetailsData.work_order)
+        ? workDetailsData.work_order[0]
+        : workDetailsData.work_order;
+
+      const vessel = Array.isArray(workOrder.vessel)
+        ? workOrder.vessel[0]
+        : workOrder.vessel;
+
+      const location = workDetailsData.location
+        ? Array.isArray(workDetailsData.location)
+          ? workDetailsData.location[0]
+          : workDetailsData.location
+        : null;
+
+      const transformedData = {
+        id: workDetailsData.id,
+        description: workDetailsData.description,
+        location: location?.location || "",
+        pic: workDetailsData.pic,
+        planned_start_date: workDetailsData.planned_start_date,
+        target_close_date: workDetailsData.target_close_date,
+        period_close_target: workDetailsData.period_close_target,
+        work_order: {
+          id: workOrder.id,
+          shipyard_wo_number: workOrder.shipyard_wo_number,
+          shipyard_wo_date: workOrder.shipyard_wo_date,
+          vessel: vessel,
+        },
+      };
 
       navigate(`/add-work-progress/${workDetailsId}`, {
         state: {
@@ -1636,19 +1550,12 @@ function NotesCell({ notes }: { notes?: string }) {
   );
 }
 
-function ReportedByCell({
-  profiles,
-}: {
-  profiles?: { name: string; email: string };
-}) {
+function ReportedByCell({ profiles }: { profiles?: { name: string } }) {
   return (
     <div>
       <div className="text-sm text-gray-900">
         {profiles?.name || "Unknown User"}
       </div>
-      {profiles?.email && (
-        <div className="text-xs text-gray-500">{profiles.email}</div>
-      )}
     </div>
   );
 }

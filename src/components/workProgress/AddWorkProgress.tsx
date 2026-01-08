@@ -445,78 +445,48 @@ export default function AddWorkProgress({
         storagePath = uploadResult.storagePath || "";
       }
 
+      // ✅ Get current authenticated user
       const {
         data: { user },
+        error: authError,
       } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error("User not authenticated");
+
+      if (authError || !user) {
+        console.error("Auth error:", authError);
+        throw new Error("User not authenticated. Please log in again.");
       }
 
+      // ✅ Get user profile from profiles table using auth_user_id
       const { data: userProfile, error: profileError } = await supabase
         .from("profiles")
-        .select("id")
+        .select("id, name, email")
         .eq("auth_user_id", user.id)
-        .maybeSingle();
+        .single();
 
       if (profileError) {
-        console.error("Error querying user profile:", profileError);
+        console.error("Profile fetch error:", profileError);
+
+        // If profile doesn't exist, this is a serious issue
         throw new Error(
-          `Failed to query user profile: ${profileError.message}`
+          "Your user profile was not found. Please contact the administrator to ensure your profile is properly set up."
         );
       }
 
-      let userId;
-
-      if (!userProfile) {
-        const { data: newProfile, error: createError } = await supabase
-          .from("profiles")
-          .insert({
-            auth_user_id: user.id,
-            email: user.email,
-            full_name:
-              user.user_metadata?.full_name ||
-              user.email?.split("@")[0] ||
-              "User",
-            role: "user",
-          })
-          .select("id")
-          .single();
-
-        if (createError) {
-          console.error("Error creating user profile:", createError);
-
-          if (createError.code === "23505") {
-            const { data: existingProfile, error: fetchError } = await supabase
-              .from("profiles")
-              .select("id")
-              .eq("auth_user_id", user.id)
-              .single();
-
-            if (fetchError || !existingProfile) {
-              throw new Error("Failed to fetch existing user profile");
-            }
-
-            userId = existingProfile.id;
-          } else {
-            throw new Error(
-              `Failed to create user profile: ${createError.message}`
-            );
-          }
-        } else {
-          if (!newProfile || !newProfile.id) {
-            throw new Error("Failed to create user profile - no ID returned");
-          }
-          userId = newProfile.id;
-        }
-      } else {
-        userId = userProfile.id;
+      if (!userProfile || !userProfile.id) {
+        throw new Error(
+          "Invalid user profile. Please contact the administrator."
+        );
       }
 
-      if (!userId || typeof userId !== "number") {
-        throw new Error(`Invalid user ID: ${userId}`);
-      }
+      console.log(
+        "Creating work progress with user_id:",
+        userProfile.id,
+        "Name:",
+        userProfile.name
+      );
 
-      const { error } = await supabase
+      // ✅ Insert work progress with the correct user_id from profiles table
+      const { data: insertedProgress, error: insertError } = await supabase
         .from("work_progress")
         .insert({
           work_details_id: selectedWorkDetailsId,
@@ -525,13 +495,21 @@ export default function AddWorkProgress({
           notes: formData.notes.trim() || null,
           evidence_url: evidenceUrl || null,
           storage_path: storagePath || null,
-          user_id: userId,
+          user_id: userProfile.id, // ✅ This is the profiles.id, not auth user id
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (insertError) {
+        console.error("Insert error:", insertError);
+        throw new Error(
+          `Failed to create progress report: ${insertError.message}`
+        );
+      }
 
+      console.log("Progress created successfully:", insertedProgress);
+
+      // Navigate to appropriate page
       if (effectiveWorkDetailsId) {
         navigate(`/work-details/${effectiveWorkDetailsId}/progress`);
       } else {
