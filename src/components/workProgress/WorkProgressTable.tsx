@@ -1271,6 +1271,11 @@ export default function WorkProgressTable({
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Created
                 </th>
+                {!isReadOnly && (
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                    Actions
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -1326,6 +1331,19 @@ export default function WorkProgressTable({
                     <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
                       {formatDateTime(item.created_at)}
                     </td>
+                    {!isReadOnly && (
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <button
+                          onClick={() =>
+                            navigate(`/work-progress/edit/${item.id}`)
+                          }
+                          className="text-blue-600 hover:text-blue-800 text-sm font-medium inline-flex items-center gap-1 hover:underline"
+                          title="Edit this progress report"
+                        >
+                          ✏️ Edit
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}

@@ -21,7 +21,11 @@ import {
 } from "./components/workVerification";
 import { AddWorkDetails, EditWorkDetails } from "./components/workDetails";
 import WorkOrderDetails from "./components/workDetails/WODetails";
-import { AddWorkProgress, WorkProgressTable } from "./components/workProgress";
+import {
+  AddWorkProgress,
+  WorkProgressTable,
+  EditWorkProgress,
+} from "./components/workProgress";
 import {
   InvoiceList,
   InvoiceDetails,
@@ -102,6 +106,10 @@ function AppRoutes() {
         <Route
           path="/work-details/:workDetailsId/progress"
           element={<WorkProgressTable />}
+        />
+        <Route
+          path="/work-progress/edit/:progressId"
+          element={<EditWorkProgress />}
         />
 
         {/* Verification Routes */}
