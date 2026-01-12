@@ -637,13 +637,8 @@ export default function WODetailsTable({
         color: "bg-blue-100 text-blue-800 border-blue-200",
         icon: "⏳",
       };
-    } else if (detail.storage_path) {
-      return {
-        text: "Ready",
-        color: "bg-yellow-100 text-yellow-800 border-yellow-200",
-        icon: "🟡",
-      };
     } else {
+      // ✅ REMOVED: storage_path check
       return {
         text: "Not Ready",
         color: "bg-red-100 text-red-600 border-red-200",
@@ -971,6 +966,10 @@ export default function WODetailsTable({
         >
           Description {getSortIcon("description")}
         </th>
+        {/* ✅ MERGED: SPK & SPKK Column */}
+        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+          SPK & SPKK
+        </th>
         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
           Quantity
         </th>
@@ -983,7 +982,6 @@ export default function WODetailsTable({
         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
           Progress
         </th>
-        {/* Hide Actions column for read-only users */}
         {!isReadOnly && (
           <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
             Actions
@@ -1050,6 +1048,45 @@ export default function WODetailsTable({
                     📍 {detail.location.location}
                   </span>
                 )}
+              </div>
+            </div>
+          </td>
+
+          <td className="px-6 py-4">
+            <div className="text-sm space-y-1">
+              {detail.spk_number && (
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xs text-gray-500 min-w-[40px]">
+                    SPK:
+                  </span>
+                  <span className="font-medium text-gray-900">
+                    {detail.spk_number}
+                  </span>
+                </div>
+              )}
+              {detail.spkk_number && (
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xs text-gray-500 min-w-[40px]">
+                    SPKK:
+                  </span>
+                  <span className="font-medium text-gray-900">
+                    {detail.spkk_number}
+                  </span>
+                </div>
+              )}
+              {!detail.spk_number && !detail.spkk_number && (
+                <span className="text-gray-400 text-xs">Not set</span>
+              )}
+            </div>
+          </td>
+
+          <td className="px-6 py-4 whitespace-nowrap">
+            <div className="text-sm">
+              <div className="font-bold text-blue-900 text-base">
+                {detail.quantity || 0}
+              </div>
+              <div className="text-xs text-blue-700 font-medium">
+                {detail.uom || "N/A"}
               </div>
             </div>
           </td>
