@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { uploadProgressEvidence } from "../../utils/progressEvidenceHandler";
 import { useAuth } from "../../hooks/useAuth";
@@ -28,10 +28,15 @@ interface WorkProgressData {
   };
 }
 
+interface KaproInfo {
+  kapro_name: string;
+}
+
 export default function EditWorkProgress() {
   const navigate = useNavigate();
   const { progressId } = useParams<{ progressId: string }>();
   const { isReadOnly } = useAuth();
+  const location = useLocation();
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -40,6 +45,7 @@ export default function EditWorkProgress() {
     null
   );
 
+  const [kaproInfo, setKaproInfo] = useState<KaproInfo | null>(null);
   const [formData, setFormData] = useState({
     progress_percentage: "",
     report_date: "",
@@ -79,6 +85,9 @@ export default function EditWorkProgress() {
             vessel!inner (
               name,
               type
+            ),
+            kapro:kapro_id (
+              kapro_name
             )
           )
         )
@@ -106,6 +115,18 @@ export default function EditWorkProgress() {
           ? workDetails.location[0]
           : workDetails.location
         : undefined;
+
+      const kapro = workOrder.kapro
+        ? Array.isArray(workOrder.kapro)
+          ? workOrder.kapro[0]
+          : workOrder.kapro
+        : null;
+
+      if (kapro) {
+        setKaproInfo({
+          kapro_name: kapro.kapro_name,
+        });
+      }
 
       const transformedData: WorkProgressData = {
         id: data.id,
@@ -239,9 +260,7 @@ export default function EditWorkProgress() {
       let evidenceUrl = progressData.evidence_url || "";
       let storagePath = progressData.storage_path || "";
 
-      // Handle evidence file changes
       if (formData.evidence_file) {
-        // Upload new evidence
         const uploadResult = await uploadProgressEvidence({
           file: formData.evidence_file,
           workDetailsId: progressData.work_details_id,
@@ -255,7 +274,6 @@ export default function EditWorkProgress() {
         evidenceUrl = uploadResult.publicUrl || "";
         storagePath = uploadResult.storagePath || "";
 
-        // Delete old evidence if exists
         if (progressData.storage_path) {
           try {
             await supabase.storage
@@ -266,7 +284,6 @@ export default function EditWorkProgress() {
           }
         }
       } else if (!formData.keep_existing_evidence) {
-        // Remove evidence
         if (progressData.storage_path) {
           try {
             await supabase.storage
@@ -280,7 +297,6 @@ export default function EditWorkProgress() {
         storagePath = "";
       }
 
-      // Update work progress
       const { error: updateError } = await supabase
         .from("work_progress")
         .update({
@@ -299,8 +315,15 @@ export default function EditWorkProgress() {
         );
       }
 
-      // Navigate back
-      navigate("/work-progress");
+      const returnFilters = location.state?.returnFilters;
+
+      if (returnFilters) {
+        navigate("/work-progress", {
+          state: { returnFilters },
+        });
+      } else {
+        navigate("/work-progress");
+      }
     } catch (err) {
       console.error("Error updating work progress:", err);
       setError(
@@ -354,7 +377,14 @@ export default function EditWorkProgress() {
     <div className="p-8">
       <div className="mb-6">
         <button
-          onClick={() => navigate("/work-progress")}
+          onClick={() => {
+            const returnFilters = location.state?.returnFilters;
+            if (returnFilters) {
+              navigate("/work-progress", { state: { returnFilters } });
+            } else {
+              navigate("/work-progress");
+            }
+          }}
           className="text-blue-600 hover:text-blue-800 mb-4 flex items-center gap-2"
         >
           ← Back to Work Progress
@@ -381,6 +411,12 @@ export default function EditWorkProgress() {
             </h3>
 
             <div className="space-y-3 text-sm">
+              {kaproInfo && (
+                <div>
+                  <span className="text-gray-500">📋 Kapro:</span>
+                  <div className="font-medium mt-1">{kaproInfo.kapro_name}</div>
+                </div>
+              )}
               <div>
                 <span className="text-gray-500">🚢 Vessel:</span>
                 <div className="font-medium mt-1">
@@ -592,7 +628,14 @@ export default function EditWorkProgress() {
             <div className="flex justify-between items-center">
               <button
                 type="button"
-                onClick={() => navigate("/work-progress")}
+                onClick={() => {
+                  const returnFilters = location.state?.returnFilters;
+                  if (returnFilters) {
+                    navigate("/work-progress", { state: { returnFilters } });
+                  } else {
+                    navigate("/work-progress");
+                  }
+                }}
                 className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 disabled={submitting}
               >

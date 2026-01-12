@@ -7,6 +7,11 @@ interface AddWorkProgressProps {
   workDetailsId?: number;
 }
 
+interface KaproFormData {
+  id: number;
+  kapro_name: string;
+}
+
 interface VesselFormData {
   id: number;
   name: string;
@@ -73,6 +78,14 @@ export default function AddWorkProgress({
     evidence_file: null as File | null,
   });
 
+  const [kapros, setKapros] = useState<KaproFormData[]>([]);
+  const [selectedKaproId, setSelectedKaproId] = useState<number>(0);
+  const [loadingKapros, setLoadingKapros] = useState(false);
+
+  const [kaproSearchTerm, setKaproSearchTerm] = useState("");
+  const [showKaproDropdown, setShowKaproDropdown] = useState(false);
+  const kaproDropdownRef = useRef<HTMLDivElement>(null);
+
   const [loadingVessels, setLoadingVessels] = useState(false);
   const [loadingWorkOrders, setLoadingWorkOrders] = useState(false);
   const [loadingWorkDetails, setLoadingWorkDetails] = useState(false);
@@ -90,6 +103,23 @@ export default function AddWorkProgress({
   const [workDetailsSearchTerm, setWorkDetailsSearchTerm] = useState("");
   const [showWorkDetailsDropdown, setShowWorkDetailsDropdown] = useState(false);
   const workDetailsDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetchKapros();
+
+    if (effectiveWorkDetailsId) {
+      fetchWorkDetailsContext(effectiveWorkDetailsId);
+    }
+  }, [effectiveWorkDetailsId]);
+
+  useEffect(() => {
+    if (selectedKaproId > 0) {
+      fetchVesselsForKapro(selectedKaproId);
+    } else {
+      setVessels([]);
+      setSelectedVesselId(0);
+    }
+  }, [selectedKaproId]);
 
   useEffect(() => {
     fetchVessels();
@@ -120,6 +150,12 @@ export default function AddWorkProgress({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
+        kaproDropdownRef.current &&
+        !kaproDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowKaproDropdown(false);
+      }
+      if (
         vesselDropdownRef.current &&
         !vesselDropdownRef.current.contains(event.target as Node)
       ) {
@@ -144,6 +180,81 @@ export default function AddWorkProgress({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  const fetchKapros = async () => {
+    try {
+      setLoadingKapros(true);
+      const { data, error } = await supabase
+        .from("kapro")
+        .select("id, kapro_name")
+        .is("deleted_at", null)
+        .order("kapro_name", { ascending: false });
+
+      if (error) throw error;
+
+      const kaproData: KaproFormData[] = (data || []).map((item) => ({
+        id: item.id,
+        kapro_name: item.kapro_name,
+      }));
+
+      setKapros(kaproData);
+    } catch (err) {
+      console.error("Error fetching kapros:", err);
+      setError("Failed to load kapros");
+    } finally {
+      setLoadingKapros(false);
+    }
+  };
+
+  const fetchVesselsForKapro = async (kaproId: number) => {
+    try {
+      setLoadingVessels(true);
+
+      // Get work orders for this kapro
+      const { data: workOrderData, error: woError } = await supabase
+        .from("work_order")
+        .select("vessel_id")
+        .eq("kapro_id", kaproId)
+        .is("deleted_at", null);
+
+      if (woError) throw woError;
+
+      // Get unique vessel IDs
+      const vesselIds = [
+        ...new Set(workOrderData?.map((wo) => wo.vessel_id) || []),
+      ];
+
+      if (vesselIds.length === 0) {
+        setVessels([]);
+        setLoadingVessels(false);
+        return;
+      }
+
+      // Fetch vessels
+      const { data, error } = await supabase
+        .from("vessel")
+        .select("id, name, type, company")
+        .in("id", vesselIds)
+        .is("deleted_at", null)
+        .order("name", { ascending: true });
+
+      if (error) throw error;
+
+      const vesselData: VesselFormData[] = (data || []).map((item) => ({
+        id: item.id,
+        name: item.name,
+        type: item.type,
+        company: item.company,
+      }));
+
+      setVessels(vesselData);
+    } catch (err) {
+      console.error("Error fetching vessels for kapro:", err);
+      setError("Failed to load vessels");
+    } finally {
+      setLoadingVessels(false);
+    }
+  };
 
   const fetchVessels = async () => {
     try {
@@ -175,12 +286,21 @@ export default function AddWorkProgress({
   const fetchWorkOrders = async (vesselId: number) => {
     try {
       setLoadingWorkOrders(true);
-      const { data, error } = await supabase
+
+      let query = supabase
         .from("work_order")
         .select("id, shipyard_wo_number, shipyard_wo_date")
         .eq("vessel_id", vesselId)
-        .is("deleted_at", null)
-        .order("shipyard_wo_number", { ascending: true });
+        .is("deleted_at", null);
+
+      // Filter by selected kapro if exists
+      if (selectedKaproId > 0) {
+        query = query.eq("kapro_id", selectedKaproId);
+      }
+
+      const { data, error } = await query.order("shipyard_wo_number", {
+        ascending: true,
+      });
 
       if (error) throw error;
 
@@ -280,6 +400,47 @@ export default function AddWorkProgress({
       console.error("Error fetching work details context:", err);
       setError("Failed to load work details information");
     }
+  };
+
+  const handleKaproSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setKaproSearchTerm(e.target.value);
+    setShowKaproDropdown(true);
+    if (selectedKaproId) {
+      setSelectedKaproId(0);
+      setSelectedVesselId(0);
+      setSelectedWorkOrderId(0);
+      setSelectedWorkDetailsId(0);
+      setVessels([]);
+      setWorkOrders([]);
+      setWorkDetailsList([]);
+    }
+  };
+
+  const handleKaproSelectFromDropdown = (kapro: KaproFormData) => {
+    setSelectedKaproId(kapro.id);
+    setKaproSearchTerm(kapro.kapro_name);
+    setShowKaproDropdown(false);
+    setSelectedVesselId(0);
+    setSelectedWorkOrderId(0);
+    setSelectedWorkDetailsId(0);
+    setVesselSearchTerm("");
+    setWorkOrderSearchTerm("");
+    setWorkDetailsSearchTerm("");
+  };
+
+  const handleClearKaproSearch = () => {
+    setKaproSearchTerm("");
+    setSelectedKaproId(0);
+    setShowKaproDropdown(false);
+    setSelectedVesselId(0);
+    setSelectedWorkOrderId(0);
+    setSelectedWorkDetailsId(0);
+    setVesselSearchTerm("");
+    setWorkOrderSearchTerm("");
+    setWorkDetailsSearchTerm("");
+    setVessels([]);
+    setWorkOrders([]);
+    setWorkDetailsList([]);
   };
 
   const handleVesselSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -445,7 +606,7 @@ export default function AddWorkProgress({
         storagePath = uploadResult.storagePath || "";
       }
 
-      // ✅ Get current authenticated user
+      // Get current authenticated user
       const {
         data: { user },
         error: authError,
@@ -456,7 +617,7 @@ export default function AddWorkProgress({
         throw new Error("User not authenticated. Please log in again.");
       }
 
-      // ✅ Get user profile from profiles table using auth_user_id
+      // Get user profile from profiles table using auth_user_id
       const { data: userProfile, error: profileError } = await supabase
         .from("profiles")
         .select("id, name, email")
@@ -485,7 +646,7 @@ export default function AddWorkProgress({
         userProfile.name
       );
 
-      // ✅ Insert work progress with the correct user_id from profiles table
+      // Insert work progress with the correct user_id from profiles table
       const { data: insertedProgress, error: insertError } = await supabase
         .from("work_progress")
         .insert({
@@ -495,7 +656,7 @@ export default function AddWorkProgress({
           notes: formData.notes.trim() || null,
           evidence_url: evidenceUrl || null,
           storage_path: storagePath || null,
-          user_id: userProfile.id, // ✅ This is the profiles.id, not auth user id
+          user_id: userProfile.id,
         })
         .select()
         .single();
@@ -552,7 +713,12 @@ export default function AddWorkProgress({
     });
   };
 
-  // Add these filter functions:
+  // Filter functions:
+  const filteredKaprosForSearch = kapros.filter((kapro) => {
+    const searchLower = kaproSearchTerm.toLowerCase();
+    return kapro.kapro_name?.toLowerCase().includes(searchLower);
+  });
+
   const filteredVesselsForSearch = vessels.filter((vessel) => {
     const searchLower = vesselSearchTerm.toLowerCase();
     return (
@@ -613,56 +779,108 @@ export default function AddWorkProgress({
               📋 Work Selection
             </h3>
 
-            <div className="relative" ref={vesselDropdownRef}>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                🚢 Step 1: Select Vessel
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={vesselSearchTerm}
-                  onChange={handleVesselSearch}
-                  onFocus={() => setShowVesselDropdown(true)}
-                  placeholder="Search vessel..."
-                  disabled={loadingVessels}
-                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                {vesselSearchTerm && (
-                  <button
-                    onClick={handleClearVesselSearch}
-                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                  >
-                    ✕
-                  </button>
+            <div className="mb-4">
+              <div className="relative" ref={kaproDropdownRef}>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  📋 Step 1: Select Kapro
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={kaproSearchTerm}
+                    onChange={handleKaproSearch}
+                    onFocus={() => setShowKaproDropdown(true)}
+                    placeholder="Search kapro name..."
+                    disabled={loadingKapros}
+                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  {kaproSearchTerm && (
+                    <button
+                      onClick={handleClearKaproSearch}
+                      className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Kapro Dropdown */}
+                {showKaproDropdown && filteredKaprosForSearch.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {filteredKaprosForSearch.map((kapro) => (
+                      <div
+                        key={kapro.id}
+                        onClick={() => handleKaproSelectFromDropdown(kapro)}
+                        className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                          selectedKaproId === kapro.id ? "bg-blue-100" : ""
+                        }`}
+                      >
+                        <div className="font-medium text-gray-900 text-sm">
+                          {kapro.kapro_name}{" "}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
+            </div>
 
-              {/* Vessel Dropdown */}
-              {showVesselDropdown && filteredVesselsForSearch.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {filteredVesselsForSearch.map((vessel) => (
-                    <div
-                      key={vessel.id}
-                      onClick={() => handleVesselSelectFromDropdown(vessel)}
-                      className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                        selectedVesselId === vessel.id ? "bg-blue-100" : ""
-                      }`}
+            <div className="mb-4">
+              <div className="relative" ref={vesselDropdownRef}>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  🚢 Step 2: Select Vessel
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={vesselSearchTerm}
+                    onChange={handleVesselSearch}
+                    onFocus={() => setShowVesselDropdown(true)}
+                    placeholder={
+                      selectedKaproId === 0
+                        ? "Select kapro first"
+                        : "Search vessel..."
+                    }
+                    disabled={loadingVessels || selectedKaproId === 0}
+                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50"
+                  />
+                  {vesselSearchTerm && (
+                    <button
+                      onClick={handleClearVesselSearch}
+                      className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                     >
-                      <div className="font-medium text-gray-900 text-sm">
-                        {vessel.name}
-                      </div>
-                      <div className="text-xs text-gray-600">
-                        {vessel.type} • {vessel.company}
-                      </div>
-                    </div>
-                  ))}
+                      ✕
+                    </button>
+                  )}
                 </div>
-              )}
+
+                {/* Vessel Dropdown */}
+                {showVesselDropdown && filteredVesselsForSearch.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {filteredVesselsForSearch.map((vessel) => (
+                      <div
+                        key={vessel.id}
+                        onClick={() => handleVesselSelectFromDropdown(vessel)}
+                        className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                          selectedVesselId === vessel.id ? "bg-blue-100" : ""
+                        }`}
+                      >
+                        <div className="font-medium text-gray-900 text-sm">
+                          {vessel.name}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          {vessel.type} • {vessel.company}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="relative" ref={workOrderDropdownRef}>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                📋 Step 2: Select Work Order
+                📋 Step 3: Select Work Order
               </label>
               <div className="relative">
                 <input
@@ -721,7 +939,7 @@ export default function AddWorkProgress({
 
             <div className="relative" ref={workDetailsDropdownRef}>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                🔧 Step 3: Select Work Details
+                🔧 Step 4: Select Work Details
               </label>
               <div className="relative">
                 <input
@@ -789,6 +1007,12 @@ export default function AddWorkProgress({
                   📊 Selection Summary
                 </h4>
                 <div className="space-y-2 text-sm">
+                  {selectedKaproId > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500">📋 Kapro:</span>
+                      <span className="font-medium">{kaproSearchTerm}</span>
+                    </div>
+                  )}
                   {selectedVessel && (
                     <div className="flex items-center gap-2">
                       <span className="text-gray-500">🚢 Vessel:</span>
