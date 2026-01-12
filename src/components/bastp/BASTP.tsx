@@ -18,43 +18,68 @@ export default function BASTP() {
       setLoading(true);
       setError(null);
 
+      // ✅ STEP 1: Fetch all profiles first using RPC function
+      const { data: allProfiles, error: profilesError } = await supabase.rpc(
+        "get_all_profiles"
+      );
+
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+      }
+
+      // Create a map for quick lookup
+      const profilesMap: Record<
+        number,
+        { id: number; name: string; email: string }
+      > = {};
+      if (allProfiles) {
+        allProfiles.forEach(
+          (profile: { id: number; name: string; email: string }) => {
+            profilesMap[profile.id] = profile;
+          }
+        );
+      }
+
+      // ✅ STEP 2: Fetch BASTPs WITHOUT profiles join
       const { data, error: fetchError } = await supabase
         .from("bastp")
         .select(
           `
-          *,
-          vessel:vessel_id (
+        *,
+        vessel:vessel_id (
+          id,
+          name,
+          type,
+          company
+        ),
+        bastp_work_details (
+          id,
+          work_details (
             id,
-            name,
-            type,
-            company
-          ),
-          profiles:user_id (
-            id,
-            name,
-            email
-          ),
-          bastp_work_details (
-            id,
-            work_details (
+            description,
+            quantity,
+            uom,
+            work_order (
               id,
-              description,
-              quantity,
-              uom,
-              work_order (
-                id,
-                shipyard_wo_number,
-                customer_wo_number
-              )
+              shipyard_wo_number,
+              customer_wo_number
             )
           )
-        `
+        )
+      `
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
 
       if (fetchError) throw fetchError;
-      setBastps(data || []);
+
+      // ✅ STEP 3: Attach profiles from map
+      const bastpsWithProfiles = (data || []).map((bastp) => ({
+        ...bastp,
+        profiles: bastp.user_id ? profilesMap[bastp.user_id] : undefined,
+      }));
+
+      setBastps(bastpsWithProfiles);
     } catch (err) {
       console.error("Error fetching BASTPs:", err);
       setError(err instanceof Error ? err.message : "Failed to load BASTPs");
