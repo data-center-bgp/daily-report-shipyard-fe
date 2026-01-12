@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import {
@@ -63,6 +63,7 @@ interface WorkDetailsData {
 export default function EditWorkDetails() {
   const navigate = useNavigate();
   const { workDetailsId } = useParams<{ workDetailsId: string }>();
+  const location = useLocation();
   const { profile } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -569,7 +570,16 @@ export default function EditWorkDetails() {
         throw error;
       }
 
-      navigate(`/work-details`);
+      const returnFilters = location.state?.returnFilters;
+
+      if (returnFilters) {
+        // Pass the filters back to the table
+        navigate("/work-details", {
+          state: { returnFilters },
+        });
+      } else {
+        navigate("/work-details");
+      }
     } catch (err) {
       console.error("Error updating work details:", err);
       setError(
@@ -582,7 +592,15 @@ export default function EditWorkDetails() {
   };
 
   const handleCancel = () => {
-    navigate(`/work-details`);
+    const returnFilters = location.state?.returnFilters;
+
+    if (returnFilters) {
+      navigate("/work-details", {
+        state: { returnFilters },
+      });
+    } else {
+      navigate("/work-details");
+    }
   };
 
   if (loading) {

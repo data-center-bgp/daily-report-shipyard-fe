@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { supabase, type WorkOrder, type Vessel } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 
@@ -34,6 +34,7 @@ export default function AddWorkDetails() {
   const navigate = useNavigate();
   const { workOrderId } = useParams<{ workOrderId: string }>();
   const { profile } = useAuth();
+  const location = useLocation();
 
   // Check user role - Only check for PPIC
   const isPPIC = profile?.role === "PPIC";
@@ -464,8 +465,16 @@ export default function AddWorkDetails() {
 
       if (error) throw error;
 
+      // ✅ ADD: Navigate back with filter state
+      const returnFilters = location.state?.returnFilters;
+
       if (workOrderId) {
         navigate(`/work-order/${workOrderId}`);
+      } else if (returnFilters) {
+        // Pass the filters back to the table
+        navigate("/work-details", {
+          state: { returnFilters },
+        });
       } else {
         navigate("/work-details");
       }
@@ -480,8 +489,14 @@ export default function AddWorkDetails() {
   };
 
   const handleCancel = () => {
+    const returnFilters = location.state?.returnFilters;
+
     if (workOrderId) {
       navigate(`/work-order/${workOrderId}`);
+    } else if (returnFilters) {
+      navigate("/work-details", {
+        state: { returnFilters },
+      });
     } else {
       navigate("/work-details");
     }

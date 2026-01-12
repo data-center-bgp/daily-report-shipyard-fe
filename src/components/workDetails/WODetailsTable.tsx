@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   supabase,
   type WorkDetails,
@@ -50,6 +50,7 @@ export default function WODetailsTable({
 }: WorkDetailsTableProps) {
   const { profile, isReadOnly } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // State Management
   const [workDetails, setWorkDetails] = useState<WorkDetailsWithWorkOrder[]>(
@@ -61,9 +62,30 @@ export default function WODetailsTable({
   // Sorting & Pagination
   const [sortField, setSortField] = useState<
     "planned_start_date" | "target_close_date" | "created_at" | "description"
-  >("planned_start_date");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  const [currentPage, setCurrentPage] = useState(1);
+  >(
+    ():
+      | "planned_start_date"
+      | "target_close_date"
+      | "created_at"
+      | "description" => {
+      const sort = searchParams.get("sortField");
+      return (
+        (sort as
+          | "planned_start_date"
+          | "target_close_date"
+          | "created_at"
+          | "description") || "planned_start_date"
+      );
+    }
+  );
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">(() => {
+    const direction = searchParams.get("sortDirection");
+    return (direction as "asc" | "desc") || "asc";
+  });
+  const [currentPage, setCurrentPage] = useState(() => {
+    const page = searchParams.get("page");
+    return page ? parseInt(page) : 1;
+  });
   const itemsPerPage = 10;
 
   // UI State
@@ -76,10 +98,14 @@ export default function WODetailsTable({
   // Filter State
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
-  const [selectedVesselId, setSelectedVesselId] = useState<number>(0);
-  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<number>(
-    workOrderId || 0
-  );
+  const [selectedVesselId, setSelectedVesselId] = useState<number>(() => {
+    const vesselId = searchParams.get("vesselId");
+    return vesselId ? parseInt(vesselId) : workOrderId || 0;
+  });
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<number>(() => {
+    const woId = searchParams.get("workOrderId");
+    return woId ? parseInt(woId) : workOrderId || 0;
+  });
   const [selectedWorkOrderDetails, setSelectedWorkOrderDetails] = useState<
     | (WorkOrder & {
         vessel?: Vessel;
@@ -89,9 +115,15 @@ export default function WODetailsTable({
   >(null);
 
   // Search State
-  const [vesselSearchTerm, setVesselSearchTerm] = useState("");
-  const [workOrderSearchTerm, setWorkOrderSearchTerm] = useState("");
-  const [workDetailsSearchTerm, setWorkDetailsSearchTerm] = useState("");
+  const [vesselSearchTerm, setVesselSearchTerm] = useState(
+    () => searchParams.get("vesselSearch") || ""
+  );
+  const [workOrderSearchTerm, setWorkOrderSearchTerm] = useState(
+    () => searchParams.get("woSearch") || ""
+  );
+  const [workDetailsSearchTerm, setWorkDetailsSearchTerm] = useState(
+    () => searchParams.get("search") || ""
+  );
 
   // Dropdown State
   const [showVesselDropdown, setShowVesselDropdown] = useState(false);
@@ -344,13 +376,42 @@ export default function WODetailsTable({
     }
   };
 
+  const updateUrlParams = useCallback(
+    (updates: Record<string, string | number | null>) => {
+      const newParams = new URLSearchParams(searchParams);
+
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value === null || value === "" || value === 0) {
+          newParams.delete(key);
+        } else {
+          newParams.set(key, String(value));
+        }
+      });
+
+      setSearchParams(newParams, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
+
   const handleVesselSelectFromDropdown = (vessel: Vessel) => {
+    const vesselDisplayText = `${vessel.name} - ${vessel.type} (${vessel.company})`;
+
     setSelectedVesselId(vessel.id);
-    setVesselSearchTerm(`${vessel.name} - ${vessel.type} (${vessel.company})`);
+    setVesselSearchTerm(vesselDisplayText);
     setShowVesselDropdown(false);
     setSelectedWorkOrderId(0);
     setWorkOrderSearchTerm("");
     setCurrentPage(1);
+
+    // ✅ Persist to URL
+    updateUrlParams({
+      vesselId: vessel.id,
+      vesselSearch: vesselDisplayText,
+      workOrderId: null,
+      woSearch: null,
+      page: 1,
+    });
+
     fetchWorkOrdersForVessel(vessel.id);
   };
 
@@ -363,6 +424,15 @@ export default function WODetailsTable({
     setWorkOrders([]);
     setCurrentPage(1);
     setSelectedWorkOrderDetails(null);
+
+    // ✅ Clear URL params
+    updateUrlParams({
+      vesselId: null,
+      vesselSearch: null,
+      workOrderId: null,
+      woSearch: null,
+      page: 1,
+    });
   };
 
   const handleWorkOrderSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -378,6 +448,14 @@ export default function WODetailsTable({
     setWorkOrderSearchTerm(workOrder.shipyard_wo_number || "");
     setShowWorkOrderDropdown(false);
     setCurrentPage(1);
+
+    // ✅ Persist to URL
+    updateUrlParams({
+      workOrderId: workOrder.id,
+      woSearch: workOrder.shipyard_wo_number || "",
+      page: 1,
+    });
+
     fetchWorkOrderDetails(workOrder.id);
   };
 
@@ -387,6 +465,13 @@ export default function WODetailsTable({
     setShowWorkOrderDropdown(false);
     setCurrentPage(1);
     setSelectedWorkOrderDetails(null);
+
+    // ✅ Clear URL params
+    updateUrlParams({
+      workOrderId: null,
+      woSearch: null,
+      page: 1,
+    });
   };
 
   const handleSort = (field: typeof sortField) => {
@@ -395,25 +480,66 @@ export default function WODetailsTable({
     setSortField(field);
     setSortDirection(newDirection);
     setCurrentPage(1);
+
+    // ✅ Persist to URL
+    updateUrlParams({
+      sortField: field,
+      sortDirection: newDirection,
+      page: 1,
+    });
   };
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: "smooth" }); // ✅ ADDED: Scroll to top on page change
+
+    // ✅ Persist to URL
+    updateUrlParams({ page });
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleAddWorkDetails = () => {
+    // ✅ FIX: Save current filter state before navigating
+    const filterState = {
+      vesselId: selectedVesselId,
+      vesselSearch: vesselSearchTerm,
+      workOrderId: selectedWorkOrderId,
+      woSearch: workOrderSearchTerm,
+      search: workDetailsSearchTerm,
+      sortField,
+      sortDirection,
+      page: currentPage,
+    };
+
     if (workOrderId) {
       navigate(`/work-details/add/${workOrderId}`);
     } else if (selectedWorkOrderId > 0) {
-      navigate(`/work-details/add/${selectedWorkOrderId}`);
+      navigate(`/work-details/add/${selectedWorkOrderId}`, {
+        state: { returnFilters: filterState },
+      });
     } else {
-      navigate("/work-details/add");
+      navigate("/work-details/add", {
+        state: { returnFilters: filterState },
+      });
     }
   };
 
   const handleEditWorkDetails = (workDetailsId: number) => {
-    navigate(`/edit-work-details/${workDetailsId}`);
+    // Save current filter state to navigate with
+    const filterState = {
+      vesselId: selectedVesselId,
+      vesselSearch: vesselSearchTerm,
+      workOrderId: selectedWorkOrderId,
+      woSearch: workOrderSearchTerm,
+      search: workDetailsSearchTerm,
+      sortField,
+      sortDirection,
+      page: currentPage,
+    };
+
+    navigate(`/edit-work-details/${workDetailsId}`, {
+      state: { returnFilters: filterState },
+    });
   };
 
   const handleDeleteWorkDetails = (detail: WorkDetailsWithWorkOrder) => {
@@ -474,6 +600,17 @@ export default function WODetailsTable({
 
   const handleAddProgress = (workDetailsId: number) => {
     navigate(`/add-work-progress/${workDetailsId}`);
+  };
+
+  const handleWorkDetailsSearchChange = (value: string) => {
+    setWorkDetailsSearchTerm(value);
+    setCurrentPage(1);
+
+    // ✅ Persist to URL with debounce
+    updateUrlParams({
+      search: value,
+      page: 1,
+    });
   };
 
   // ==================== UTILITY FUNCTIONS ====================
@@ -585,10 +722,6 @@ export default function WODetailsTable({
   }, [workOrderId, fetchWorkOrderDetails]);
 
   useEffect(() => {
-    fetchWorkDetails();
-  }, [fetchWorkDetails]);
-
-  useEffect(() => {
     if (workOrderId && workDetails.length > 0) {
       const workDetail = workDetails[0];
       if (workDetail.work_order?.vessel) {
@@ -601,6 +734,228 @@ export default function WODetailsTable({
   useEffect(() => {
     setCurrentPage(1);
   }, [workDetailsSearchTerm]);
+
+  useEffect(() => {
+    // Check if we're returning from edit with saved filters
+    const navigationState = window.history.state?.usr?.returnFilters;
+
+    if (navigationState) {
+      console.log("🔄 Restoring filters from navigation:", navigationState);
+
+      // Create an async function to restore filters in sequence
+      const restoreFiltersAndFetch = async () => {
+        try {
+          // Step 1: Restore simple filters immediately
+          if (navigationState.search) {
+            setWorkDetailsSearchTerm(navigationState.search);
+          }
+          if (navigationState.sortField) {
+            setSortField(navigationState.sortField);
+            setSortDirection(navigationState.sortDirection);
+          }
+          if (navigationState.page) {
+            setCurrentPage(navigationState.page);
+          }
+
+          // Step 2: Restore vessel and work order filters
+          let shouldFetch = false;
+
+          if (navigationState.vesselId) {
+            console.log("Restoring vessel:", navigationState.vesselId);
+            setSelectedVesselId(navigationState.vesselId);
+            setVesselSearchTerm(navigationState.vesselSearch || "");
+            shouldFetch = true;
+
+            // Fetch work orders for the vessel
+            await fetchWorkOrdersForVessel(navigationState.vesselId);
+
+            if (navigationState.workOrderId) {
+              console.log("Restoring work order:", navigationState.workOrderId);
+              setSelectedWorkOrderId(navigationState.workOrderId);
+              setWorkOrderSearchTerm(navigationState.woSearch || "");
+
+              // Fetch work order details
+              await fetchWorkOrderDetails(navigationState.workOrderId);
+            }
+          }
+
+          // Step 3: Update URL params to match restored state
+          const newParams = new URLSearchParams();
+          Object.entries(navigationState).forEach(([key, value]) => {
+            if (value && value !== 0) {
+              newParams.set(key, String(value));
+            }
+          });
+          setSearchParams(newParams, { replace: true });
+
+          // Step 4: Clear navigation state to prevent re-triggering
+          window.history.replaceState(
+            { ...window.history.state, usr: undefined },
+            ""
+          );
+
+          console.log("✅ Filters restored, now fetching work details...");
+
+          // Step 5: ✅ FIX - Wait for state updates then fetch with a longer delay
+          setTimeout(() => {
+            // Force refetch by directly calling the fetch with the restored values
+            fetchWorkDetailsWithFilters(
+              navigationState.vesselId || 0,
+              navigationState.workOrderId || 0,
+              navigationState.sortField || "planned_start_date",
+              navigationState.sortDirection || "asc"
+            );
+          }, 300); // Increased delay to ensure state is updated
+        } catch (error) {
+          console.error("Error restoring filters:", error);
+          fetchWorkDetails(); // Fallback to regular fetch
+        }
+      };
+
+      restoreFiltersAndFetch();
+    } else {
+      // No navigation state, do normal fetch
+      fetchWorkDetails();
+    }
+    // Only run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    selectedVesselId,
+    selectedWorkOrderId,
+    sortField,
+    sortDirection,
+    fetchWorkDetails,
+  ]);
+
+  const fetchWorkDetailsWithFilters = useCallback(
+    async (
+      vesselIdParam: number,
+      workOrderIdParam: number,
+      sortFieldParam: typeof sortField,
+      sortDirectionParam: "asc" | "desc"
+    ) => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        let baseQuery = supabase
+          .from("work_details")
+          .select(
+            `
+        *,
+        work_order (
+          id,
+          shipyard_wo_number,
+          customer_wo_number,
+          vessel (id, name, type, company)
+        ),
+        profiles (id, name, email),
+        work_progress (id, progress_percentage, report_date, created_at),
+        location:location_id (id, location),
+        work_scope:work_scope_id (id, work_scope)
+      `
+          )
+          .is("deleted_at", null);
+
+        // Apply filters using the parameters
+        if (workOrderId) {
+          baseQuery = baseQuery.eq("work_order_id", workOrderId);
+        } else if (workOrderIdParam > 0) {
+          baseQuery = baseQuery.eq("work_order_id", workOrderIdParam);
+        } else if (vesselIdParam > 0) {
+          const { data: vesselWorkOrders } = await supabase
+            .from("work_order")
+            .select("id")
+            .eq("vessel_id", vesselIdParam)
+            .is("deleted_at", null);
+
+          if (vesselWorkOrders && vesselWorkOrders.length > 0) {
+            const workOrderIds = vesselWorkOrders.map((wo) => wo.id);
+            baseQuery = baseQuery.in("work_order_id", workOrderIds);
+          } else {
+            setWorkDetails([]);
+            setLoading(false);
+            return;
+          }
+        }
+
+        // Add sorting using the parameters
+        const query = baseQuery.order(sortFieldParam, {
+          ascending: sortDirectionParam === "asc",
+        });
+
+        const { data, error: queryError } = await query;
+
+        if (queryError) throw queryError;
+
+        // Process work details with progress data
+        const workDetailsWithProgress = (data || []).map((detail) => {
+          const progressRecords = detail.work_progress || [];
+
+          if (progressRecords.length === 0) {
+            return {
+              ...detail,
+              current_progress: 0,
+              latest_progress_date: undefined,
+              progress_count: 0,
+            };
+          }
+
+          const sortedProgress = [...progressRecords].sort(
+            (a, b) =>
+              new Date(b.report_date).getTime() -
+              new Date(a.report_date).getTime()
+          );
+
+          return {
+            ...detail,
+            current_progress: sortedProgress[0]?.progress_percentage || 0,
+            latest_progress_date: sortedProgress[0]?.report_date,
+            progress_count: progressRecords.length,
+          };
+        });
+
+        setWorkDetails(workDetailsWithProgress);
+      } catch (err) {
+        console.error("Error in fetchWorkDetailsWithFilters:", err);
+        setError(err instanceof Error ? err.message : "An error occurred");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [workOrderId]
+  );
+
+  useEffect(() => {
+    if (selectedVesselId > 0 && vessels.length === 0) {
+      fetchVessels().then(() => {
+        const vessel = vessels.find((v) => v.id === selectedVesselId);
+        if (vessel && !vesselSearchTerm) {
+          setVesselSearchTerm(
+            `${vessel.name} - ${vessel.type} (${vessel.company})`
+          );
+        }
+      });
+    }
+
+    if (selectedVesselId > 0 && workOrders.length === 0) {
+      fetchWorkOrdersForVessel(selectedVesselId);
+    }
+
+    if (selectedWorkOrderId > 0 && !selectedWorkOrderDetails) {
+      fetchWorkOrderDetails(selectedWorkOrderId);
+    }
+  }, [
+    selectedVesselId,
+    selectedWorkOrderId,
+    vessels.length,
+    workOrders.length,
+    selectedWorkOrderDetails,
+    vesselSearchTerm,
+    fetchVessels,
+    fetchWorkOrdersForVessel,
+    fetchWorkOrderDetails,
+  ]);
 
   // ==================== RENDER COMPONENTS ====================
 
@@ -1274,12 +1629,12 @@ export default function WODetailsTable({
                 type="text"
                 placeholder="Search by description, location, PIC, WO number, SPK, SPKK, PTW, work scope..."
                 value={workDetailsSearchTerm}
-                onChange={(e) => setWorkDetailsSearchTerm(e.target.value)}
+                onChange={(e) => handleWorkDetailsSearchChange(e.target.value)}
                 className="w-full px-3 py-2 pr-8 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               {workDetailsSearchTerm && (
                 <button
-                  onClick={() => setWorkDetailsSearchTerm("")}
+                  onClick={() => handleWorkDetailsSearchChange("")}
                   className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                 >
                   ✕
