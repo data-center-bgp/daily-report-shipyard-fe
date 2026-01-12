@@ -758,13 +758,10 @@ export default function WODetailsTable({
           }
 
           // Step 2: Restore vessel and work order filters
-          let shouldFetch = false;
-
           if (navigationState.vesselId) {
             console.log("Restoring vessel:", navigationState.vesselId);
             setSelectedVesselId(navigationState.vesselId);
             setVesselSearchTerm(navigationState.vesselSearch || "");
-            shouldFetch = true;
 
             // Fetch work orders for the vessel
             await fetchWorkOrdersForVessel(navigationState.vesselId);
@@ -796,7 +793,7 @@ export default function WODetailsTable({
 
           console.log("✅ Filters restored, now fetching work details...");
 
-          // Step 5: ✅ FIX - Wait for state updates then fetch with a longer delay
+          // Step 5: Wait for state updates then fetch with a longer delay
           setTimeout(() => {
             // Force refetch by directly calling the fetch with the restored values
             fetchWorkDetailsWithFilters(
@@ -805,7 +802,7 @@ export default function WODetailsTable({
               navigationState.sortField || "planned_start_date",
               navigationState.sortDirection || "asc"
             );
-          }, 300); // Increased delay to ensure state is updated
+          }, 300);
         } catch (error) {
           console.error("Error restoring filters:", error);
           fetchWorkDetails(); // Fallback to regular fetch
