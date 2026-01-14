@@ -25,71 +25,73 @@ export default function BASTPDetails() {
         .from("bastp")
         .select(
           `
-          *,
-          vessel:vessel_id (
+    *,
+    vessel:vessel_id (
+      id,
+      name,
+      type,
+      company
+    ),
+    profiles:user_id (
+      id,
+      name,
+      email
+    ),
+    bastp_work_details (
+      id,
+      work_details:work_details_id (
+        id,
+        description,
+        quantity,
+        uom,
+        planned_start_date,
+        target_close_date,
+        pic,
+        location:location_id (
+          id,
+          location
+        ),
+        work_order:work_order_id (
+          id,
+          created_at,
+          updated_at,
+          vessel_id,
+          shipyard_wo_number,
+          shipyard_wo_date,
+          customer_wo_number,
+          customer_wo_date,
+          user_id,
+          is_additional_wo,
+          kapro_id,
+          work_location,
+          work_type,
+          kapro:kapro_id (
             id,
-            name,
-            type,
-            company
+            kapro_name
           ),
           profiles:user_id (
             id,
             name,
             email
-          ),
-          bastp_work_details (
-            id,
-            work_details:work_details_id (
-              id,
-              description,
-              quantity,
-              uom,
-              planned_start_date,
-              target_close_date,
-              pic,
-              location:location_id (
-                id,
-                location
-              ),
-              work_order:work_order_id (
-                id,
-                created_at,
-                updated_at,
-                vessel_id,
-                shipyard_wo_number,
-                shipyard_wo_date,
-                customer_wo_number,
-                customer_wo_date,
-                user_id,
-                is_additional_wo,
-                kapro_id,
-                work_location,
-                work_type,
-                kapro:kapro_id (
-                  id,
-                  kapro_name
-                ),
-                profiles:user_id (
-                  id,
-                  name,
-                  email
-                )
-              )
-            )
-          ),
-          general_services (
-            id,
-            service_type_id,
-            total_days,
-            remarks,
-            service_type:service_type_id (
-              id,
-              service_name,
-              service_code,
-              display_order
-            )
           )
-        `
+        )
+      )
+    ),
+    general_services (
+      id,
+      service_type_id,
+      start_date,
+      close_date,
+      total_days,
+      remarks,
+      service_type:service_type_id (
+        id,
+        service_name,
+        service_code,
+        display_order
+      )
+    )
+  `
         )
         .eq("id", bastpId)
         .is("deleted_at", null)
@@ -613,6 +615,12 @@ export default function BASTPDetails() {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                         Service Name
                       </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Start Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Close Date
+                      </th>
                       <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
                         Total Days
                       </th>
@@ -638,6 +646,30 @@ export default function BASTPDetails() {
                               {service.service_type?.service_name}
                             </div>
                           </td>
+                          {/* ✅ ADD: Start Date */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">
+                              {service.start_date ? (
+                                formatDate(service.start_date)
+                              ) : (
+                                <span className="text-gray-400 text-xs">
+                                  Not set
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          {/* ✅ ADD: Close Date */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">
+                              {service.close_date ? (
+                                formatDate(service.close_date)
+                              ) : (
+                                <span className="text-gray-400 text-xs">
+                                  Not set
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td className="px-6 py-4 text-center">
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
                               {service.total_days} day
@@ -658,8 +690,9 @@ export default function BASTPDetails() {
               {/* Info Notice */}
               <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-800">
-                  💡 <strong>Note:</strong> Pricing information is managed by
-                  Finance during invoice creation.
+                  💡 <strong>Note:</strong> Total days includes both start and
+                  close dates. Pricing information is managed by Finance during
+                  invoice creation.
                 </p>
               </div>
             </div>

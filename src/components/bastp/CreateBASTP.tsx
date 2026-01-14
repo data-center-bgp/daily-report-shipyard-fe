@@ -167,6 +167,8 @@ export default function CreateBASTP() {
       const servicesFromBastp =
         data.general_services?.map((gs: any) => ({
           service_type_id: gs.service_type_id,
+          start_date: gs.start_date || new Date().toISOString().split("T")[0],
+          close_date: gs.close_date || new Date().toISOString().split("T")[0],
           total_days: gs.total_days,
           remarks: gs.remarks || "",
         })) || [];
@@ -327,30 +329,19 @@ export default function CreateBASTP() {
       if (exists) {
         return prev.filter((s) => s.service_type_id !== serviceTypeId);
       } else {
+        const today = new Date().toISOString().split("T")[0];
         return [
           ...prev,
           {
             service_type_id: serviceTypeId,
-            total_days: 0,
+            start_date: today,
+            close_date: today,
+            total_days: 1,
             remarks: "",
           },
         ];
       }
     });
-  };
-
-  // Handle service days change
-  const handleServiceDaysChange = (serviceTypeId: number, days: string) => {
-    const numericValue = days.replace(/\D/g, "");
-    const totalDays = numericValue === "" ? 0 : parseInt(numericValue, 10);
-
-    setSelectedServices((prev) =>
-      prev.map((service) =>
-        service.service_type_id === serviceTypeId
-          ? { ...service, total_days: totalDays }
-          : service
-      )
-    );
   };
 
   // Handle service remarks change
@@ -364,6 +355,59 @@ export default function CreateBASTP() {
           ? { ...service, remarks }
           : service
       )
+    );
+  };
+
+  const calculateTotalDays = (startDate: string, closeDate: string): number => {
+    if (!startDate || !closeDate) return 0;
+
+    const start = new Date(startDate);
+    const end = new Date(closeDate);
+
+    if (end < start) return 0;
+
+    // Calculate difference in days
+    const diffTime = end.getTime() - start.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end date
+
+    return diffDays > 0 ? diffDays : 0;
+  };
+
+  const handleServiceStartDateChange = (
+    serviceTypeId: number,
+    startDate: string
+  ) => {
+    setSelectedServices((prev) =>
+      prev.map((service) => {
+        if (service.service_type_id === serviceTypeId) {
+          const totalDays = calculateTotalDays(startDate, service.close_date);
+          return {
+            ...service,
+            start_date: startDate,
+            total_days: totalDays,
+          };
+        }
+        return service;
+      })
+    );
+  };
+
+  const handleServiceCloseDateChange = (
+    serviceTypeId: number,
+    closeDate: string
+  ) => {
+    setSelectedServices((prev) =>
+      prev.map((service) => {
+        if (service.service_type_id === serviceTypeId) {
+          const totalDays = calculateTotalDays(service.start_date, closeDate);
+          return {
+            ...service,
+            close_date: closeDate,
+            total_days: totalDays,
+          };
+        }
+        return service;
+      })
     );
   };
 
@@ -541,6 +585,8 @@ export default function CreateBASTP() {
           const servicesToInsert = selectedServices.map((service) => ({
             bastp_id: parseInt(bastpId),
             service_type_id: service.service_type_id,
+            start_date: service.start_date,
+            close_date: service.close_date,
             total_days: service.total_days,
             unit_price: 0,
             payment_price: 0,
@@ -591,6 +637,8 @@ export default function CreateBASTP() {
           const servicesToInsert = selectedServices.map((service) => ({
             bastp_id: bastpData.id,
             service_type_id: service.service_type_id,
+            start_date: service.start_date,
+            close_date: service.close_date,
             total_days: service.total_days,
             unit_price: 0,
             payment_price: 0,
@@ -818,32 +866,71 @@ export default function CreateBASTP() {
 
                         {/* Days Input - Only show if selected */}
                         {isSelected && (
-                          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Total Days{" "}
-                                <span className="text-red-500">*</span>
-                              </label>
-                              <input
-                                type="number"
-                                min="1"
-                                value={
-                                  serviceData?.total_days === 0
-                                    ? ""
-                                    : serviceData?.total_days || ""
-                                }
-                                onChange={(e) =>
-                                  handleServiceDaysChange(
-                                    serviceType.id,
-                                    e.target.value
-                                  )
-                                }
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="Enter number of days"
-                                required
-                              />
+                          <>
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Start Date{" "}
+                                  <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="date"
+                                  value={serviceData?.start_date || ""}
+                                  onChange={(e) =>
+                                    handleServiceStartDateChange(
+                                      serviceType.id,
+                                      e.target.value
+                                    )
+                                  }
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Close Date{" "}
+                                  <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="date"
+                                  value={serviceData?.close_date || ""}
+                                  onChange={(e) =>
+                                    handleServiceCloseDateChange(
+                                      serviceType.id,
+                                      e.target.value
+                                    )
+                                  }
+                                  min={serviceData?.start_date} // HTML5 validation
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  required
+                                />
+                                {/* ✅ ADD: Warning for invalid date */}
+                                {serviceData?.start_date &&
+                                  serviceData?.close_date &&
+                                  new Date(serviceData.close_date) <
+                                    new Date(serviceData.start_date) && (
+                                    <p className="text-xs text-red-600 mt-1">
+                                      ⚠️ Close date cannot be before start date
+                                    </p>
+                                  )}
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Total Days
+                                </label>
+                                <input
+                                  type="number"
+                                  value={serviceData?.total_days || 0}
+                                  readOnly
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed"
+                                  placeholder="Auto-calculated"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Auto-calculated from dates
+                                </p>
+                              </div>
                             </div>
-                            <div>
+                            <div className="mt-3">
                               <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Remarks (Optional)
                               </label>
@@ -860,7 +947,7 @@ export default function CreateBASTP() {
                                 placeholder="Add notes..."
                               />
                             </div>
-                          </div>
+                          </>
                         )}
                       </div>
                     </div>

@@ -24,6 +24,8 @@ export interface GeneralService {
 
 export interface GeneralServiceInput {
   service_type_id: number;
+  start_date: string;
+  close_date: string;
   total_days: number;
-  remarks?: string;
+  remarks: string;
 }

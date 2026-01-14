@@ -45,28 +45,33 @@ export default function BASTP() {
         .from("bastp")
         .select(
           `
-        *,
-        vessel:vessel_id (
+    *,
+    vessel:vessel_id (
+      id,
+      name,
+      type,
+      company
+    ),
+    bastp_work_details (
+      id,
+      work_details (
+        id,
+        description,
+        quantity,
+        uom,
+        work_order (
           id,
-          name,
-          type,
-          company
-        ),
-        bastp_work_details (
-          id,
-          work_details (
-            id,
-            description,
-            quantity,
-            uom,
-            work_order (
-              id,
-              shipyard_wo_number,
-              customer_wo_number
-            )
-          )
+          shipyard_wo_number,
+          customer_wo_number
         )
-      `
+      )
+    ),
+    general_services (
+      start_date,
+      close_date,
+      total_days
+    )
+  `
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
@@ -385,6 +390,46 @@ export default function BASTP() {
                       <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
                         {bastp.total_work_details} items
                       </span>
+                      {bastp.general_services &&
+                        bastp.general_services.length > 0 && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {(() => {
+                              const services = bastp.general_services;
+                              const dates = services
+                                .filter(
+                                  (s: any) => s.start_date && s.close_date
+                                )
+                                .flatMap((s: any) => [
+                                  new Date(s.start_date),
+                                  new Date(s.close_date),
+                                ]);
+
+                              if (dates.length === 0) return null;
+
+                              const minDate = new Date(
+                                Math.min(...dates.map((d) => d.getTime()))
+                              );
+                              const maxDate = new Date(
+                                Math.max(...dates.map((d) => d.getTime()))
+                              );
+
+                              return (
+                                <span>
+                                  📅{" "}
+                                  {minDate.toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                  })}{" "}
+                                  -{" "}
+                                  {maxDate.toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                  })}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {getStatusBadge(bastp.status)}
