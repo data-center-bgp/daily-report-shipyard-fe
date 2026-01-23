@@ -1,7 +1,25 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
-import { useAuth } from "../../hooks/useAuth"; // Add this import
+import { useAuth } from "../../hooks/useAuth";
+// ✅ Import icons from lucide-react
+import {
+  LayoutDashboard,
+  FileText,
+  Wrench,
+  TrendingUp,
+  CheckCircle,
+  FileCheck,
+  Receipt,
+  ScrollText,
+  Download,
+  Ship,
+  Menu,
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+  User,
+} from "lucide-react";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -17,7 +35,6 @@ export default function Layout({ children, onLogout }: LayoutProps) {
   const { canAccess } = useAuth();
 
   useEffect(() => {
-    // Get current user
     const getUser = async () => {
       const {
         data: { user },
@@ -27,7 +44,6 @@ export default function Layout({ children, onLogout }: LayoutProps) {
     getUser();
   }, []);
 
-  // Load collapsed state from localStorage
   useEffect(() => {
     const saved = localStorage.getItem("sidebar-collapsed");
     if (saved) {
@@ -35,59 +51,59 @@ export default function Layout({ children, onLogout }: LayoutProps) {
     }
   }, []);
 
-  // Save collapsed state to localStorage
   const toggleSidebar = () => {
     const newState = !sidebarCollapsed;
     setSidebarCollapsed(newState);
     localStorage.setItem("sidebar-collapsed", JSON.stringify(newState));
   };
 
+  // ✅ Updated navigation with Lucide icons
   const navigation = [
     {
       name: "Dashboard",
       href: "/",
-      icon: "📊",
+      icon: LayoutDashboard,
       current: location.pathname === "/",
       show: true,
     },
     {
       name: "Work Orders",
       href: "/work-orders",
-      icon: "📋",
+      icon: FileText,
       current:
         location.pathname === "/work-orders" ||
         location.pathname.startsWith("/vessel/") ||
         location.pathname.startsWith("/work-order/") ||
         location.pathname.startsWith("/add-work-order") ||
         location.pathname.startsWith("/edit-work-order"),
-      show: canAccess("workOrders"), // Check access
+      show: canAccess("workOrders"),
     },
     {
       name: "Work Details",
       href: "/work-details",
-      icon: "🔧",
+      icon: Wrench,
       current:
         location.pathname === "/work-details" ||
         location.pathname.startsWith("/work-details/") ||
         location.pathname.includes("/add-work-details") ||
         location.pathname.includes("/edit-work-details"),
-      show: canAccess("workDetails"), // Check access
+      show: canAccess("workDetails"),
     },
     {
       name: "Work Progress",
       href: "/work-progress",
-      icon: "📈",
+      icon: TrendingUp,
       current:
         location.pathname === "/work-progress" ||
         location.pathname.startsWith("/work-progress/") ||
         location.pathname.includes("/add-progress") ||
         location.pathname.includes("/edit-progress"),
-      show: canAccess("progress"), // Check access
+      show: canAccess("progress"),
     },
     {
       name: "Work Verification",
       href: "/work-verification",
-      icon: "✅",
+      icon: CheckCircle,
       current:
         location.pathname === "/work-verification" ||
         location.pathname.startsWith("/work-verification/"),
@@ -96,57 +112,56 @@ export default function Layout({ children, onLogout }: LayoutProps) {
     {
       name: "BASTP",
       href: "/bastp",
-      icon: "📄",
+      icon: FileCheck,
       current:
         location.pathname === "/bastp" ||
         location.pathname.startsWith("/bastp/"),
-      show: canAccess("workOrders") || canAccess("invoices"), // PPIC, Finance, and Manager can access
+      show: canAccess("workOrders") || canAccess("invoices"),
     },
     {
       name: "Invoices",
       href: "/invoices",
-      icon: "💰",
+      icon: Receipt,
       current:
         location.pathname === "/invoices" ||
         location.pathname.startsWith("/invoices/") ||
         location.pathname.includes("/invoice"),
-      show: canAccess("invoices"), // Only show for MASTER and FINANCE
+      show: canAccess("invoices"),
     },
     {
       name: "Activity Logs",
       href: "/activity-logs",
-      icon: "📜",
+      icon: ScrollText,
       current:
         location.pathname === "/activity-logs" ||
         location.pathname.startsWith("/activity-logs/"),
-      show: canAccess("exportData"), //
+      show: canAccess("exportData"),
     },
     {
       name: "Export Data",
       href: "/export-data",
-      icon: "📥",
+      icon: Download,
       current: location.pathname === "/export-data",
-      show: canAccess("exportData"), // Check access
+      show: canAccess("exportData"),
     },
   ];
 
-  // Filter navigation items based on access
   const visibleNavigation = navigation.filter((item) => item.show);
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar for desktop */}
-      <div className="hidden lg:flex lg:flex-shrink-0">
+      {/* Sidebar for desktop - ✅ FIXED: Added fixed positioning and height constraints */}
+      <div className="hidden lg:flex lg:flex-shrink-0 lg:fixed lg:inset-y-0 lg:z-30">
         <div
-          className={`flex flex-col bg-gradient-to-b from-blue-900 via-blue-800 to-blue-900 shadow-xl transition-all duration-300 ease-in-out ${
+          className={`flex flex-col h-screen bg-gradient-to-b from-blue-900 via-blue-800 to-blue-900 shadow-xl transition-all duration-300 ease-in-out ${
             sidebarCollapsed ? "w-16" : "w-64"
           }`}
         >
-          {/* Logo/Header */}
-          <div className="flex items-center justify-between h-16 px-4 bg-blue-800 border-b border-blue-700">
+          {/* Logo/Header - ✅ FIXED: Now sticky at top */}
+          <div className="flex-shrink-0 flex items-center justify-between h-16 px-4 bg-blue-800 border-b border-blue-700">
             <div className="flex items-center space-x-3 min-w-0">
               <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
-                <span className="text-blue-800 text-lg font-bold">🚢</span>
+                <Ship className="w-5 h-5 text-blue-800" />
               </div>
               {!sidebarCollapsed && (
                 <h1 className="text-lg font-bold text-white transition-opacity duration-200 truncate">
@@ -155,87 +170,100 @@ export default function Layout({ children, onLogout }: LayoutProps) {
               )}
             </div>
 
-            {/* Collapse Toggle Button - Inside sidebar */}
+            {/* Collapse Toggle Button */}
             <button
               onClick={toggleSidebar}
-              className="flex-shrink-0 w-8 h-8 bg-blue-700 hover:bg-blue-600 rounded-lg flex items-center justify-center text-white text-sm transition-all duration-200 hover:scale-105"
+              className="flex-shrink-0 w-8 h-8 bg-blue-700 hover:bg-blue-600 rounded-lg flex items-center justify-center text-white transition-all duration-200 hover:scale-105"
               title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
-              <span className="transform transition-transform duration-200">
-                {sidebarCollapsed ? "▶" : "◀"}
-              </span>
+              {sidebarCollapsed ? (
+                <ChevronRight className="w-4 h-4" />
+              ) : (
+                <ChevronLeft className="w-4 h-4" />
+              )}
             </button>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 px-3 py-6 space-y-1">
-            {visibleNavigation.map((item) => (
-              <div key={item.name} className="relative group">
-                <button
-                  onClick={() => navigate(item.href)}
-                  className={`w-full text-left px-3 py-3 rounded-xl flex items-center transition-all duration-200 ${
-                    sidebarCollapsed ? "justify-center" : "space-x-3"
-                  } ${
-                    item.current
-                      ? "bg-white text-blue-800 shadow-lg transform scale-105"
-                      : "text-blue-100 hover:bg-blue-700 hover:text-white hover:transform hover:scale-105"
-                  }`}
-                >
-                  <span className="text-xl flex-shrink-0">{item.icon}</span>
-                  {!sidebarCollapsed && (
-                    <span className="font-medium transition-opacity duration-200 truncate">
-                      {item.name}
-                    </span>
-                  )}
-                </button>
+          {/* Navigation - ✅ FIXED: Now scrollable independently */}
+          <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-blue-700 scrollbar-track-blue-900">
+            {visibleNavigation.map((item) => {
+              const IconComponent = item.icon;
+              return (
+                <div key={item.name} className="relative group">
+                  <button
+                    onClick={() => navigate(item.href)}
+                    className={`w-full text-left px-3 py-3 rounded-xl flex items-center transition-all duration-200 ${
+                      sidebarCollapsed ? "justify-center" : "space-x-3"
+                    } ${
+                      item.current
+                        ? "bg-white text-blue-800 shadow-lg transform scale-105"
+                        : "text-blue-100 hover:bg-blue-700 hover:text-white hover:transform hover:scale-105"
+                    }`}
+                  >
+                    <IconComponent className="w-5 h-5 flex-shrink-0" />
+                    {!sidebarCollapsed && (
+                      <span className="font-medium transition-opacity duration-200 truncate">
+                        {item.name}
+                      </span>
+                    )}
+                  </button>
 
-                {/* Tooltip for collapsed state */}
-                {sidebarCollapsed && (
-                  <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white px-2 py-1 rounded text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 pointer-events-none">
-                    {item.name}
-                    <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 rotate-45"></div>
-                  </div>
-                )}
-              </div>
-            ))}
+                  {/* Tooltip for collapsed state */}
+                  {sidebarCollapsed && (
+                    <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white px-2 py-1 rounded text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 pointer-events-none">
+                      {item.name}
+                      <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 rotate-45"></div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </nav>
 
-          {/* User Info & Logout */}
-          <div className="p-3 border-t border-blue-700 bg-blue-800">
+          {/* User Info & Logout - ✅ FIXED: Now sticky at bottom */}
+          <div className="flex-shrink-0 p-3 border-t border-blue-700 bg-blue-800">
             {!sidebarCollapsed ? (
-              // Expanded user info
               <>
                 <div className="flex items-center space-x-3 mb-4">
                   <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center ring-2 ring-blue-400 flex-shrink-0">
-                    <span className="text-white text-sm font-bold">
-                      {user?.email?.charAt(0).toUpperCase() || "U"}
-                    </span>
+                    {user?.email ? (
+                      <span className="text-white text-sm font-bold">
+                        {user.email.charAt(0).toUpperCase()}
+                      </span>
+                    ) : (
+                      <User className="w-5 h-5 text-white" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white truncate">
                       {user?.email || "User"}
                     </p>
-                    <p className="text-xs text-blue-200">Online ●</p>
+                    <p className="text-xs text-blue-200 flex items-center">
+                      <span className="w-2 h-2 bg-green-400 rounded-full mr-1"></span>
+                      Online
+                    </p>
                   </div>
                 </div>
                 <button
                   onClick={onLogout}
                   className="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium flex items-center justify-center space-x-2 shadow-md hover:shadow-lg"
                 >
-                  <span>🚪</span>
+                  <LogOut className="w-4 h-4" />
                   <span>Logout</span>
                 </button>
               </>
             ) : (
-              // Collapsed user info
               <div className="flex flex-col items-center space-y-3">
                 <div className="relative group">
                   <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center ring-2 ring-blue-400 cursor-pointer">
-                    <span className="text-white text-sm font-bold">
-                      {user?.email?.charAt(0).toUpperCase() || "U"}
-                    </span>
+                    {user?.email ? (
+                      <span className="text-white text-sm font-bold">
+                        {user.email.charAt(0).toUpperCase()}
+                      </span>
+                    ) : (
+                      <User className="w-5 h-5 text-white" />
+                    )}
                   </div>
-                  {/* User tooltip */}
                   <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white px-2 py-1 rounded text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 pointer-events-none">
                     {user?.email || "User"} - Online
                     <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 rotate-45"></div>
@@ -247,9 +275,8 @@ export default function Layout({ children, onLogout }: LayoutProps) {
                     onClick={onLogout}
                     className="w-10 h-10 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center shadow-md hover:shadow-lg"
                   >
-                    <span>🚪</span>
+                    <LogOut className="w-4 h-4" />
                   </button>
-                  {/* Logout tooltip */}
                   <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white px-2 py-1 rounded text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 pointer-events-none">
                     Logout
                     <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 rotate-45"></div>
@@ -268,12 +295,12 @@ export default function Layout({ children, onLogout }: LayoutProps) {
             className="fixed inset-0 bg-gray-600 bg-opacity-75"
             onClick={() => setSidebarOpen(false)}
           />
-          <div className="relative flex flex-col max-w-xs w-full bg-gradient-to-b from-blue-900 via-blue-800 to-blue-900 shadow-2xl">
+          <div className="relative flex flex-col max-w-xs w-full h-full bg-gradient-to-b from-blue-900 via-blue-800 to-blue-900 shadow-2xl">
             {/* Mobile sidebar header */}
-            <div className="flex items-center justify-between h-16 px-6 bg-blue-800 border-b border-blue-700">
+            <div className="flex-shrink-0 flex items-center justify-between h-16 px-6 bg-blue-800 border-b border-blue-700">
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-                  <span className="text-blue-800 text-lg font-bold">🚢</span>
+                  <Ship className="w-5 h-5 text-blue-800" />
                 </div>
                 <h1 className="text-xl font-bold text-white">
                   Shipyard System
@@ -288,46 +315,56 @@ export default function Layout({ children, onLogout }: LayoutProps) {
             </div>
 
             {/* Mobile navigation */}
-            <nav className="flex-1 px-4 py-6 space-y-1">
-              {visibleNavigation.map((item) => (
-                <button
-                  key={item.name}
-                  onClick={() => {
-                    navigate(item.href);
-                    setSidebarOpen(false);
-                  }}
-                  className={`w-full text-left px-4 py-3 rounded-xl flex items-center space-x-3 transition-all duration-200 ${
-                    item.current
-                      ? "bg-white text-blue-800 shadow-lg"
-                      : "text-blue-100 hover:bg-blue-700 hover:text-white"
-                  }`}
-                >
-                  <span className="text-xl">{item.icon}</span>
-                  <span className="font-medium">{item.name}</span>
-                </button>
-              ))}
+            <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+              {visibleNavigation.map((item) => {
+                const IconComponent = item.icon;
+                return (
+                  <button
+                    key={item.name}
+                    onClick={() => {
+                      navigate(item.href);
+                      setSidebarOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-3 rounded-xl flex items-center space-x-3 transition-all duration-200 ${
+                      item.current
+                        ? "bg-white text-blue-800 shadow-lg"
+                        : "text-blue-100 hover:bg-blue-700 hover:text-white"
+                    }`}
+                  >
+                    <IconComponent className="w-5 h-5" />
+                    <span className="font-medium">{item.name}</span>
+                  </button>
+                );
+              })}
             </nav>
 
             {/* Mobile user info */}
-            <div className="p-4 border-t border-blue-700 bg-blue-800">
+            <div className="flex-shrink-0 p-4 border-t border-blue-700 bg-blue-800">
               <div className="flex items-center space-x-3 mb-4">
                 <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center ring-2 ring-blue-400">
-                  <span className="text-white text-sm font-bold">
-                    {user?.email?.charAt(0).toUpperCase() || "U"}
-                  </span>
+                  {user?.email ? (
+                    <span className="text-white text-sm font-bold">
+                      {user.email.charAt(0).toUpperCase()}
+                    </span>
+                  ) : (
+                    <User className="w-5 h-5 text-white" />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-white truncate">
                     {user?.email || "User"}
                   </p>
-                  <p className="text-xs text-blue-200">Online ●</p>
+                  <p className="text-xs text-blue-200 flex items-center">
+                    <span className="w-2 h-2 bg-green-400 rounded-full mr-1"></span>
+                    Online
+                  </p>
                 </div>
               </div>
               <button
                 onClick={onLogout}
                 className="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium flex items-center justify-center space-x-2 shadow-md hover:shadow-lg"
               >
-                <span>🚪</span>
+                <LogOut className="w-4 h-4" />
                 <span>Logout</span>
               </button>
             </div>
@@ -335,8 +372,12 @@ export default function Layout({ children, onLogout }: LayoutProps) {
         </div>
       )}
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Main content - ✅ FIXED: Added left margin to account for fixed sidebar */}
+      <div
+        className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${
+          sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
+        }`}
+      >
         {/* Mobile header */}
         <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
           <div className="flex items-center justify-between">
@@ -344,17 +385,17 @@ export default function Layout({ children, onLogout }: LayoutProps) {
               onClick={() => setSidebarOpen(true)}
               className="text-gray-600 hover:text-gray-900 p-2 rounded-lg hover:bg-gray-100 transition-colors"
             >
-              <span className="text-xl">☰</span>
+              <Menu className="w-6 h-6" />
             </button>
             <div className="flex items-center space-x-2">
               <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center">
-                <span className="text-white text-sm">🚢</span>
+                <Ship className="w-4 h-4 text-white" />
               </div>
               <h1 className="text-lg font-medium text-gray-900">
                 Shipyard System
               </h1>
             </div>
-            <div className="w-10"></div> {/* Spacer for centering */}
+            <div className="w-10"></div>
           </div>
         </div>
 
