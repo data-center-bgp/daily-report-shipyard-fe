@@ -4,6 +4,18 @@ import { supabase } from "../../lib/supabase";
 import type { Invoice } from "../../types/invoiceTypes";
 import type { BASTPWithDetails } from "../../types/bastp.types";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  DollarSign,
+  FileText,
+  Plus,
+  ArrowRight,
+  CheckCircle2,
+  X,
+  Lock,
+  ExternalLink,
+  Download,
+  Loader,
+} from "lucide-react";
 
 export default function InvoiceList() {
   const navigate = useNavigate();
@@ -17,10 +29,10 @@ export default function InvoiceList() {
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "unpaid">(
-    "all"
+    "all",
   );
   const [viewMode, setViewMode] = useState<"invoices" | "ready-bastp">(
-    "invoices"
+    "invoices",
   );
 
   // Pagination
@@ -88,7 +100,7 @@ export default function InvoiceList() {
               uom
             )
           )
-        `
+        `,
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
@@ -130,7 +142,7 @@ export default function InvoiceList() {
               )
             )
           )
-        `
+        `,
         )
         .eq("status", "READY_FOR_INVOICE")
         .eq("is_invoiced", false)
@@ -169,7 +181,7 @@ export default function InvoiceList() {
           inv.faktur_number?.toLowerCase().includes(searchLower) ||
           inv.bastp?.number?.toLowerCase().includes(searchLower) ||
           inv.bastp?.vessel?.name?.toLowerCase().includes(searchLower) ||
-          inv.bastp?.vessel?.company?.toLowerCase().includes(searchLower)
+          inv.bastp?.vessel?.company?.toLowerCase().includes(searchLower),
       );
     }
 
@@ -184,7 +196,7 @@ export default function InvoiceList() {
       (bastp) =>
         bastp.number?.toLowerCase().includes(searchLower) ||
         bastp.vessel?.name?.toLowerCase().includes(searchLower) ||
-        bastp.vessel?.company?.toLowerCase().includes(searchLower)
+        bastp.vessel?.company?.toLowerCase().includes(searchLower),
     );
   }, [readyBASTPs, searchTerm]);
 
@@ -204,7 +216,7 @@ export default function InvoiceList() {
       unpaid: invoices.filter((inv) => !inv.payment_status).length,
       ready: readyBASTPs.length,
     }),
-    [invoices, readyBASTPs]
+    [invoices, readyBASTPs],
   );
 
   const formatDate = (dateString: string | null | undefined) => {
@@ -227,7 +239,7 @@ export default function InvoiceList() {
   // View document with modal
   const handleViewDocument = async (
     storagePath: string | null,
-    bastpNumber: string
+    bastpNumber: string,
   ) => {
     if (!storagePath) {
       alert("No document available");
@@ -277,7 +289,7 @@ export default function InvoiceList() {
     return (
       <div className="p-8">
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <Loader className="w-12 h-12 text-blue-600 animate-spin" />
           <span className="ml-3 text-gray-600">Loading invoices...</span>
         </div>
       </div>
@@ -332,24 +344,25 @@ export default function InvoiceList() {
           <nav className="flex -mb-px">
             <button
               onClick={() => setViewMode("invoices")}
-              className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
                 viewMode === "invoices"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}
             >
-              💰 Invoices ({stats.total})
+              <DollarSign className="w-4 h-4" /> Invoices ({stats.total})
             </button>
             {!isReadOnly && (
               <button
                 onClick={() => setViewMode("ready-bastp")}
-                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
                   viewMode === "ready-bastp"
                     ? "border-blue-500 text-blue-600"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                 }`}
               >
-                📋 Ready for Invoice ({stats.ready})
+                <FileText className="w-4 h-4" /> Ready for Invoice (
+                {stats.ready})
               </button>
             )}
           </nav>
@@ -454,13 +467,13 @@ export default function InvoiceList() {
                               onClick={() =>
                                 handleViewDocument(
                                   invoice.bastp?.storage_path || null,
-                                  invoice.bastp?.number || ""
+                                  invoice.bastp?.number || "",
                                 )
                               }
                               disabled={viewingDocument}
                               className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              📄 View BASTP
+                              <FileText className="w-4 h-4" /> View BASTP
                             </button>
                           ) : (
                             <span className="text-xs text-gray-400">
@@ -516,9 +529,9 @@ export default function InvoiceList() {
                         <td className="px-6 py-4 text-center">
                           <button
                             onClick={() => navigate(`/invoices/${invoice.id}`)}
-                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                            className="flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-medium mx-auto"
                           >
-                            View Details →
+                            View Details <ArrowRight className="w-4 h-4" />
                           </button>
                         </td>
                       </tr>
@@ -533,7 +546,7 @@ export default function InvoiceList() {
                       Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
                       {Math.min(
                         currentPage * itemsPerPage,
-                        filteredInvoices.length
+                        filteredInvoices.length,
                       )}{" "}
                       of {filteredInvoices.length} results
                     </div>
@@ -565,7 +578,7 @@ export default function InvoiceList() {
               </>
             ) : (
               <div className="text-center py-12">
-                <span className="text-gray-400 text-4xl mb-4 block">💰</span>
+                <DollarSign className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-500 text-lg mb-4">No invoices found</p>
               </div>
             )}
@@ -606,8 +619,9 @@ export default function InvoiceList() {
                             <div className="font-medium text-gray-900">
                               {bastp.number}
                             </div>
-                            <div className="text-xs text-green-600 font-medium mt-1">
-                              ✓ Ready for Invoice
+                            <div className="flex items-center gap-1 text-xs text-green-600 font-medium mt-1">
+                              <CheckCircle2 className="w-3 h-3" /> Ready for
+                              Invoice
                             </div>
                           </div>
                         </td>
@@ -630,13 +644,13 @@ export default function InvoiceList() {
                               onClick={() =>
                                 handleViewDocument(
                                   bastp.storage_path || null,
-                                  bastp.number
+                                  bastp.number,
                                 )
                               }
                               disabled={viewingDocument}
                               className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              📄 View BASTP
+                              <FileText className="w-4 h-4" /> View BASTP
                             </button>
                           ) : (
                             <span className="text-xs text-gray-400">
@@ -670,9 +684,9 @@ export default function InvoiceList() {
                             onClick={() =>
                               navigate(`/invoices/create/${bastp.id}`)
                             }
-                            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                            className="inline-flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
                           >
-                            ➕ Create Invoice
+                            <Plus className="w-4 h-4" /> Create Invoice
                           </button>
                         </td>
                       </tr>
@@ -681,7 +695,7 @@ export default function InvoiceList() {
                 </table>
               ) : (
                 <div className="text-center py-12">
-                  <span className="text-gray-400 text-4xl mb-4 block">📋</span>
+                  <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                   <p className="text-gray-500 text-lg mb-4">
                     No BASTP ready for invoicing
                   </p>
@@ -701,14 +715,15 @@ export default function InvoiceList() {
           <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] flex flex-col shadow-2xl">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">
-                📄 BASTP Document - {currentBastpNumber}
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FileText className="w-5 h-5" /> BASTP Document -{" "}
+                {currentBastpNumber}
               </h3>
               <button
                 onClick={handleCloseModal}
-                className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
+                className="text-gray-500 hover:text-gray-700"
               >
-                ✕
+                <X className="w-6 h-6" />
               </button>
             </div>
 
@@ -734,8 +749,9 @@ export default function InvoiceList() {
               ) : (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center">
-                    <p className="text-gray-600 mb-4 text-lg">
-                      📄 Cannot preview this file type in browser
+                    <p className="text-gray-600 mb-4 text-lg flex items-center gap-2 justify-center">
+                      <FileText className="w-5 h-5" /> Cannot preview this file
+                      type in browser
                     </p>
                     <a
                       href={documentUrl}
@@ -752,8 +768,9 @@ export default function InvoiceList() {
 
             {/* Modal Footer */}
             <div className="p-4 border-t border-gray-200 flex justify-between items-center bg-white">
-              <p className="text-xs text-gray-500">
-                🔒 Secure signed URL - Expires in 5 minutes
+              <p className="text-xs text-gray-500 flex items-center gap-1">
+                <Lock className="w-3 h-3" /> Secure signed URL - Expires in 5
+                minutes
               </p>
               <div className="flex gap-2">
                 <a
@@ -762,14 +779,14 @@ export default function InvoiceList() {
                   rel="noopener noreferrer"
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 inline-flex items-center gap-2 text-sm font-medium"
                 >
-                  🔗 New Tab
+                  <ExternalLink className="w-4 h-4" /> New Tab
                 </a>
                 <a
                   href={documentUrl}
                   download={`BASTP-${currentBastpNumber}.pdf`}
                   className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 inline-flex items-center gap-2 text-sm font-medium"
                 >
-                  ⬇️ Download
+                  <Download className="w-4 h-4" /> Download
                 </a>
                 <button
                   onClick={handleCloseModal}

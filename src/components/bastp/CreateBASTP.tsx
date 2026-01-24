@@ -6,6 +6,20 @@ import type {
   GeneralServiceType,
   GeneralServiceInput,
 } from "../../types/generalService.types";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  FileText,
+  Wrench,
+  RefreshCw,
+  CheckCircle2,
+  ArrowRight,
+  Plus,
+  X,
+  FileEdit,
+  Search,
+  Loader,
+} from "lucide-react";
 
 interface WorkDetailsWithProgress extends WorkDetails {
   current_progress?: number;
@@ -142,7 +156,7 @@ export default function CreateBASTP() {
               display_order
             )
           )
-        `
+        `,
         )
         .eq("id", bastpId)
         .is("deleted_at", null)
@@ -212,7 +226,7 @@ export default function CreateBASTP() {
             id,
             location
           )
-        `
+        `,
         )
         .eq("work_order.vessel.id", formData.vessel_id)
         .is("deleted_at", null);
@@ -230,7 +244,7 @@ export default function CreateBASTP() {
           const sortedProgress = progressRecords.sort(
             (a: any, b: any) =>
               new Date(b.report_date).getTime() -
-              new Date(a.report_date).getTime()
+              new Date(a.report_date).getTime(),
           );
 
           const latestProgress = sortedProgress[0]?.progress_percentage || 0;
@@ -254,7 +268,7 @@ export default function CreateBASTP() {
       if (verError) throw verError;
 
       const verifiedIds = new Set(
-        verifications?.map((v) => v.work_details_id) || []
+        verifications?.map((v) => v.work_details_id) || [],
       );
 
       // Mark verified work details
@@ -275,18 +289,18 @@ export default function CreateBASTP() {
       const workDetailsInOtherBastps = new Set(
         existingBastpWorkDetails
           ?.filter((bwd) => bwd.bastp_id !== Number(bastpId))
-          .map((bwd) => bwd.work_details_id) || []
+          .map((bwd) => bwd.work_details_id) || [],
       );
 
       // Also exclude currently selected work details
       const currentlySelectedIds = new Set(
-        selectedWorkDetails.map((wd) => wd.id)
+        selectedWorkDetails.map((wd) => wd.id),
       );
 
       const availableWork = workWithVerification.filter(
         (wd) =>
           !workDetailsInOtherBastps.has(wd.id) &&
-          !currentlySelectedIds.has(wd.id)
+          !currentlySelectedIds.has(wd.id),
       );
 
       setAvailableWorkDetails(availableWork);
@@ -347,14 +361,14 @@ export default function CreateBASTP() {
   // Handle service remarks change
   const handleServiceRemarksChange = (
     serviceTypeId: number,
-    remarks: string
+    remarks: string,
   ) => {
     setSelectedServices((prev) =>
       prev.map((service) =>
         service.service_type_id === serviceTypeId
           ? { ...service, remarks }
-          : service
-      )
+          : service,
+      ),
     );
   };
 
@@ -375,7 +389,7 @@ export default function CreateBASTP() {
 
   const handleServiceStartDateChange = (
     serviceTypeId: number,
-    startDate: string
+    startDate: string,
   ) => {
     setSelectedServices((prev) =>
       prev.map((service) => {
@@ -388,13 +402,13 @@ export default function CreateBASTP() {
           };
         }
         return service;
-      })
+      }),
     );
   };
 
   const handleServiceCloseDateChange = (
     serviceTypeId: number,
-    closeDate: string
+    closeDate: string,
   ) => {
     setSelectedServices((prev) =>
       prev.map((service) => {
@@ -407,7 +421,7 @@ export default function CreateBASTP() {
           };
         }
         return service;
-      })
+      }),
     );
   };
 
@@ -415,21 +429,21 @@ export default function CreateBASTP() {
   const handleAddWorkDetail = (workDetail: WorkDetailsWithProgress) => {
     setSelectedWorkDetails((prev) => [...prev, workDetail]);
     setAvailableWorkDetails((prev) =>
-      prev.filter((wd) => wd.id !== workDetail.id)
+      prev.filter((wd) => wd.id !== workDetail.id),
     );
   };
 
   // Handle remove work detail
   const handleRemoveWorkDetail = (workDetail: WorkDetailsWithProgress) => {
     setSelectedWorkDetails((prev) =>
-      prev.filter((wd) => wd.id !== workDetail.id)
+      prev.filter((wd) => wd.id !== workDetail.id),
     );
     setAvailableWorkDetails((prev) => [...prev, workDetail]);
   };
 
   // Handle document upload
   const handleDocumentUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const file = event.target.files?.[0];
     if (!file || !bastpId) return;
@@ -487,7 +501,7 @@ export default function CreateBASTP() {
       if (updateError) throw updateError;
 
       alert(
-        "✅ Document uploaded successfully! Status will update automatically."
+        "✅ Document uploaded successfully! Status will update automatically.",
       );
 
       // Refresh to show new document
@@ -497,7 +511,7 @@ export default function CreateBASTP() {
       alert(
         `❌ Failed to upload document: ${
           err instanceof Error ? err.message : String(err)
-        }`
+        }`,
       );
     } finally {
       setUploadingDocument(false);
@@ -700,16 +714,16 @@ export default function CreateBASTP() {
         </div>
         <button
           onClick={() => navigate("/bastp")}
-          className="text-blue-600 hover:text-blue-800"
+          className="flex items-center gap-2 text-blue-600 hover:text-blue-800"
         >
-          ← Back to BASTP List
+          <ArrowLeft className="w-4 h-4" /> Back to BASTP List
         </button>
       </div>
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center">
-            <span className="text-red-600 mr-2">⚠️</span>
+            <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
             <p className="text-red-700 font-medium">{error}</p>
           </div>
         </div>
@@ -718,8 +732,8 @@ export default function CreateBASTP() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* BASTP Information */}
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            📋 BASTP Information
+          <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <FileText className="w-5 h-5" /> BASTP Information
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -803,8 +817,8 @@ export default function CreateBASTP() {
         {/* General Services Section */}
         <div className="bg-white rounded-lg shadow p-6">
           <div className="mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">
-              🛠️ General Services
+            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+              <Wrench className="w-5 h-5" /> General Services
             </h2>
             <p className="text-sm text-gray-600 mt-1">
               Select the general services used for this vessel and specify the
@@ -814,7 +828,7 @@ export default function CreateBASTP() {
 
           {loadingServiceTypes ? (
             <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <Loader className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
               <p className="text-gray-600 mt-2">Loading services...</p>
             </div>
           ) : serviceTypes.length === 0 ? (
@@ -823,19 +837,19 @@ export default function CreateBASTP() {
               <button
                 type="button"
                 onClick={() => fetchServiceTypes()}
-                className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
+                className="mt-2 flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm mx-auto"
               >
-                🔄 Retry Loading
+                <RefreshCw className="w-4 h-4" /> Retry Loading
               </button>
             </div>
           ) : (
             <div className="space-y-3">
               {serviceTypes.map((serviceType) => {
                 const isSelected = selectedServices.some(
-                  (s) => s.service_type_id === serviceType.id
+                  (s) => s.service_type_id === serviceType.id,
                 );
                 const serviceData = selectedServices.find(
-                  (s) => s.service_type_id === serviceType.id
+                  (s) => s.service_type_id === serviceType.id,
                 );
 
                 return (
@@ -879,7 +893,7 @@ export default function CreateBASTP() {
                                   onChange={(e) =>
                                     handleServiceStartDateChange(
                                       serviceType.id,
-                                      e.target.value
+                                      e.target.value,
                                     )
                                   }
                                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -897,7 +911,7 @@ export default function CreateBASTP() {
                                   onChange={(e) =>
                                     handleServiceCloseDateChange(
                                       serviceType.id,
-                                      e.target.value
+                                      e.target.value,
                                     )
                                   }
                                   min={serviceData?.start_date} // HTML5 validation
@@ -909,8 +923,9 @@ export default function CreateBASTP() {
                                   serviceData?.close_date &&
                                   new Date(serviceData.close_date) <
                                     new Date(serviceData.start_date) && (
-                                    <p className="text-xs text-red-600 mt-1">
-                                      ⚠️ Close date cannot be before start date
+                                    <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                                      <AlertTriangle className="w-3 h-3" />{" "}
+                                      Close date cannot be before start date
                                     </p>
                                   )}
                               </div>
@@ -940,7 +955,7 @@ export default function CreateBASTP() {
                                 onChange={(e) =>
                                   handleServiceRemarksChange(
                                     serviceType.id,
-                                    e.target.value
+                                    e.target.value,
                                   )
                                 }
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -960,8 +975,9 @@ export default function CreateBASTP() {
           {/* Summary */}
           {selectedServices.length > 0 && (
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-900">
-                ✓ Selected {selectedServices.length} service(s) • Total Days:{" "}
+              <p className="text-sm text-blue-900 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" /> Selected{" "}
+                {selectedServices.length} service(s) • Total Days:{" "}
                 {selectedServices.reduce((sum, s) => sum + s.total_days, 0)}
               </p>
             </div>
@@ -972,10 +988,11 @@ export default function CreateBASTP() {
             !loadingServiceTypes &&
             serviceTypes.length > 0 && (
               <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <p className="text-sm text-yellow-800">
+                <p className="text-sm text-yellow-800 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
                   {isEditMode
-                    ? "⚠️ No general services selected."
-                    : "⚠️ Please select at least one general service"}
+                    ? "No general services selected."
+                    : "Please select at least one general service"}
                 </p>
               </div>
             )}
@@ -984,8 +1001,8 @@ export default function CreateBASTP() {
         {/* Document Upload (Edit Mode Only) */}
         {isEditMode && existingBastp && (
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              📄 BASTP Document
+            <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <FileText className="w-5 h-5" /> BASTP Document
             </h2>
             {existingBastp.document_url ? (
               <div className="space-y-4">
@@ -998,7 +1015,7 @@ export default function CreateBASTP() {
                       Uploaded on:{" "}
                       {existingBastp.bastp_upload_date
                         ? new Date(
-                            existingBastp.bastp_upload_date
+                            existingBastp.bastp_upload_date,
                           ).toLocaleDateString()
                         : "Unknown"}
                     </p>
@@ -1007,9 +1024,9 @@ export default function CreateBASTP() {
                     href={existingBastp.document_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-800"
+                    className="flex items-center gap-2 text-blue-600 hover:text-blue-800"
                   >
-                    View Document →
+                    View Document <ArrowRight className="w-4 h-4" />
                   </a>
                 </div>
                 <div>
@@ -1044,7 +1061,7 @@ export default function CreateBASTP() {
             )}
             {uploadingDocument && (
               <div className="flex items-center gap-2 text-blue-600 mt-2">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                <Loader className="w-4 h-4 animate-spin" />
                 <span className="text-sm">Uploading document...</span>
               </div>
             )}
@@ -1056,17 +1073,21 @@ export default function CreateBASTP() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Available Work Details */}
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                ✅ Available Work Details ({filteredAvailableWork.length})
+              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-green-600" /> Available
+                Work Details ({filteredAvailableWork.length})
               </h2>
               <div className="mb-4">
-                <input
-                  type="text"
-                  placeholder="Search work details..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search work details..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {filteredAvailableWork.length > 0 ? (
@@ -1086,8 +1107,8 @@ export default function CreateBASTP() {
                               WO: {wd.work_order?.shipyard_wo_number}
                             </span>
                             {wd.is_verified && (
-                              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
-                                ✓ Verified
+                              <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
+                                <CheckCircle2 className="w-3 h-3" /> Verified
                               </span>
                             )}
                           </div>
@@ -1097,7 +1118,7 @@ export default function CreateBASTP() {
                           onClick={() => handleAddWorkDetail(wd)}
                           className="ml-2 text-blue-600 hover:text-blue-800"
                         >
-                          ➕
+                          <Plus className="w-5 h-5" />
                         </button>
                       </div>
                     </div>
@@ -1112,8 +1133,9 @@ export default function CreateBASTP() {
 
             {/* Selected Work Details */}
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                📝 Selected Work Details ({selectedWorkDetails.length})
+              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <FileEdit className="w-5 h-5 text-blue-600" /> Selected Work
+                Details ({selectedWorkDetails.length})
               </h2>
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {selectedWorkDetails.length > 0 ? (
@@ -1142,7 +1164,7 @@ export default function CreateBASTP() {
                           onClick={() => handleRemoveWorkDetail(wd)}
                           className="ml-2 text-red-600 hover:text-red-800"
                         >
-                          ✕
+                          <X className="w-5 h-5" />
                         </button>
                       </div>
                     </div>
@@ -1167,8 +1189,8 @@ export default function CreateBASTP() {
             {submitting
               ? "Saving..."
               : isEditMode
-              ? "Update BASTP"
-              : "Create BASTP"}
+                ? "Update BASTP"
+                : "Create BASTP"}
           </button>
           <button
             type="button"

@@ -8,6 +8,33 @@ import {
 } from "../../lib/supabase";
 import { openPermitFile } from "../../utils/urlHandler";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  Ship,
+  FileText,
+  User,
+  MapPin,
+  Edit,
+  Trash2,
+  ChevronRight,
+  CheckCircle2,
+  Circle,
+  AlertTriangle,
+  X,
+  Clock,
+  RefreshCw,
+  Plus,
+  Wrench,
+  HardHat,
+  BarChart3,
+  Calendar,
+  ClipboardList,
+  ArrowLeft,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Search,
+  FileCheck,
+} from "lucide-react";
 
 interface WorkDetailsWithWorkOrder extends WorkDetails {
   work_order?: WorkOrder & {
@@ -54,7 +81,7 @@ export default function WODetailsTable({
 
   // State Management
   const [workDetails, setWorkDetails] = useState<WorkDetailsWithWorkOrder[]>(
-    []
+    [],
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +103,7 @@ export default function WODetailsTable({
           | "created_at"
           | "description") || "planned_start_date"
       );
-    }
+    },
   );
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">(() => {
     const direction = searchParams.get("sortDirection");
@@ -116,13 +143,13 @@ export default function WODetailsTable({
 
   // Search State
   const [vesselSearchTerm, setVesselSearchTerm] = useState(
-    () => searchParams.get("vesselSearch") || ""
+    () => searchParams.get("vesselSearch") || "",
   );
   const [workOrderSearchTerm, setWorkOrderSearchTerm] = useState(
-    () => searchParams.get("woSearch") || ""
+    () => searchParams.get("woSearch") || "",
   );
   const [workDetailsSearchTerm, setWorkDetailsSearchTerm] = useState(
-    () => searchParams.get("search") || ""
+    () => searchParams.get("search") || "",
   );
 
   // Dropdown State
@@ -168,7 +195,7 @@ export default function WODetailsTable({
   const endIndex = startIndex + itemsPerPage;
   const currentWorkDetails = filteredWorkDetailsForDisplay.slice(
     startIndex,
-    endIndex
+    endIndex,
   );
 
   // Filter vessels for search dropdown
@@ -179,7 +206,7 @@ export default function WODetailsTable({
       (vessel) =>
         vessel.name?.toLowerCase().includes(searchLower) ||
         vessel.type?.toLowerCase().includes(searchLower) ||
-        vessel.company?.toLowerCase().includes(searchLower)
+        vessel.company?.toLowerCase().includes(searchLower),
     );
   }, [vessels, vesselSearchTerm]);
 
@@ -190,7 +217,7 @@ export default function WODetailsTable({
     return workOrders.filter(
       (wo) =>
         wo.shipyard_wo_number?.toLowerCase().includes(searchLower) ||
-        wo.customer_wo_number?.toLowerCase().includes(searchLower)
+        wo.customer_wo_number?.toLowerCase().includes(searchLower),
     );
   }, [workOrders, workOrderSearchTerm]);
 
@@ -242,7 +269,7 @@ export default function WODetailsTable({
           *,
           vessel (id, name, type, company),
           kapro (id, kapro_name)
-        `
+        `,
         )
         .eq("id", workOrderId)
         .single();
@@ -275,7 +302,7 @@ export default function WODetailsTable({
           work_progress (id, progress_percentage, report_date, created_at),
           location:location_id (id, location),
           work_scope:work_scope_id (id, work_scope)
-        `
+        `,
         )
         .is("deleted_at", null);
 
@@ -326,7 +353,7 @@ export default function WODetailsTable({
         const sortedProgress = [...progressRecords].sort(
           (a, b) =>
             new Date(b.report_date).getTime() -
-            new Date(a.report_date).getTime()
+            new Date(a.report_date).getTime(),
         );
 
         return {
@@ -390,7 +417,7 @@ export default function WODetailsTable({
 
       setSearchParams(newParams, { replace: true });
     },
-    [searchParams, setSearchParams]
+    [searchParams, setSearchParams],
   );
 
   const handleVesselSelectFromDropdown = (vessel: Vessel) => {
@@ -572,7 +599,7 @@ export default function WODetailsTable({
     } catch (err) {
       console.error("Error deleting work details:", err);
       setError(
-        err instanceof Error ? err.message : "An error occurred while deleting"
+        err instanceof Error ? err.message : "An error occurred while deleting",
       );
     } finally {
       setIsDeleting(false);
@@ -629,20 +656,20 @@ export default function WODetailsTable({
       return {
         text: "Completed",
         color: "bg-green-100 text-green-800 border-green-200",
-        icon: "✅",
+        icon: <CheckCircle2 className="w-4 h-4" />,
       };
     } else if (detail.actual_start_date) {
       return {
         text: "In Progress",
         color: "bg-blue-100 text-blue-800 border-blue-200",
-        icon: "⏳",
+        icon: <Clock className="w-4 h-4" />,
       };
     } else {
       // ✅ REMOVED: storage_path check
       return {
         text: "Not Ready",
         color: "bg-red-100 text-red-600 border-red-200",
-        icon: "🔴",
+        icon: <Circle className="w-4 h-4 text-red-600 fill-red-600" />,
       };
     }
   };
@@ -656,16 +683,25 @@ export default function WODetailsTable({
   };
 
   const getProgressIcon = (progress: number) => {
-    if (progress >= 100) return "✅";
-    if (progress >= 75) return "🔵";
-    if (progress >= 50) return "🟡";
-    if (progress >= 25) return "🟠";
-    return "🔴";
+    if (progress >= 100)
+      return <CheckCircle2 className="w-4 h-4 text-green-600" />;
+    if (progress >= 75)
+      return <Circle className="w-4 h-4 text-blue-600 fill-blue-600" />;
+    if (progress >= 50)
+      return <Circle className="w-4 h-4 text-yellow-600 fill-yellow-600" />;
+    if (progress >= 25)
+      return <Circle className="w-4 h-4 text-orange-600 fill-orange-600" />;
+    return <Circle className="w-4 h-4 text-red-600 fill-red-600" />;
   };
 
   const getSortIcon = (field: string) => {
-    if (sortField !== field) return "↕️";
-    return sortDirection === "asc" ? "↑" : "↓";
+    if (sortField !== field)
+      return <ArrowUpDown className="w-4 h-4 inline ml-1" />;
+    return sortDirection === "asc" ? (
+      <ArrowUp className="w-4 h-4 inline ml-1" />
+    ) : (
+      <ArrowDown className="w-4 h-4 inline ml-1" />
+    );
   };
 
   // ==================== EFFECTS ====================
@@ -783,7 +819,7 @@ export default function WODetailsTable({
           // Step 4: Clear navigation state to prevent re-triggering
           window.history.replaceState(
             { ...window.history.state, usr: undefined },
-            ""
+            "",
           );
 
           console.log("✅ Filters restored, now fetching work details...");
@@ -795,7 +831,7 @@ export default function WODetailsTable({
               navigationState.vesselId || 0,
               navigationState.workOrderId || 0,
               navigationState.sortField || "planned_start_date",
-              navigationState.sortDirection || "asc"
+              navigationState.sortDirection || "asc",
             );
           }, 300);
         } catch (error) {
@@ -824,7 +860,7 @@ export default function WODetailsTable({
       vesselIdParam: number,
       workOrderIdParam: number,
       sortFieldParam: typeof sortField,
-      sortDirectionParam: "asc" | "desc"
+      sortDirectionParam: "asc" | "desc",
     ) => {
       try {
         setLoading(true);
@@ -845,7 +881,7 @@ export default function WODetailsTable({
         work_progress (id, progress_percentage, report_date, created_at),
         location:location_id (id, location),
         work_scope:work_scope_id (id, work_scope)
-      `
+      `,
           )
           .is("deleted_at", null);
 
@@ -896,7 +932,7 @@ export default function WODetailsTable({
           const sortedProgress = [...progressRecords].sort(
             (a, b) =>
               new Date(b.report_date).getTime() -
-              new Date(a.report_date).getTime()
+              new Date(a.report_date).getTime(),
           );
 
           return {
@@ -915,7 +951,7 @@ export default function WODetailsTable({
         setLoading(false);
       }
     },
-    [workOrderId]
+    [workOrderId],
   );
 
   useEffect(() => {
@@ -924,7 +960,7 @@ export default function WODetailsTable({
         const vessel = vessels.find((v) => v.id === selectedVesselId);
         if (vessel && !vesselSearchTerm) {
           setVesselSearchTerm(
-            `${vessel.name} - ${vessel.type} (${vessel.company})`
+            `${vessel.name} - ${vessel.type} (${vessel.company})`,
           );
         }
       });
@@ -1004,13 +1040,11 @@ export default function WODetailsTable({
               className="flex items-center gap-2 text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
               aria-label={isExpanded ? "Hide details" : "Show details"} // ✅ ADDED
             >
-              <span
-                className={`transform transition-transform duration-200 ${
+              <ChevronRight
+                className={`w-5 h-5 transform transition-transform duration-200 ${
                   isExpanded ? "rotate-90" : ""
                 }`}
-              >
-                ▶️
-              </span>
+              />
               <span className="text-xs text-gray-500">
                 {isExpanded ? "Hide" : "Show"}
               </span>
@@ -1040,12 +1074,12 @@ export default function WODetailsTable({
                   : detail.description}
               </div>
               <div className="flex flex-wrap gap-1 mt-1">
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                  👤 {detail.pic || "Not assigned"}
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                  <User className="w-3 h-3" /> {detail.pic || "Not assigned"}
                 </span>
                 {detail.location && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                    📍 {detail.location.location}
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                    <MapPin className="w-3 h-3" /> {detail.location.location}
                   </span>
                 )}
               </div>
@@ -1133,7 +1167,7 @@ export default function WODetailsTable({
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
                     className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(
-                      detail.current_progress || 0
+                      detail.current_progress || 0,
                     )}`}
                     style={{ width: `${detail.current_progress || 0}%` }}
                   ></div>
@@ -1151,7 +1185,7 @@ export default function WODetailsTable({
                   title="Edit"
                   aria-label={`Edit ${detail.description}`}
                 >
-                  ✏️
+                  <Edit className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleDeleteWorkDetails(detail)}
@@ -1159,7 +1193,7 @@ export default function WODetailsTable({
                   title="Delete"
                   aria-label={`Delete ${detail.description}`}
                 >
-                  🗑️
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             </td>
@@ -1167,15 +1201,15 @@ export default function WODetailsTable({
         </tr>
 
         {isExpanded && (
-          <tr className="bg-gray-50">
-            <td colSpan={isReadOnly ? 6 : 7} className="px-0 py-0">
+          <tr className="bg-gray-50 animate-in fade-in slide-in-from-top-2 duration-300">
+            <td colSpan={isReadOnly ? 8 : 9} className="px-0 py-0">
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-t border-b border-blue-200">
-                <div className="px-6 py-4">
+                <div className="px-6 py-4 transition-all duration-300 ease-in-out">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {/* Full Description */}
                     <div className="lg:col-span-2">
-                      <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
-                        📝 Full Description
+                      <label className="flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase mb-2">
+                        <ClipboardList className="w-4 h-4" /> Full Description
                       </label>
                       <p className="text-sm text-gray-900 bg-white p-3 rounded-lg border border-gray-200">
                         {detail.description}
@@ -1184,8 +1218,8 @@ export default function WODetailsTable({
 
                     {/* Work Order Info */}
                     <div>
-                      <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
-                        📋 Work Order
+                      <label className="flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase mb-2">
+                        <FileText className="w-4 h-4" /> Work Order
                       </label>
                       <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-1">
                         <div className="text-sm font-medium text-gray-900">
@@ -1197,8 +1231,9 @@ export default function WODetailsTable({
                           </div>
                         )}
                         {detail.work_order?.vessel && (
-                          <div className="text-xs text-gray-600">
-                            🚢 {detail.work_order.vessel.name}
+                          <div className="flex items-center gap-1 text-xs text-gray-600">
+                            <Ship className="w-3 h-3" />{" "}
+                            {detail.work_order.vessel.name}
                           </div>
                         )}
                       </div>
@@ -1206,8 +1241,8 @@ export default function WODetailsTable({
 
                     {/* Document Numbers */}
                     <div>
-                      <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
-                        📄 Document Numbers
+                      <label className="flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase mb-2">
+                        <FileCheck className="w-4 h-4" /> Document Numbers
                       </label>
                       <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-2">
                         {detail.spk_number && (
@@ -1246,8 +1281,8 @@ export default function WODetailsTable({
 
                     {/* Dates */}
                     <div>
-                      <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
-                        📅 Schedule
+                      <label className="flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase mb-2">
+                        <Calendar className="w-4 h-4" /> Schedule
                       </label>
                       <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-2">
                         <div className="text-sm">
@@ -1291,8 +1326,8 @@ export default function WODetailsTable({
 
                     {/* Progress Info */}
                     <div>
-                      <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
-                        📊 Progress Status
+                      <label className="flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase mb-2">
+                        <BarChart3 className="w-4 h-4" /> Progress Status
                       </label>
                       <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-2">
                         <div className="text-sm">
@@ -1332,21 +1367,22 @@ export default function WODetailsTable({
                         onClick={() => handleViewPermit(detail)}
                         className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm"
                       >
-                        📄 View Work Permit
+                        <FileCheck className="w-4 h-4" /> View Work Permit
                       </button>
                     )}
                     <button
                       onClick={() => handleViewProgress(detail.id)}
                       className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 text-sm"
                     >
-                      📊 View Progress ({detail.progress_count || 0})
+                      <BarChart3 className="w-4 h-4" /> View Progress (
+                      {detail.progress_count || 0})
                     </button>
                     {!isReadOnly && (
                       <button
                         onClick={() => handleAddProgress(detail.id)}
                         className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm"
                       >
-                        ➕ Add Progress
+                        <Plus className="w-4 h-4" /> Add Progress
                       </button>
                     )}
                   </div>
@@ -1417,7 +1453,7 @@ export default function WODetailsTable({
                 disabled={currentPage === 1}
                 className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ←
+                <ArrowLeft className="w-4 h-4" />
               </button>
 
               {startPage > 1 && (
@@ -1471,7 +1507,7 @@ export default function WODetailsTable({
                 disabled={currentPage === totalPages}
                 className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                →
+                <ChevronRight className="w-4 h-4" />
               </button>
             </nav>
           </div>
@@ -1494,7 +1530,7 @@ export default function WODetailsTable({
           <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full transform transition-all">
             <div className="bg-red-600 px-6 py-4 rounded-t-lg">
               <div className="flex items-center gap-3">
-                <span className="text-3xl">⚠️</span>
+                <AlertTriangle className="w-8 h-8 text-white" />
                 <h3 className="text-xl font-bold text-white">Confirm Delete</h3>
               </div>
             </div>
@@ -1529,7 +1565,9 @@ export default function WODetailsTable({
                     Deleting...
                   </>
                 ) : (
-                  <>🗑️ Delete</>
+                  <>
+                    <Trash2 className="w-4 h-4" /> Delete
+                  </>
                 )}
               </button>
             </div>
@@ -1548,8 +1586,8 @@ export default function WODetailsTable({
           <div className="flex flex-col sm:flex-row gap-4">
             {/* Vessel Filter */}
             <div className="flex-1 relative" ref={vesselDropdownRef}>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                🚢 Vessel
+              <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
+                <Ship className="w-4 h-4" /> Vessel
               </label>
               <div className="relative">
                 <input
@@ -1566,7 +1604,7 @@ export default function WODetailsTable({
                     onClick={handleClearVesselSearch}
                     className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                   >
-                    ✕
+                    <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
@@ -1595,8 +1633,8 @@ export default function WODetailsTable({
 
             {/* Work Order Filter */}
             <div className="flex-1 relative" ref={workOrderDropdownRef}>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                📋 Work Order
+              <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
+                <FileText className="w-4 h-4" /> Work Order
               </label>
               <div className="relative">
                 <input
@@ -1617,7 +1655,7 @@ export default function WODetailsTable({
                     onClick={handleClearWorkOrderSearch}
                     className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                   >
-                    ✕
+                    <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
@@ -1655,8 +1693,8 @@ export default function WODetailsTable({
 
           {/* Work Details Search */}
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              🔍 Search Work Details
+            <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
+              <Search className="w-4 h-4" /> Search Work Details
             </label>
             <div className="relative">
               <input
@@ -1671,7 +1709,7 @@ export default function WODetailsTable({
                   onClick={() => handleWorkDetailsSearchChange("")}
                   className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                 >
-                  ✕
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>
@@ -1688,7 +1726,7 @@ export default function WODetailsTable({
 
   const renderEmptyState = () => (
     <div className="text-center py-16">
-      <div className="text-6xl mb-4">🔧</div>
+      <Wrench className="w-16 h-16 text-gray-400 mx-auto mb-4" />
       <h3 className="text-xl font-semibold text-gray-900 mb-2">
         No work details found
       </h3>
@@ -1696,19 +1734,19 @@ export default function WODetailsTable({
         {workDetailsSearchTerm
           ? `No work details match your search "${workDetailsSearchTerm}"`
           : workOrderId
-          ? "Add work details to break down this work order into manageable tasks."
-          : selectedWorkOrderId > 0
-          ? "No work details found for the selected work order."
-          : selectedVesselId > 0
-          ? "No work details found for the selected vessel."
-          : "Create work details to track and manage work tasks."}
+            ? "Add work details to break down this work order into manageable tasks."
+            : selectedWorkOrderId > 0
+              ? "No work details found for the selected work order."
+              : selectedVesselId > 0
+                ? "No work details found for the selected vessel."
+                : "Create work details to track and manage work tasks."}
       </p>
       {!workDetailsSearchTerm && !isReadOnly && (
         <button
           onClick={handleAddWorkDetails}
           className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 inline-flex items-center gap-2 shadow-md"
         >
-          ➕ Add Work Details
+          <Plus className="w-5 h-5" /> Add Work Details
         </button>
       )}
     </div>
@@ -1752,7 +1790,7 @@ export default function WODetailsTable({
               onClick={fetchWorkDetails}
               className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-all duration-200 flex items-center gap-2 shadow-sm"
             >
-              🔄 Refresh
+              <RefreshCw className="w-4 h-4" /> Refresh
             </button>
             {!isReadOnly &&
               (profile?.role === "PPIC" || profile?.role === "MASTER") && (
@@ -1760,7 +1798,7 @@ export default function WODetailsTable({
                   onClick={handleAddWorkDetails}
                   className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-2 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center gap-2 shadow-md"
                 >
-                  ➕ Add Work Details
+                  <Plus className="w-4 h-4" /> Add Work Details
                 </button>
               )}
           </div>
@@ -1775,8 +1813,8 @@ export default function WODetailsTable({
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-sm border border-blue-200 p-6">
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="bg-blue-600 text-white rounded-full w-12 h-12 flex items-center justify-center text-xl font-bold">
-                🏗️
+              <div className="bg-blue-600 text-white rounded-full w-12 h-12 flex items-center justify-center">
+                <HardHat className="w-6 h-6" />
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
@@ -1803,7 +1841,7 @@ export default function WODetailsTable({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-gray-200">
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xl">🚢</span>
+                  <Ship className="w-5 h-5 text-blue-600" />
                   <span className="text-xs font-semibold text-gray-500 uppercase">
                     Vessel
                   </span>
@@ -1821,7 +1859,7 @@ export default function WODetailsTable({
 
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xl">📋</span>
+                  <FileText className="w-5 h-5 text-blue-600" />
                   <span className="text-xs font-semibold text-gray-500 uppercase">
                     Work Order Numbers
                   </span>
@@ -1884,21 +1922,21 @@ export default function WODetailsTable({
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
               >
                 <option value="planned_start_date-asc">
-                  📅 Start Date (Earliest)
+                  Start Date (Earliest)
                 </option>
                 <option value="planned_start_date-desc">
-                  📅 Start Date (Latest)
+                  Start Date (Latest)
                 </option>
                 <option value="target_close_date-asc">
-                  🎯 Target Date (Earliest)
+                  Target Date (Earliest)
                 </option>
                 <option value="target_close_date-desc">
-                  🎯 Target Date (Latest)
+                  Target Date (Latest)
                 </option>
-                <option value="description-asc">📝 Description (A-Z)</option>
-                <option value="description-desc">📝 Description (Z-A)</option>
-                <option value="created_at-desc">🆕 Recently Added</option>
-                <option value="created_at-asc">📅 Oldest First</option>
+                <option value="description-asc">Description (A-Z)</option>
+                <option value="description-desc">Description (Z-A)</option>
+                <option value="created_at-desc">Recently Added</option>
+                <option value="created_at-asc">Oldest First</option>
               </select>
 
               {embedded &&
@@ -1908,7 +1946,7 @@ export default function WODetailsTable({
                     onClick={handleAddWorkDetails}
                     className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center gap-2 shadow-sm text-sm"
                   >
-                    ➕ Add Work Details
+                    <Plus className="w-4 h-4" /> Add Work Details
                   </button>
                 )}
             </div>

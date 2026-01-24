@@ -7,6 +7,24 @@ import {
   type Vessel,
 } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  Ship,
+  X,
+  FileEdit,
+  Clock,
+  CheckCircle2,
+  FileCheck,
+  DollarSign,
+  FileText,
+  Search,
+  ArrowLeft,
+  MapPin,
+  Calendar,
+  ChevronRight,
+  Eye,
+  User,
+  AlertTriangle,
+} from "lucide-react";
 
 interface WorkDetailsWithProgress extends WorkDetails {
   current_progress?: number;
@@ -72,7 +90,7 @@ export default function WorkVerification() {
     WorkDetailsWithProgress[]
   >([]);
   const [verifications, setVerifications] = useState<VerificationWithDetails[]>(
-    []
+    [],
   );
   const [bastps, setBastps] = useState<BASTPs[]>([]);
   const [loading, setLoading] = useState(true);
@@ -191,7 +209,7 @@ export default function WorkVerification() {
             id,
             location
           )
-        `
+        `,
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
@@ -211,7 +229,7 @@ export default function WorkVerification() {
         const sortedProgress = progressRecords.sort(
           (a: WorkProgressItem, b: WorkProgressItem) =>
             new Date(b.report_date).getTime() -
-            new Date(a.report_date).getTime()
+            new Date(a.report_date).getTime(),
         );
         const latestProgress = sortedProgress[0]?.progress_percentage || 0;
         const latestProgressDate = sortedProgress[0]?.report_date;
@@ -225,7 +243,7 @@ export default function WorkVerification() {
 
       // Filter only completed work details (100% progress)
       const completed = workDetailsWithProgress.filter(
-        (wd) => wd.current_progress === 100
+        (wd) => wd.current_progress === 100,
       );
       setCompletedWorkDetails(completed);
 
@@ -259,7 +277,7 @@ export default function WorkVerification() {
             name,
             email
           )
-        `
+        `,
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
@@ -283,7 +301,7 @@ export default function WorkVerification() {
       type,
       company
     )
-  `
+  `,
         )
         .is("deleted_at", null)
         .order("date", { ascending: false });
@@ -294,7 +312,7 @@ export default function WorkVerification() {
           ...b,
           vessel_id: b.vessel?.id ?? null,
           vessel: Array.isArray(b.vessel) ? b.vessel[0] : b.vessel,
-        }))
+        })),
       );
 
       // Fetch vessels for filter
@@ -329,7 +347,7 @@ export default function WorkVerification() {
   // Get pending work details (completed but not yet verified)
   const verifiedWorkDetailsIds = verifications.map((v) => v.work_details_id);
   const pendingWorkDetails = completedWorkDetails.filter(
-    (wd) => !verifiedWorkDetailsIds.includes(wd.id)
+    (wd) => !verifiedWorkDetailsIds.includes(wd.id),
   );
 
   // Apply vessel filter
@@ -355,10 +373,10 @@ export default function WorkVerification() {
 
   // Split pending work details for tabs
   const pendingNotInBASTP = filteredPending.filter(
-    (wd) => !wd.is_in_bastp || !wd.bastp_id
+    (wd) => !wd.is_in_bastp || !wd.bastp_id,
   );
   const pendingWithBASTP = filteredPending.filter(
-    (wd) => wd.is_in_bastp && wd.bastp_id
+    (wd) => wd.is_in_bastp && wd.bastp_id,
   );
 
   // Group pendingWithBASTP by BASTP
@@ -434,31 +452,43 @@ export default function WorkVerification() {
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<
       string,
-      { bg: string; text: string; icon: string }
+      { bg: string; text: string; icon: React.ReactElement }
     > = {
-      DRAFT: { bg: "bg-gray-100", text: "text-gray-700", icon: "📝" },
+      DRAFT: {
+        bg: "bg-gray-100",
+        text: "text-gray-700",
+        icon: <FileEdit className="w-3 h-3" />,
+      },
       PENDING_VERIFICATION: {
         bg: "bg-yellow-100",
         text: "text-yellow-700",
-        icon: "⏳",
+        icon: <Clock className="w-3 h-3" />,
       },
-      VERIFIED: { bg: "bg-blue-100", text: "text-blue-700", icon: "✅" },
+      VERIFIED: {
+        bg: "bg-blue-100",
+        text: "text-blue-700",
+        icon: <CheckCircle2 className="w-3 h-3" />,
+      },
       DOCUMENT_UPLOADED: {
         bg: "bg-purple-100",
         text: "text-purple-700",
-        icon: "📄",
+        icon: <FileCheck className="w-3 h-3" />,
       },
       READY_FOR_INVOICE: {
         bg: "bg-green-100",
         text: "text-green-700",
-        icon: "💰",
+        icon: <DollarSign className="w-3 h-3" />,
       },
-      INVOICED: { bg: "bg-emerald-100", text: "text-emerald-700", icon: "✓" },
+      INVOICED: {
+        bg: "bg-emerald-100",
+        text: "text-emerald-700",
+        icon: <CheckCircle2 className="w-3 h-3" />,
+      },
     };
     const config = statusConfig[status] || statusConfig.DRAFT;
     return (
       <span
-        className={`px-2 py-1 rounded-full text-xs font-medium ${config.bg} ${config.text}`}
+        className={`px-2 py-1 rounded-full text-xs font-medium ${config.bg} ${config.text} inline-flex items-center gap-1`}
       >
         {config.icon} {status.replace(/_/g, " ")}
       </span>
@@ -496,7 +526,7 @@ export default function WorkVerification() {
           onClick={() => navigate("/work-details")}
           className="text-blue-600 hover:text-blue-800 flex items-center gap-2 transition-colors"
         >
-          ← Back to Work Details
+          <ArrowLeft className="w-4 h-4" /> Back to Work Details
         </button>
       </div>
 
@@ -504,7 +534,7 @@ export default function WorkVerification() {
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center">
-            <span className="text-red-600 mr-2">⚠️</span>
+            <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
             <p className="text-red-700 font-medium">{error}</p>
           </div>
         </div>
@@ -522,7 +552,7 @@ export default function WorkVerification() {
                 {completedWorkDetails.length}
               </p>
             </div>
-            <span className="text-blue-500 text-2xl">✅</span>
+            <CheckCircle2 className="w-8 h-8 text-blue-500" />
           </div>
         </div>
         <div className="bg-white p-6 rounded-lg shadow border-l-4 border-yellow-500">
@@ -535,7 +565,7 @@ export default function WorkVerification() {
                 {pendingNotInBASTP.length}
               </p>
             </div>
-            <span className="text-yellow-500 text-2xl">⏳</span>
+            <Clock className="w-8 h-8 text-yellow-500" />
           </div>
         </div>
         <div className="bg-white p-6 rounded-lg shadow border-l-4 border-purple-500">
@@ -548,7 +578,7 @@ export default function WorkVerification() {
                 {pendingWithBASTP.length}
               </p>
             </div>
-            <span className="text-purple-500 text-2xl">📋</span>
+            <FileText className="w-8 h-8 text-purple-500" />
           </div>
         </div>
         <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
@@ -559,7 +589,7 @@ export default function WorkVerification() {
                 {filteredVerified.length}
               </p>
             </div>
-            <span className="text-green-500 text-2xl">🔍</span>
+            <Eye className="w-8 h-8 text-green-500" />
           </div>
         </div>
       </div>
@@ -571,8 +601,8 @@ export default function WorkVerification() {
           <div className="flex flex-col sm:flex-row gap-4">
             {/* Vessel Filter with Search Dropdown */}
             <div className="flex-1 relative" ref={vesselDropdownRef}>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                🚢 Filter by Vessel
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                <Ship className="w-4 h-4" /> Filter by Vessel
               </label>
               <div className="relative">
                 <input
@@ -588,7 +618,7 @@ export default function WorkVerification() {
                     onClick={handleClearVesselSearch}
                     className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                   >
-                    ✕
+                    <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
@@ -615,8 +645,8 @@ export default function WorkVerification() {
             </div>
             {/* Text Search */}
             <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                🔍 Search
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                <Search className="w-4 h-4" /> Search
               </label>
               <input
                 type="text"
@@ -709,8 +739,8 @@ export default function WorkVerification() {
                           <div className="text-sm font-medium text-gray-900">
                             {wd.description}
                           </div>
-                          <div className="text-sm text-gray-500">
-                            👤 {wd.pic || "-"}
+                          <div className="text-sm text-gray-500 flex items-center gap-1">
+                            <User className="w-3 h-3" /> {wd.pic || "-"}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -731,7 +761,10 @@ export default function WorkVerification() {
                           </div>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500">
-                          📍 {wd.location?.location || "-"}
+                          <div className="flex items-center gap-1">
+                            <MapPin className="w-4 h-4" />{" "}
+                            {wd.location?.location || "-"}
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-900">
                           {wd.quantity} {wd.uom}
@@ -743,7 +776,7 @@ export default function WorkVerification() {
                               {wd.latest_progress_date && (
                                 <div className="text-xs text-gray-400">
                                   {new Date(
-                                    wd.latest_progress_date
+                                    wd.latest_progress_date,
                                   ).toLocaleDateString()}
                                 </div>
                               )}
@@ -771,7 +804,7 @@ export default function WorkVerification() {
               </div>
             ) : (
               <div className="text-center py-12">
-                <span className="text-gray-400 text-4xl mb-4 block">🔍</span>
+                <Search className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-500 text-lg mb-2">
                   No pending verifications found matching your filters
                 </p>
@@ -803,32 +836,29 @@ export default function WorkVerification() {
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
-                            <svg
+                            <ChevronRight
                               className={`w-5 h-5 text-gray-500 transition-transform duration-200 ${
                                 isExpanded ? "rotate-90" : ""
                               }`}
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 5l7 7-7 7"
-                              />
-                            </svg>
+                            />
                             {group.bastp ? (
                               <div className="text-left">
                                 <div className="flex items-center gap-3">
-                                  <h3 className="text-lg font-bold text-gray-900">
-                                    📋 BASTP: {group.bastp.number}
+                                  <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                    <FileText className="w-5 h-5" /> BASTP:{" "}
+                                    {group.bastp.number}
                                   </h3>
                                   {getStatusBadge(group.bastp.status)}
                                 </div>
                                 <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
-                                  <span>🚢 {group.bastp.vessel?.name}</span>
-                                  <span>📅 {formatDate(group.bastp.date)}</span>
+                                  <span className="flex items-center gap-1">
+                                    <Ship className="w-4 h-4" />{" "}
+                                    {group.bastp.vessel?.name}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="w-4 h-4" />{" "}
+                                    {formatDate(group.bastp.date)}
+                                  </span>
                                   <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs font-medium">
                                     {group.workDetails.length} item
                                     {group.workDetails.length > 1 ? "s" : ""}
@@ -893,8 +923,9 @@ export default function WorkVerification() {
                                     <div className="text-sm font-medium text-gray-900">
                                       {wd.description}
                                     </div>
-                                    <div className="text-sm text-gray-500">
-                                      👤 {wd.pic || "-"}
+                                    <div className="text-sm text-gray-500 flex items-center gap-1">
+                                      <User className="w-3 h-3" />{" "}
+                                      {wd.pic || "-"}
                                     </div>
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap">
@@ -915,7 +946,10 @@ export default function WorkVerification() {
                                     </div>
                                   </td>
                                   <td className="px-6 py-4 text-sm text-gray-500">
-                                    📍 {wd.location?.location || "-"}
+                                    <div className="flex items-center gap-1">
+                                      <MapPin className="w-3 h-3" />{" "}
+                                      {wd.location?.location || "-"}
+                                    </div>
                                   </td>
                                   <td className="px-6 py-4 text-sm text-gray-900">
                                     {wd.quantity} {wd.uom}
@@ -927,7 +961,7 @@ export default function WorkVerification() {
                                         {wd.latest_progress_date && (
                                           <div className="text-xs text-gray-400">
                                             {new Date(
-                                              wd.latest_progress_date
+                                              wd.latest_progress_date,
                                             ).toLocaleDateString()}
                                           </div>
                                         )}
@@ -960,7 +994,7 @@ export default function WorkVerification() {
               </div>
             ) : (
               <div className="text-center py-12">
-                <span className="text-gray-400 text-4xl mb-4 block">🔍</span>
+                <Search className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-500 text-lg mb-2">
                   No pending verifications with BASTP found matching your
                   filters
@@ -993,32 +1027,29 @@ export default function WorkVerification() {
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
-                            <svg
+                            <ChevronRight
                               className={`w-5 h-5 text-gray-500 transition-transform duration-200 ${
                                 isExpanded ? "rotate-90" : ""
                               }`}
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 5l7 7-7 7"
-                              />
-                            </svg>
+                            />
                             {group.bastp ? (
                               <div className="text-left">
                                 <div className="flex items-center gap-3">
-                                  <h3 className="text-lg font-bold text-gray-900">
-                                    📋 BASTP: {group.bastp.number}
+                                  <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                    <FileText className="w-5 h-5" /> BASTP:{" "}
+                                    {group.bastp.number}
                                   </h3>
                                   {getStatusBadge(group.bastp.status)}
                                 </div>
                                 <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
-                                  <span>🚢 {group.bastp.vessel?.name}</span>
-                                  <span>📅 {formatDate(group.bastp.date)}</span>
+                                  <span className="flex items-center gap-1">
+                                    <Ship className="w-4 h-4" />{" "}
+                                    {group.bastp.vessel?.name}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="w-4 h-4" />{" "}
+                                    {formatDate(group.bastp.date)}
+                                  </span>
                                   <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs font-medium">
                                     {group.verifications.length} item
                                     {group.verifications.length > 1 ? "s" : ""}
@@ -1087,8 +1118,9 @@ export default function WorkVerification() {
                                     <div className="text-sm font-medium text-gray-900">
                                       {verification.work_details?.description}
                                     </div>
-                                    <div className="text-sm text-gray-500">
-                                      👤 {verification.work_details?.pic || "-"}
+                                    <div className="text-sm text-gray-500 flex items-center gap-1">
+                                      <User className="w-3 h-3" />{" "}
+                                      {verification.work_details?.pic || "-"}
                                     </div>
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap">
@@ -1115,9 +1147,11 @@ export default function WorkVerification() {
                                     </div>
                                   </td>
                                   <td className="px-6 py-4 text-sm text-gray-500">
-                                    📍{" "}
-                                    {verification.work_details?.location
-                                      ?.location || "-"}
+                                    <div className="flex items-center gap-1">
+                                      <MapPin className="w-3 h-3" />{" "}
+                                      {verification.work_details?.location
+                                        ?.location || "-"}
+                                    </div>
                                   </td>
                                   <td className="px-6 py-4 text-sm text-gray-900">
                                     {verification.work_details?.quantity}{" "}
@@ -1145,7 +1179,7 @@ export default function WorkVerification() {
               </div>
             ) : (
               <div className="text-center py-12">
-                <span className="text-gray-400 text-4xl mb-4 block">✅</span>
+                <CheckCircle2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-500 text-lg mb-2">
                   No verified work details found matching your filters
                 </p>

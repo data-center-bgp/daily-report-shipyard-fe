@@ -8,6 +8,17 @@ import {
 } from "../../lib/supabase";
 import { ActivityLogService } from "../../services/activityLogService";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  ArrowLeft,
+  Lock,
+  Info,
+  AlertTriangle,
+  FileText,
+  Ship,
+  Save,
+  RefreshCw,
+  Circle,
+} from "lucide-react";
 
 interface WorkOrderWithVessel extends WorkOrder {
   vessel?: Vessel;
@@ -92,7 +103,7 @@ export default function EditWorkOrder() {
               id,
               kapro_name
             )
-          `
+          `,
           )
           .eq("id", parseInt(workOrderId))
           .single();
@@ -124,13 +135,13 @@ export default function EditWorkOrder() {
             ? data.vessel[0]
             : data.vessel;
           setVesselSearchTerm(
-            `${vessel.name} - ${vessel.type} (${vessel.company})`
+            `${vessel.name} - ${vessel.type} (${vessel.company})`,
           );
         }
       } catch (err) {
         console.error("Error fetching work order:", err);
         setError(
-          err instanceof Error ? err.message : "Failed to load work order"
+          err instanceof Error ? err.message : "Failed to load work order",
         );
       } finally {
         setLoadingWorkOrder(false);
@@ -214,7 +225,7 @@ export default function EditWorkOrder() {
   };
 
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
   ) => {
     if (isReadOnly) return; // Prevent editing in read-only mode
 
@@ -372,8 +383,8 @@ export default function EditWorkOrder() {
             {loadingWorkOrder
               ? "Loading work order..."
               : loadingVessels
-              ? "Loading vessels..."
-              : "Loading kapros..."}
+                ? "Loading vessels..."
+                : "Loading kapros..."}
           </p>
         </div>
       </div>
@@ -386,7 +397,7 @@ export default function EditWorkOrder() {
         <div className="max-w-md w-full bg-white rounded-xl shadow-lg border border-red-200 p-6">
           <div className="text-center">
             <div className="w-12 h-12 bg-gradient-to-br from-red-400 to-red-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-md">
-              <span className="text-white text-xl">⚠️</span>
+              <AlertTriangle className="w-6 h-6 text-white" />
             </div>
             <h2 className="text-lg font-semibold text-slate-800 mb-2">
               Cannot Load Work Order
@@ -395,15 +406,15 @@ export default function EditWorkOrder() {
             <div className="flex gap-3">
               <button
                 onClick={handleCancel}
-                className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-2 rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 text-sm font-medium shadow-md"
+                className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-2 rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 text-sm font-medium shadow-md flex items-center justify-center gap-2"
               >
-                ← Back
+                <ArrowLeft className="w-4 h-4" /> Back
               </button>
               <button
                 onClick={() => window.location.reload()}
-                className="flex-1 bg-gradient-to-r from-slate-500 to-slate-600 text-white px-4 py-2 rounded-lg hover:from-slate-600 hover:to-slate-700 transition-all duration-200 text-sm font-medium shadow-md"
+                className="flex-1 bg-gradient-to-r from-slate-500 to-slate-600 text-white px-4 py-2 rounded-lg hover:from-slate-600 hover:to-slate-700 transition-all duration-200 text-sm font-medium shadow-md flex items-center justify-center gap-2"
               >
-                🔄 Retry
+                <RefreshCw className="w-4 h-4" /> Retry
               </button>
             </div>
           </div>
@@ -416,13 +427,13 @@ export default function EditWorkOrder() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
-          <span className="text-slate-400 text-4xl mb-4 block">📋</span>
+          <FileText className="w-16 h-16 text-slate-400 mx-auto mb-4" />
           <p className="text-slate-500 text-lg mb-4">Work order not found</p>
           <button
             onClick={handleCancel}
-            className="text-blue-600 hover:text-blue-800 transition-colors font-medium"
+            className="text-blue-600 hover:text-blue-800 transition-colors font-medium flex items-center justify-center gap-2 mx-auto"
           >
-            ← Back to Work Orders
+            <ArrowLeft className="w-4 h-4" /> Back to Work Orders
           </button>
         </div>
       </div>
@@ -438,9 +449,9 @@ export default function EditWorkOrder() {
             <div className="flex items-center gap-4">
               <button
                 onClick={handleCancel}
-                className="text-slate-600 hover:text-slate-900 transition-colors p-2 rounded-lg hover:bg-slate-100"
+                className="text-slate-600 hover:text-slate-900 transition-colors p-2 rounded-lg hover:bg-slate-100 flex items-center gap-2"
               >
-                ← Back
+                <ArrowLeft className="w-4 h-4" /> Back
               </button>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
@@ -453,8 +464,8 @@ export default function EditWorkOrder() {
             </div>
             <div className="flex items-center gap-3">
               {isReadOnly && (
-                <span className="px-3 py-1.5 bg-yellow-100 text-yellow-800 text-sm font-medium rounded-full border border-yellow-200">
-                  🔒 Read Only
+                <span className="px-3 py-1.5 bg-yellow-100 text-yellow-800 text-sm font-medium rounded-full border border-yellow-200 flex items-center gap-1.5">
+                  <Lock className="w-4 h-4" /> Read Only
                 </span>
               )}
               <div className="text-sm text-slate-600 bg-gradient-to-r from-slate-50 to-gray-50 px-3 py-2 rounded-lg border">
@@ -472,7 +483,7 @@ export default function EditWorkOrder() {
           {isReadOnly && (
             <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border-b border-yellow-200 p-4">
               <div className="flex items-start gap-3">
-                <span className="text-yellow-600 text-xl">ℹ️</span>
+                <Info className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="font-semibold text-yellow-900">
                     Read-Only Mode
@@ -491,7 +502,7 @@ export default function EditWorkOrder() {
             <div className="p-6 border-b border-slate-200">
               <div className="bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-lg p-4 shadow-sm">
                 <div className="flex items-center">
-                  <span className="text-red-600 mr-2">⚠️</span>
+                  <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
                   <p className="text-red-700 font-medium">{error}</p>
                 </div>
               </div>
@@ -503,13 +514,14 @@ export default function EditWorkOrder() {
             {/* Current Work Order Info */}
             <div className="bg-gradient-to-r from-slate-50 to-gray-50 rounded-lg p-4 border border-slate-200">
               <h3 className="text-lg font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                📋 Current Work Order Information
+                <FileText className="w-5 h-5" /> Current Work Order Information
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="font-medium text-slate-600">Vessel:</span>
-                  <span className="ml-2 text-slate-800">
-                    🚢 {workOrder.vessel?.name} ({workOrder.vessel?.type})
+                  <span className="ml-2 text-slate-800 flex items-center gap-1">
+                    <Ship className="w-4 h-4 inline" /> {workOrder.vessel?.name}{" "}
+                    ({workOrder.vessel?.type})
                   </span>
                 </div>
                 <div>
@@ -592,7 +604,8 @@ export default function EditWorkOrder() {
             {/* Required Fields */}
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
-                🔵 Required Information
+                <Circle className="w-4 h-4 text-blue-600 fill-blue-600" />{" "}
+                Required Information
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -677,7 +690,8 @@ export default function EditWorkOrder() {
             {/* Optional Fields */}
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-2">
-                🟡 Optional Information
+                <Circle className="w-4 h-4 text-yellow-600 fill-yellow-600" />{" "}
+                Optional Information
               </h3>
 
               {/* Work Type */}
@@ -778,9 +792,15 @@ export default function EditWorkOrder() {
               <button
                 type="button"
                 onClick={handleCancel}
-                className="px-6 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-gradient-to-r hover:from-slate-50 hover:to-gray-50 transition-all duration-200 font-medium shadow-sm"
+                className="px-6 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-gradient-to-r hover:from-slate-50 hover:to-gray-50 transition-all duration-200 font-medium shadow-sm flex items-center justify-center gap-2"
               >
-                {isReadOnly ? "← Back" : "Cancel"}
+                {isReadOnly ? (
+                  <>
+                    <ArrowLeft className="w-4 h-4" /> Back
+                  </>
+                ) : (
+                  "Cancel"
+                )}
               </button>
 
               {!isReadOnly && (
@@ -795,7 +815,9 @@ export default function EditWorkOrder() {
                       Updating...
                     </>
                   ) : (
-                    <>💾 Update Work Order</>
+                    <>
+                      <Save className="w-4 h-4" /> Update Work Order
+                    </>
                   )}
                 </button>
               )}

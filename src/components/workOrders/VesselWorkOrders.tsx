@@ -6,6 +6,35 @@ import {
   type WorkDetailsWithProgress,
 } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Lock,
+  Info,
+  Plus,
+  Ship,
+  Search,
+  RefreshCw,
+  FileText,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  CheckCircle2,
+  Circle,
+  ChevronRight,
+  Settings,
+  Eye,
+  Edit,
+  Trash2,
+  User,
+  Wrench,
+  Package,
+  Calendar,
+  Target,
+  Play,
+  MapPin,
+  ClipboardList,
+} from "lucide-react";
 
 interface VesselData {
   id: number;
@@ -30,8 +59,10 @@ interface WorkDetailWithProgress extends WorkDetailsWithProgress {
 }
 
 // Define the work order type with progress properties
-interface WorkOrderWithProgress
-  extends Omit<WorkOrderWithDetails, "work_details"> {
+interface WorkOrderWithProgress extends Omit<
+  WorkOrderWithDetails,
+  "work_details"
+> {
   work_details: WorkDetailWithProgress[];
   overall_progress: number;
   has_progress_data: boolean;
@@ -48,7 +79,7 @@ export default function VesselWorkOrders() {
     WorkOrderWithProgress[]
   >([]);
   const [expandedWorkOrders, setExpandedWorkOrders] = useState<Set<number>>(
-    new Set()
+    new Set(),
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +135,7 @@ export default function VesselWorkOrders() {
               type,
               company
             )
-          `
+          `,
           )
           .eq("vessel_id", vesselId)
           .is("deleted_at", null)
@@ -139,7 +170,7 @@ export default function VesselWorkOrders() {
               const sortedProgress = progressRecords.sort(
                 (a, b) =>
                   new Date(b.report_date).getTime() -
-                  new Date(a.report_date).getTime()
+                  new Date(a.report_date).getTime(),
               );
 
               const latestProgress =
@@ -163,13 +194,13 @@ export default function VesselWorkOrders() {
             const totalProgress = workDetailsWithProgress.reduce(
               (sum: number, detail: WorkDetailWithProgress) =>
                 sum + (detail.current_progress || 0),
-              0
+              0,
             );
             overallProgress = Math.round(
-              totalProgress / workDetailsWithProgress.length
+              totalProgress / workDetailsWithProgress.length,
             );
             hasProgressData = workDetailsWithProgress.some(
-              (detail: WorkDetailWithProgress) => detail.current_progress > 0
+              (detail: WorkDetailWithProgress) => detail.current_progress > 0,
             );
           }
 
@@ -179,7 +210,7 @@ export default function VesselWorkOrders() {
             overall_progress: overallProgress,
             has_progress_data: hasProgressData,
           } as WorkOrderWithProgress;
-        }
+        },
       );
 
       setWorkOrders(workOrdersWithProgress);
@@ -209,7 +240,7 @@ export default function VesselWorkOrders() {
             (detail) =>
               safeIncludes(detail.description) ||
               safeIncludes(detail.location?.location) ||
-              safeIncludes(detail.pic)
+              safeIncludes(detail.pic),
           )
         );
       });
@@ -297,7 +328,7 @@ export default function VesselWorkOrders() {
     } catch (err) {
       console.error("Error deleting work order:", err);
       setError(
-        err instanceof Error ? err.message : "An error occurred while deleting"
+        err instanceof Error ? err.message : "An error occurred while deleting",
       );
     } finally {
       setIsDeleting(false);
@@ -348,11 +379,15 @@ export default function VesselWorkOrders() {
   };
 
   const getProgressIcon = (progress: number) => {
-    if (progress >= 100) return "✅";
-    if (progress >= 75) return "🔵";
-    if (progress >= 50) return "🟡";
-    if (progress >= 25) return "🟠";
-    return "🔴";
+    if (progress >= 100)
+      return <CheckCircle2 className="w-4 h-4 text-green-600" />;
+    if (progress >= 75)
+      return <Circle className="w-4 h-4 text-blue-600 fill-blue-600" />;
+    if (progress >= 50)
+      return <Circle className="w-4 h-4 text-yellow-600 fill-yellow-600" />;
+    if (progress >= 25)
+      return <Circle className="w-4 h-4 text-orange-600 fill-orange-600" />;
+    return <Circle className="w-4 h-4 text-red-600 fill-red-600" />;
   };
 
   const getStatus = (wo: WorkOrderWithProgress) => {
@@ -371,11 +406,12 @@ export default function VesselWorkOrders() {
   }: {
     field: "shipyard_wo_date" | "shipyard_wo_number";
   }) => {
-    if (sortField !== field) return <span className="text-gray-400">↕️</span>;
+    if (sortField !== field)
+      return <ArrowUpDown className="w-4 h-4 text-gray-400" />;
     return sortDirection === "asc" ? (
-      <span className="text-blue-600">↑</span>
+      <ArrowUp className="w-4 h-4 text-blue-600" />
     ) : (
-      <span className="text-blue-600">↓</span>
+      <ArrowDown className="w-4 h-4 text-blue-600" />
     );
   };
 
@@ -396,7 +432,7 @@ export default function VesselWorkOrders() {
             {/* Header */}
             <div className="bg-red-600 px-6 py-4 rounded-t-lg">
               <div className="flex items-center gap-3">
-                <span className="text-3xl">⚠️</span>
+                <AlertTriangle className="w-8 h-8 text-white" />
                 <h3 className="text-xl font-bold text-white">Confirm Delete</h3>
               </div>
             </div>
@@ -438,7 +474,9 @@ export default function VesselWorkOrders() {
                     Deleting...
                   </>
                 ) : (
-                  <>🗑️ Delete Work Order</>
+                  <>
+                    <Trash2 className="w-4 h-4" /> Delete Work Order
+                  </>
                 )}
               </button>
             </div>
@@ -501,14 +539,14 @@ export default function VesselWorkOrders() {
               onClick={() => navigate("/work-orders")}
               className="text-blue-600 hover:text-blue-800 flex items-center gap-2 transition-colors font-medium"
             >
-              ← Back to Dashboard
+              <ArrowLeft className="w-4 h-4" /> Back to Dashboard
             </button>
           </div>
 
           {/* Read-Only Badge */}
           {isReadOnly && (
             <span className="px-3 py-1.5 bg-yellow-100 text-yellow-800 text-sm font-medium rounded-full border border-yellow-200 flex items-center gap-1.5">
-              🔒 Read Only Access
+              <Lock className="w-4 h-4" /> Read Only Access
             </span>
           )}
 
@@ -518,7 +556,7 @@ export default function VesselWorkOrders() {
               onClick={handleAddWorkOrder}
               className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 font-medium shadow-md"
             >
-              ➕ Add Work Order
+              <Plus className="w-5 h-5" /> Add Work Order
             </button>
           )}
         </div>
@@ -527,7 +565,7 @@ export default function VesselWorkOrders() {
         {isReadOnly && (
           <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <span className="text-yellow-600 text-xl">ℹ️</span>
+              <Info className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold text-yellow-900">Read-Only Mode</p>
                 <p className="text-sm text-yellow-700 mt-1">
@@ -543,7 +581,7 @@ export default function VesselWorkOrders() {
       {/* Vessel Info Card */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center gap-4">
-          <span className="text-3xl">🚢</span>
+          <Ship className="w-10 h-10 text-blue-600" />
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{vessel.name}</h1>
             <p className="text-gray-600">
@@ -570,14 +608,14 @@ export default function VesselWorkOrders() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
-            <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
           </div>
           <div className="flex gap-2">
             <button
               onClick={fetchVesselWorkOrders}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
             >
-              🔄 Refresh
+              <RefreshCw className="w-4 h-4" /> Refresh
             </button>
           </div>
         </div>
@@ -642,9 +680,9 @@ export default function VesselWorkOrders() {
                                 expandedWorkOrders.has(wo.id) ? "rotate-90" : ""
                               }`}
                             >
-                              ▶️
+                              <ChevronRight className="w-4 h-4" />
                             </span>
-                            <span className="text-lg">📋</span>
+                            <FileText className="w-5 h-5 text-blue-600" />
                             <div>
                               <div className="font-medium">
                                 {wo.work_details.length} Work Detail
@@ -687,8 +725,8 @@ export default function VesselWorkOrders() {
                         <div className="space-y-2">
                           {wo.work_type && (
                             <div className="flex items-center gap-1">
-                              <span className="text-xs text-gray-500">
-                                ⚙️ Type:
+                              <span className="text-xs text-gray-500 flex items-center gap-1">
+                                <Settings className="w-3 h-3" /> Type:
                               </span>
                               <span className="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
                                 {wo.work_type}
@@ -697,8 +735,8 @@ export default function VesselWorkOrders() {
                           )}
                           {wo.work_location && (
                             <div className="flex items-center gap-1">
-                              <span className="text-xs text-gray-500">
-                                📍 Location:
+                              <span className="text-xs text-gray-500 flex items-center gap-1">
+                                <MapPin className="w-3 h-3" /> Location:
                               </span>
                               <span className="text-xs text-gray-700">
                                 {wo.work_location}
@@ -740,14 +778,16 @@ export default function VesselWorkOrders() {
                         <div className="space-y-2">
                           {wo.is_additional_wo && (
                             <div>
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
-                                ⚠️ Additional WO
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
+                                <AlertTriangle className="w-3 h-3" /> Additional
+                                WO
                               </span>
                             </div>
                           )}
                           {wo.kapro_id && (
-                            <div className="text-xs text-gray-600">
-                              👤 Kapro ID: {wo.kapro_id}
+                            <div className="text-xs text-gray-600 flex items-center gap-1">
+                              <User className="w-3 h-3" /> Kapro ID:{" "}
+                              {wo.kapro_id}
                             </div>
                           )}
                           <div className="text-xs text-gray-400">
@@ -774,7 +814,7 @@ export default function VesselWorkOrders() {
                               <div className="w-full bg-gray-200 rounded-full h-2">
                                 <div
                                   className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(
-                                    wo.overall_progress
+                                    wo.overall_progress,
                                   )}`}
                                   style={{ width: `${wo.overall_progress}%` }}
                                 ></div>
@@ -792,7 +832,7 @@ export default function VesselWorkOrders() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(
-                            wo
+                            wo,
                           )}`}
                         >
                           {getStatus(wo)}
@@ -813,7 +853,11 @@ export default function VesselWorkOrders() {
                               isReadOnly ? "View Work Order" : "Edit Work Order"
                             }
                           >
-                            {isReadOnly ? "👁️" : "✏️"}
+                            {isReadOnly ? (
+                              <Eye className="w-4 h-4" />
+                            ) : (
+                              <Edit className="w-4 h-4" />
+                            )}
                           </button>
 
                           {/* Hide Delete button for MANAGER */}
@@ -823,7 +867,7 @@ export default function VesselWorkOrders() {
                               className="text-red-600 hover:text-red-900 transition-colors p-1 rounded hover:bg-red-50"
                               title="Delete Work Order"
                             >
-                              🗑️
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           )}
                         </div>
@@ -837,7 +881,8 @@ export default function VesselWorkOrders() {
                           <div className="bg-gray-50 border-l-4 border-blue-400">
                             <div className="px-6 py-4">
                               <h4 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
-                                🔧 Work Details for {wo.shipyard_wo_number}
+                                <Wrench className="w-4 h-4" /> Work Details for{" "}
+                                {wo.shipyard_wo_number}
                               </h4>
 
                               {wo.work_details.length > 0 ? (
@@ -852,7 +897,7 @@ export default function VesselWorkOrders() {
                                           <div className="flex items-start gap-3">
                                             <span className="text-lg">
                                               {getProgressIcon(
-                                                detail.current_progress
+                                                detail.current_progress,
                                               )}
                                             </span>
                                             <div className="flex-1">
@@ -862,7 +907,7 @@ export default function VesselWorkOrders() {
                                               <div className="space-y-1 text-sm text-gray-600">
                                                 {detail.location && (
                                                   <div className="flex items-center gap-1">
-                                                    <span>📍</span>
+                                                    <MapPin className="w-4 h-4 text-gray-600" />
                                                     <span className="font-medium">
                                                       Location:
                                                     </span>
@@ -873,7 +918,7 @@ export default function VesselWorkOrders() {
                                                 )}
                                                 {detail.work_scope && (
                                                   <div className="flex items-center gap-1">
-                                                    <span>🔧</span>
+                                                    <Wrench className="w-4 h-4 text-gray-600" />
                                                     <span className="font-medium">
                                                       Work Scope:
                                                     </span>
@@ -887,7 +932,7 @@ export default function VesselWorkOrders() {
                                                 )}
                                                 {detail.quantity && (
                                                   <div className="flex items-center gap-1">
-                                                    <span>📦</span>
+                                                    <Package className="w-4 h-4 text-gray-600" />
                                                     <span className="font-medium">
                                                       Quantity:
                                                     </span>
@@ -899,7 +944,7 @@ export default function VesselWorkOrders() {
                                                 )}
                                                 {detail.pic && (
                                                   <div className="flex items-center gap-1">
-                                                    <span>👤</span>
+                                                    <User className="w-4 h-4 text-gray-600" />
                                                     <span className="font-medium">
                                                       PIC:
                                                     </span>
@@ -908,52 +953,52 @@ export default function VesselWorkOrders() {
                                                 )}
                                                 {detail.planned_start_date && (
                                                   <div className="flex items-center gap-1">
-                                                    <span>📅</span>
+                                                    <Calendar className="w-4 h-4 text-gray-600" />
                                                     <span className="font-medium">
                                                       Planned Start:
                                                     </span>
                                                     <span>
                                                       {formatDate(
-                                                        detail.planned_start_date
+                                                        detail.planned_start_date,
                                                       )}
                                                     </span>
                                                   </div>
                                                 )}
                                                 {detail.target_close_date && (
                                                   <div className="flex items-center gap-1">
-                                                    <span>🎯</span>
+                                                    <Target className="w-4 h-4 text-gray-600" />
                                                     <span className="font-medium">
                                                       Target Close:
                                                     </span>
                                                     <span>
                                                       {formatDate(
-                                                        detail.target_close_date
+                                                        detail.target_close_date,
                                                       )}
                                                     </span>
                                                   </div>
                                                 )}
                                                 {detail.actual_start_date && (
                                                   <div className="flex items-center gap-1">
-                                                    <span>▶️</span>
+                                                    <Play className="w-4 h-4 text-gray-600" />
                                                     <span className="font-medium">
                                                       Actual Start:
                                                     </span>
                                                     <span>
                                                       {formatDate(
-                                                        detail.actual_start_date
+                                                        detail.actual_start_date,
                                                       )}
                                                     </span>
                                                   </div>
                                                 )}
                                                 {detail.actual_close_date && (
                                                   <div className="flex items-center gap-1">
-                                                    <span>✅</span>
+                                                    <CheckCircle2 className="w-4 h-4 text-gray-600" />
                                                     <span className="font-medium">
                                                       Actual Close:
                                                     </span>
                                                     <span>
                                                       {formatDate(
-                                                        detail.actual_close_date
+                                                        detail.actual_close_date,
                                                       )}
                                                     </span>
                                                   </div>
@@ -971,7 +1016,7 @@ export default function VesselWorkOrders() {
                                             <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
                                               <div
                                                 className={`h-3 rounded-full transition-all duration-300 ${getProgressColor(
-                                                  detail.current_progress
+                                                  detail.current_progress,
                                                 )}`}
                                                 style={{
                                                   width: `${detail.current_progress}%`,
@@ -990,7 +1035,7 @@ export default function VesselWorkOrders() {
                                                   Last Progress:
                                                 </span>{" "}
                                                 {formatDateTime(
-                                                  detail.latest_progress_date
+                                                  detail.latest_progress_date,
                                                 )}
                                               </div>
                                             )}
@@ -1002,7 +1047,7 @@ export default function VesselWorkOrders() {
                                 </div>
                               ) : (
                                 <div className="text-center py-8 text-gray-500">
-                                  <div className="text-4xl mb-2">📝</div>
+                                  <ClipboardList className="w-16 h-16 text-gray-400 mx-auto mb-2" />
                                   <p>No work details added yet</p>
                                   {!isReadOnly && (
                                     <button
@@ -1028,7 +1073,7 @@ export default function VesselWorkOrders() {
           </div>
         ) : (
           <div className="text-center py-12">
-            <span className="text-gray-400 text-4xl mb-4 block">📋</span>
+            <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             {searchTerm ? (
               <>
                 <p className="text-gray-500 text-lg mb-2">
@@ -1054,7 +1099,8 @@ export default function VesselWorkOrders() {
                     onClick={handleAddWorkOrder}
                     className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"
                   >
-                    ➕ Add Work Order for {vessel.name}
+                    <Plus className="w-4 h-4" /> Add Work Order for{" "}
+                    {vessel.name}
                   </button>
                 )}
               </>

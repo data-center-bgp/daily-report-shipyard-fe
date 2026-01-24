@@ -3,6 +3,21 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { uploadProgressEvidence } from "../../utils/progressEvidenceHandler";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  ArrowLeft,
+  FileText,
+  Ship,
+  Wrench,
+  MapPin,
+  BarChart3,
+  Calendar,
+  FileEdit,
+  Image,
+  Paperclip,
+  X,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 
 interface WorkProgressData {
   id: number;
@@ -42,7 +57,7 @@ export default function EditWorkProgress() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progressData, setProgressData] = useState<WorkProgressData | null>(
-    null
+    null,
   );
 
   const [kaproInfo, setKaproInfo] = useState<KaproInfo | null>(null);
@@ -91,7 +106,7 @@ export default function EditWorkProgress() {
             )
           )
         )
-      `
+      `,
         )
         .eq("id", progressId)
         .single();
@@ -180,7 +195,7 @@ export default function EditWorkProgress() {
   }, [progressId, isReadOnly, navigate, fetchProgressData]);
 
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
 
@@ -311,7 +326,7 @@ export default function EditWorkProgress() {
       if (updateError) {
         console.error("Update error:", updateError);
         throw new Error(
-          `Failed to update progress report: ${updateError.message}`
+          `Failed to update progress report: ${updateError.message}`,
         );
       }
 
@@ -327,7 +342,7 @@ export default function EditWorkProgress() {
     } catch (err) {
       console.error("Error updating work progress:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to update progress report"
+        err instanceof Error ? err.message : "Failed to update progress report",
       );
     } finally {
       setSubmitting(false);
@@ -387,7 +402,7 @@ export default function EditWorkProgress() {
           }}
           className="text-blue-600 hover:text-blue-800 mb-4 flex items-center gap-2"
         >
-          ← Back to Work Progress
+          <ArrowLeft className="w-4 h-4" /> Back to Work Progress
         </button>
         <h1 className="text-3xl font-bold text-gray-900">
           Edit Progress Report
@@ -406,19 +421,23 @@ export default function EditWorkProgress() {
         {/* Info Panel */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sticky top-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              📋 Work Details
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <FileText className="w-5 h-5" /> Work Details
             </h3>
 
             <div className="space-y-3 text-sm">
               {kaproInfo && (
                 <div>
-                  <span className="text-gray-500">📋 Kapro:</span>
+                  <span className="text-gray-500 flex items-center gap-1">
+                    <FileText className="w-4 h-4" /> Kapro:
+                  </span>
                   <div className="font-medium mt-1">{kaproInfo.kapro_name}</div>
                 </div>
               )}
               <div>
-                <span className="text-gray-500">🚢 Vessel:</span>
+                <span className="text-gray-500 flex items-center gap-1">
+                  <Ship className="w-4 h-4" /> Vessel:
+                </span>
                 <div className="font-medium mt-1">
                   {progressData.work_details.work_order.vessel.name}
                 </div>
@@ -428,14 +447,18 @@ export default function EditWorkProgress() {
               </div>
 
               <div>
-                <span className="text-gray-500">📋 Work Order:</span>
+                <span className="text-gray-500 flex items-center gap-1">
+                  <FileText className="w-4 h-4" /> Work Order:
+                </span>
                 <div className="font-medium mt-1">
                   {progressData.work_details.work_order.shipyard_wo_number}
                 </div>
               </div>
 
               <div>
-                <span className="text-gray-500">🔧 Description:</span>
+                <span className="text-gray-500 flex items-center gap-1">
+                  <Wrench className="w-4 h-4" /> Description:
+                </span>
                 <div className="font-medium mt-1">
                   {progressData.work_details.description}
                 </div>
@@ -443,7 +466,9 @@ export default function EditWorkProgress() {
 
               {progressData.work_details.location && (
                 <div>
-                  <span className="text-gray-500">📍 Location:</span>
+                  <span className="text-gray-500 flex items-center gap-1">
+                    <MapPin className="w-4 h-4" /> Location:
+                  </span>
                   <div className="font-medium mt-1">
                     {progressData.work_details.location.location}
                   </div>
@@ -457,15 +482,15 @@ export default function EditWorkProgress() {
         <div className="lg:col-span-2">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">
-                📈 Progress Information
+              <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
+                <BarChart3 className="w-5 h-5" /> Progress Information
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Progress Percentage */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    📊 Progress Percentage *
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                    <BarChart3 className="w-4 h-4" /> Progress Percentage *
                   </label>
                   <div className="relative">
                     <input
@@ -488,12 +513,13 @@ export default function EditWorkProgress() {
                   {formData.progress_percentage !== "" && (
                     <div className="mt-1">
                       {progressValue >= 0 && progressValue <= 100 ? (
-                        <span className="text-xs text-green-600">
-                          ✅ Valid percentage
+                        <span className="text-xs text-green-600 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Valid percentage
                         </span>
                       ) : (
-                        <span className="text-xs text-red-600">
-                          ❌ Must be between 0-100
+                        <span className="text-xs text-red-600 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" /> Must be between
+                          0-100
                         </span>
                       )}
                     </div>
@@ -502,8 +528,8 @@ export default function EditWorkProgress() {
 
                 {/* Report Date */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    📅 Report Date *
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                    <Calendar className="w-4 h-4" /> Report Date *
                   </label>
                   <input
                     type="date"
@@ -538,8 +564,8 @@ export default function EditWorkProgress() {
 
               {/* Notes */}
               <div className="mt-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  📝 Notes (Optional)
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                  <FileEdit className="w-4 h-4" /> Notes (Optional)
                 </label>
                 <textarea
                   name="notes"
@@ -554,8 +580,8 @@ export default function EditWorkProgress() {
 
             {/* Evidence Upload */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">
-                🖼️ Progress Evidence
+              <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
+                <Image className="w-5 h-5" /> Progress Evidence
               </h3>
 
               {/* Existing Evidence */}
@@ -563,7 +589,7 @@ export default function EditWorkProgress() {
                 <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-blue-600">📎</span>
+                      <Paperclip className="w-4 h-4 text-blue-600" />
                       <span className="text-sm text-blue-800 font-medium">
                         Current Evidence Attached
                       </span>
@@ -571,9 +597,9 @@ export default function EditWorkProgress() {
                     <button
                       type="button"
                       onClick={handleRemoveExistingEvidence}
-                      className="text-red-600 hover:text-red-800 text-sm"
+                      className="text-red-600 hover:text-red-800 text-sm flex items-center gap-1"
                     >
-                      ✕ Remove
+                      <X className="w-4 h-4" /> Remove
                     </button>
                   </div>
                 </div>
@@ -602,7 +628,7 @@ export default function EditWorkProgress() {
                 <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-green-600">📎</span>
+                      <Paperclip className="w-4 h-4 text-green-600" />
                       <span className="text-sm text-green-800 font-medium">
                         {formData.evidence_file.name}
                       </span>
@@ -615,9 +641,9 @@ export default function EditWorkProgress() {
                     <button
                       type="button"
                       onClick={handleRemoveNewEvidence}
-                      className="text-red-600 hover:text-red-800 text-sm"
+                      className="text-red-600 hover:text-red-800 text-sm flex items-center gap-1"
                     >
-                      ✕ Remove
+                      <X className="w-4 h-4" /> Remove
                     </button>
                   </div>
                 </div>
@@ -653,7 +679,9 @@ export default function EditWorkProgress() {
                     Updating...
                   </>
                 ) : (
-                  <>✅ Update Progress Report</>
+                  <>
+                    <CheckCircle2 className="w-4 h-4" /> Update Progress Report
+                  </>
                 )}
               </button>
             </div>

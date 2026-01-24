@@ -1,10 +1,32 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { openProgressEvidence } from "../../utils/progressEvidenceHandler";
 import type { WorkProgressWithDetails } from "../../types/progressTypes";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  Search,
+  RefreshCw,
+  Ship,
+  FileText,
+  File,
+  Wrench,
+  MapPin,
+  HardHat,
+  AlertTriangle,
+  X,
+  Plus,
+  BarChart3,
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Circle,
+  Calendar,
+  Edit,
+  Camera,
+  Pin,
+} from "lucide-react";
 
 // ==================== INTERFACES ====================
 
@@ -47,7 +69,7 @@ export default function WorkProgressTable({
 
   // ==================== STATE - Data ====================
   const [workProgress, setWorkProgress] = useState<WorkProgressWithDetails[]>(
-    []
+    [],
   );
   const [totalCount, setTotalCount] = useState(0);
   const [maxProgressByWorkDetail, setMaxProgressByWorkDetail] = useState<
@@ -100,7 +122,7 @@ export default function WorkProgressTable({
     // Filter by vessel
     if (vesselFilter) {
       filtered = filtered.filter(
-        (wo) => wo.vessel_id === parseInt(vesselFilter)
+        (wo) => wo.vessel_id === parseInt(vesselFilter),
       );
     }
 
@@ -110,7 +132,7 @@ export default function WorkProgressTable({
         filtered = filtered.filter((wo) => !wo.kapro_id);
       } else {
         filtered = filtered.filter(
-          (wo) => wo.kapro_id === parseInt(kaproFilter)
+          (wo) => wo.kapro_id === parseInt(kaproFilter),
         );
       }
     }
@@ -123,7 +145,7 @@ export default function WorkProgressTable({
     // Filter by work location
     if (workLocationFilter) {
       filtered = filtered.filter(
-        (wo) => wo.work_location === workLocationFilter
+        (wo) => wo.work_location === workLocationFilter,
       );
     }
 
@@ -136,14 +158,14 @@ export default function WorkProgressTable({
     // Filter by shipyard WO number
     if (shipyardWoFilter) {
       filtered = filtered.filter(
-        (wo) => wo.shipyard_wo_number === shipyardWoFilter
+        (wo) => wo.shipyard_wo_number === shipyardWoFilter,
       );
     }
 
     // Filter by customer WO number
     if (customerWoFilter) {
       filtered = filtered.filter(
-        (wo) => wo.customer_wo_number === customerWoFilter
+        (wo) => wo.customer_wo_number === customerWoFilter,
       );
     }
 
@@ -211,7 +233,7 @@ export default function WorkProgressTable({
     const kaproIds = new Set(
       filteredWorkOrders
         .map((wo) => wo.kapro_id)
-        .filter((id): id is number => id !== null && id !== undefined)
+        .filter((id): id is number => id !== null && id !== undefined),
     );
 
     const filteredKapros = allKapros.filter((kapro) => kaproIds.has(kapro.id));
@@ -266,7 +288,7 @@ export default function WorkProgressTable({
       const { data: woData, error: woError } = await supabase
         .from("work_order")
         .select(
-          "id, vessel_id, shipyard_wo_number, customer_wo_number, work_type, work_location, is_additional_wo, kapro_id"
+          "id, vessel_id, shipyard_wo_number, customer_wo_number, work_type, work_location, is_additional_wo, kapro_id",
         )
         .is("deleted_at", null);
 
@@ -283,9 +305,8 @@ export default function WorkProgressTable({
       setError(null);
 
       // ✅ STEP 1: Fetch all profiles first using RPC function
-      const { data: allProfiles, error: profilesError } = await supabase.rpc(
-        "get_all_profiles"
-      );
+      const { data: allProfiles, error: profilesError } =
+        await supabase.rpc("get_all_profiles");
 
       if (profilesError) {
         console.error("Error fetching profiles:", profilesError);
@@ -334,7 +355,7 @@ export default function WorkProgressTable({
           )
         )
       `,
-        { count: "exact" }
+        { count: "exact" },
       );
 
       // Apply filters only if any filter is active
@@ -430,7 +451,7 @@ export default function WorkProgressTable({
   }, [currentPage, hasActiveFilters, filteredWorkOrders]);
 
   const calculateMaxProgress = async (
-    currentProgressData: WorkProgressWithDetails[]
+    currentProgressData: WorkProgressWithDetails[],
   ) => {
     try {
       const workDetailIds = [
@@ -458,11 +479,11 @@ export default function WorkProgressTable({
       if (maxProgressData) {
         workDetailIds.forEach((workDetailId) => {
           const progressReports = maxProgressData.filter(
-            (item) => item.work_details_id === workDetailId
+            (item) => item.work_details_id === workDetailId,
           );
           if (progressReports.length > 0) {
             maxProgressMap[workDetailId] = Math.max(
-              ...progressReports.map((item) => item.progress_percentage)
+              ...progressReports.map((item) => item.progress_percentage),
             );
           }
         });
@@ -522,7 +543,7 @@ export default function WorkProgressTable({
   };
 
   const handleAddProgressFromCurrent = async (
-    progressItem: WorkProgressWithDetails
+    progressItem: WorkProgressWithDetails,
   ) => {
     if (isReadOnly) {
       alert("❌ You don't have permission to add progress reports.");
@@ -532,7 +553,7 @@ export default function WorkProgressTable({
 
     if (!canAddProgress(workDetailsId)) {
       alert(
-        "❌ Cannot add progress report. This work detail has already reached 100% completion."
+        "❌ Cannot add progress report. This work detail has already reached 100% completion.",
       );
       return;
     }
@@ -564,7 +585,7 @@ export default function WorkProgressTable({
               company
             )
           )
-        `
+        `,
         )
         .eq("id", workDetailsId)
         .single();
@@ -629,7 +650,7 @@ export default function WorkProgressTable({
             suggestedNextProgress: Math.min(
               (maxProgressByWorkDetail[workDetailsId] ||
                 progressItem.progress_percentage) + 10,
-              100
+              100,
             ),
             fromProgressTable: true,
           },
@@ -680,11 +701,12 @@ export default function WorkProgressTable({
   };
 
   const getProgressIcon = (progress: number) => {
-    if (progress >= 100) return "✅";
-    if (progress >= 75) return "🔵";
-    if (progress >= 50) return "🟡";
-    if (progress >= 25) return "🟠";
-    return "🔴";
+    if (progress >= 100)
+      return <CheckCircle2 className="w-5 h-5 text-green-600" />;
+    if (progress >= 75) return <Circle className="w-5 h-5 text-blue-600" />;
+    if (progress >= 50) return <Circle className="w-5 h-5 text-yellow-600" />;
+    if (progress >= 25) return <Circle className="w-5 h-5 text-orange-600" />;
+    return <Circle className="w-5 h-5 text-red-600" />;
   };
 
   const handleEvidenceClick = async (storagePath?: string) => {
@@ -792,7 +814,7 @@ export default function WorkProgressTable({
                 disabled={currentPage === 1}
                 className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ←
+                <ArrowLeft className="w-4 h-4" />
               </button>
               {pages.map((page) => (
                 <button
@@ -814,7 +836,7 @@ export default function WorkProgressTable({
                 disabled={currentPage === totalPages}
                 className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                →
+                <ArrowRight className="w-4 h-4" />
               </button>
             </nav>
           </div>
@@ -830,7 +852,9 @@ export default function WorkProgressTable({
       <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <h3 className="text-lg font-semibold text-gray-900">🔍 Filters</h3>
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Search className="w-5 h-5" /> Filters
+            </h3>
             {hasActiveFilters && (
               <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-bold">
                 {
@@ -851,9 +875,9 @@ export default function WorkProgressTable({
             {hasActiveFilters && (
               <button
                 onClick={handleClearFilters}
-                className="text-sm text-blue-600 hover:text-blue-800"
+                className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
               >
-                🔄 Clear All Filters
+                <RefreshCw className="w-4 h-4" /> Clear All Filters
               </button>
             )}
             <button
@@ -874,8 +898,8 @@ export default function WorkProgressTable({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Vessel Filter with Search Dropdown */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  🚢 Vessel
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                  <Ship className="w-4 h-4" /> Vessel
                   {availableVessels.length < allVessels.length && (
                     <span className="ml-2 text-xs text-blue-600">
                       ({availableVessels.length} of {allVessels.length})
@@ -896,7 +920,7 @@ export default function WorkProgressTable({
                       onClick={handleClearVesselSearch}
                       className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                     >
-                      ✕
+                      <X className="w-4 h-4" />
                     </button>
                   )}
 
@@ -937,8 +961,8 @@ export default function WorkProgressTable({
 
               {/* Shipyard WO Number Filter */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  📋 Shipyard WO Number
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                  <FileText className="w-4 h-4" /> Shipyard WO Number
                   {availableShipyardWoNumbers.length > 0 && (
                     <span className="ml-2 text-xs text-blue-600">
                       ({availableShipyardWoNumbers.length})
@@ -966,8 +990,8 @@ export default function WorkProgressTable({
 
               {/* Customer WO Number Filter */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  📄 Customer WO Number
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                  <File className="w-4 h-4" /> Customer WO Number
                   {availableCustomerWoNumbers.length > 0 && (
                     <span className="ml-2 text-xs text-blue-600">
                       ({availableCustomerWoNumbers.length})
@@ -995,8 +1019,8 @@ export default function WorkProgressTable({
 
               {/* Work Type Filter */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  🔧 Work Type
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                  <Wrench className="w-4 h-4" /> Work Type
                   {availableWorkTypes.length > 0 && (
                     <span className="ml-2 text-xs text-blue-600">
                       ({availableWorkTypes.length})
@@ -1024,8 +1048,8 @@ export default function WorkProgressTable({
 
               {/* Work Location Filter */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  📍 Work Location
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                  <MapPin className="w-4 h-4" /> Work Location
                   {availableWorkLocations.length > 0 && (
                     <span className="ml-2 text-xs text-blue-600">
                       ({availableWorkLocations.length})
@@ -1053,8 +1077,8 @@ export default function WorkProgressTable({
 
               {/* Kapro Filter */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  👷 Kapro
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                  <HardHat className="w-4 h-4" /> Kapro
                   {availableKapros.kapros.length > 0 && (
                     <span className="ml-2 text-xs text-blue-600">
                       ({availableKapros.kapros.length}
@@ -1090,8 +1114,8 @@ export default function WorkProgressTable({
 
               {/* Additional WO Filter */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  ⚠️ Additional WO
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                  <AlertTriangle className="w-4 h-4" /> Additional WO
                 </label>
                 <select
                   value={additionalWoFilter}
@@ -1204,7 +1228,7 @@ export default function WorkProgressTable({
     if (workProgress.length === 0) {
       return (
         <div className="text-center py-12">
-          <div className="text-6xl mb-4">📊</div>
+          <BarChart3 className="w-16 h-16 mx-auto mb-4 text-gray-400" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">
             No Progress Reports Found
           </h3>
@@ -1228,7 +1252,7 @@ export default function WorkProgressTable({
                 onClick={handleAddProgressFromNoResults}
                 className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
               >
-                ➕ Add Progress Report
+                <Plus className="w-4 h-4" /> Add Progress Report
               </button>
             )}
           </div>
@@ -1314,7 +1338,10 @@ export default function WorkProgressTable({
                       />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      📅 {formatDate(item.report_date)}
+                      <div className="flex items-center gap-1">
+                        <Calendar className="w-4 h-4" />{" "}
+                        {formatDate(item.report_date)}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-sm">
                       <NotesCell notes={item.notes} />
@@ -1340,7 +1367,7 @@ export default function WorkProgressTable({
                           className="text-blue-600 hover:text-blue-800 text-sm font-medium inline-flex items-center gap-1 hover:underline"
                           title="Edit this progress report"
                         >
-                          ✏️ Edit
+                          <Edit className="w-4 h-4" /> Edit
                         </button>
                       </td>
                     )}
@@ -1376,7 +1403,7 @@ export default function WorkProgressTable({
                 onClick={() => navigate("/add-work-progress")}
                 className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
               >
-                ➕ Add Progress Report
+                <Plus className="w-4 h-4" /> Add Progress Report
               </button>
             )}
           </div>
@@ -1404,7 +1431,7 @@ function FilterPill({
     <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
       {label}: {value}
       <button onClick={onRemove} className="hover:text-blue-900 font-bold">
-        ✕
+        <X className="w-3 h-3" />
       </button>
     </span>
   );
@@ -1424,24 +1451,26 @@ function ProgressCell({
   maxProgress: number;
   onAddProgress: (item: WorkProgressWithDetails) => void;
   getProgressColor: (progress: number) => string;
-  getProgressIcon: (progress: number) => string;
+  getProgressIcon: (progress: number) => React.ReactElement;
   isReadOnly: boolean;
 }) {
   if (isCompleted || isReadOnly) {
     return (
       <div className="w-full text-left p-2 rounded-lg bg-gray-50 border border-gray-200 cursor-not-allowed opacity-75">
         <div className="flex items-center">
-          <span className="text-lg mr-2">
+          <span className="mr-2">
             {getProgressIcon(item.progress_percentage)}
           </span>
           <span
             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getProgressColor(
-              item.progress_percentage
+              item.progress_percentage,
             )}`}
           >
             {item.progress_percentage}%
           </span>
-          <span className="ml-2 text-xs text-gray-400">✅ Completed</span>
+          <span className="ml-2 text-xs text-gray-400 flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" /> Completed
+          </span>
         </div>
         <div className="mt-1 w-20">
           <div className="bg-gray-200 rounded-full h-1.5">
@@ -1462,12 +1491,12 @@ function ProgressCell({
       title={`Click to add new progress report (Current max: ${maxProgress}%)`}
     >
       <div className="flex items-center">
-        <span className="text-lg mr-2">
+        <span className="mr-2">
           {getProgressIcon(item.progress_percentage)}
         </span>
         <span
           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getProgressColor(
-            item.progress_percentage
+            item.progress_percentage,
           )} group-hover:scale-105 transition-transform`}
         >
           {item.progress_percentage}%
@@ -1477,8 +1506,8 @@ function ProgressCell({
             (Max: {maxProgress}%)
           </span>
         )}
-        <span className="ml-2 text-xs text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
-          ➕ Add new
+        <span className="ml-2 text-xs text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+          <Plus className="w-3 h-3" /> Add new
         </span>
       </div>
       <div className="mt-1 w-20">
@@ -1513,17 +1542,19 @@ function WorkDetailsCell({
           {workDetails.description}
         </div>
         {isCompleted && (
-          <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            ✅ Complete
+          <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            <CheckCircle2 className="w-3 h-3" /> Complete
           </span>
         )}
       </div>
       {locationText && (
-        <div className="text-sm text-gray-500">📍 {locationText}</div>
+        <div className="text-sm text-gray-500 flex items-center gap-1">
+          <MapPin className="w-4 h-4" /> {locationText}
+        </div>
       )}
       {workDetails.work_location && (
-        <div className="text-xs text-gray-600 mt-0.5 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 inline-block">
-          📌 {workDetails.work_location}
+        <div className="text-xs text-gray-600 mt-0.5 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 inline-flex items-center gap-1">
+          <Pin className="w-3 h-3" /> {workDetails.work_location}
         </div>
       )}
     </div>
@@ -1539,8 +1570,12 @@ function VesselWorkOrderCell({
 }) {
   return (
     <div>
-      <div className="text-sm text-gray-900">🚢 {vessel.name}</div>
-      <div className="text-sm text-gray-500">📋 {shipyardWoNumber}</div>
+      <div className="text-sm text-gray-900 flex items-center gap-1">
+        <Ship className="w-4 h-4" /> {vessel.name}
+      </div>
+      <div className="text-sm text-gray-500 flex items-center gap-1">
+        <FileText className="w-4 h-4" /> {shipyardWoNumber}
+      </div>
       <div className="text-xs text-gray-400">{vessel.type}</div>
     </div>
   );
@@ -1594,7 +1629,7 @@ function EvidenceCell({
       onClick={() => onClick(storagePath)}
       className="text-blue-600 hover:text-blue-800 flex items-center gap-1 hover:underline"
     >
-      📷 View Evidence
+      <Camera className="w-4 h-4" /> View Evidence
     </button>
   );
 }

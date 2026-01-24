@@ -4,6 +4,21 @@ import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import type { BASTPWithDetails } from "../../types/bastp.types";
 import type { Invoice } from "../../types/invoiceTypes";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ArrowLeft,
+  FileText,
+  Trash2,
+  Save,
+  X,
+  Lock,
+  ExternalLink,
+  Download,
+  Loader,
+  Wrench,
+  DollarSign,
+} from "lucide-react";
 
 interface WorkDetailPrice {
   work_details_id: number;
@@ -60,7 +75,7 @@ export default function ManageInvoice() {
   });
 
   const [workDetailPrices, setWorkDetailPrices] = useState<WorkDetailPrice[]>(
-    []
+    [],
   );
 
   const [generalServicePrices, setGeneralServicePrices] = useState<
@@ -161,7 +176,7 @@ export default function ManageInvoice() {
               )
             )
           )
-        `
+        `,
         )
         .eq("id", invoiceId)
         .single();
@@ -195,11 +210,11 @@ export default function ManageInvoice() {
       const prices: WorkDetailPrice[] = allWorkDetailIds.map(
         (workDetailId: number) => {
           const existingPrice = data.invoice_work_details?.find(
-            (item: any) => item.work_details_id === workDetailId
+            (item: any) => item.work_details_id === workDetailId,
           );
 
           const workDetail = data.bastp?.bastp_work_details?.find(
-            (bwd: any) => bwd.work_details_id === workDetailId
+            (bwd: any) => bwd.work_details_id === workDetailId,
           )?.work_details;
 
           const quantity = workDetail?.quantity || 0;
@@ -213,7 +228,7 @@ export default function ManageInvoice() {
             uom: uom,
             payment_price: unit_price * quantity,
           };
-        }
+        },
       );
 
       setWorkDetailPrices(prices);
@@ -291,7 +306,7 @@ export default function ManageInvoice() {
             display_order
           )
         )
-      `
+      `,
         )
         .eq("id", bastpId)
         .single();
@@ -368,8 +383,8 @@ export default function ManageInvoice() {
               unit_price: unit_price,
               payment_price: unit_price * item.quantity,
             }
-          : item
-      )
+          : item,
+      ),
     );
 
     if (error && error.includes("work detail price")) {
@@ -379,7 +394,7 @@ export default function ManageInvoice() {
 
   const handleServiceUnitPriceChange = (
     service_type_id: number,
-    value: string
+    value: string,
   ) => {
     const numericValue = value.replace(/\D/g, "");
     const unit_price = numericValue === "" ? 0 : parseInt(numericValue, 10);
@@ -392,8 +407,8 @@ export default function ManageInvoice() {
               unit_price: unit_price,
               payment_price: unit_price * item.total_days,
             }
-          : item
-      )
+          : item,
+      ),
     );
 
     if (error && error.includes("service price")) {
@@ -404,11 +419,11 @@ export default function ManageInvoice() {
   const calculateTotalAmount = () => {
     const workTotal = workDetailPrices.reduce(
       (sum, item) => sum + item.payment_price,
-      0
+      0,
     );
     const serviceTotal = generalServicePrices.reduce(
       (sum, item) => sum + item.payment_price,
-      0
+      0,
     );
     return workTotal + serviceTotal;
   };
@@ -440,12 +455,12 @@ export default function ManageInvoice() {
     // Validate that at least one work detail has a unit price
     const hasWorkPrice = workDetailPrices.some((item) => item.unit_price > 0);
     const hasServicePrice = generalServicePrices.some(
-      (item) => item.unit_price > 0
+      (item) => item.unit_price > 0,
     );
 
     if (!hasWorkPrice && !hasServicePrice) {
       setError(
-        "Please set at least one work detail price or general service price"
+        "Please set at least one work detail price or general service price",
       );
       return;
     }
@@ -614,7 +629,7 @@ export default function ManageInvoice() {
     if (!existingInvoice || !invoiceId) return;
 
     const confirmed = window.confirm(
-      "Are you sure you want to delete this invoice? This action cannot be undone."
+      "Are you sure you want to delete this invoice? This action cannot be undone.",
     );
 
     if (!confirmed) return;
@@ -709,7 +724,7 @@ export default function ManageInvoice() {
     return (
       <div className="p-8">
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <Loader className="w-12 h-12 text-blue-600 animate-spin" />
           <span className="ml-3 text-gray-600">
             Loading {isEditMode ? "invoice" : "BASTP"} details...
           </span>
@@ -743,7 +758,7 @@ export default function ManageInvoice() {
           onClick={() => navigate("/invoices")}
           className="text-blue-600 hover:text-blue-800 mb-4 flex items-center gap-2"
         >
-          ← Back to Invoices
+          <ArrowLeft className="w-4 h-4" /> Back to Invoices
         </button>
         <h1 className="text-3xl font-bold text-gray-900">
           {isEditMode ? "Edit Invoice" : "Create Invoice"}
@@ -761,7 +776,7 @@ export default function ManageInvoice() {
       {error && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center">
-            <span className="text-red-600 mr-2">⚠️</span>
+            <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
             <p className="text-red-700">{error}</p>
           </div>
         </div>
@@ -770,7 +785,7 @@ export default function ManageInvoice() {
       {success && (
         <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
           <div className="flex items-center">
-            <span className="text-green-600 mr-2">✅</span>
+            <CheckCircle2 className="w-5 h-5 text-green-600 mr-2" />
             <p className="text-green-700 font-medium">{success}</p>
           </div>
         </div>
@@ -789,7 +804,7 @@ export default function ManageInvoice() {
               disabled={viewingDocument}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              📄 View BASTP Document
+              <FileText className="w-4 h-4" /> View BASTP Document
             </button>
           )}
         </div>
@@ -829,7 +844,7 @@ export default function ManageInvoice() {
                           year: "numeric",
                           month: "short",
                           day: "numeric",
-                        }
+                        },
                       )
                     : "N/A"}
                 </span>
@@ -1035,8 +1050,8 @@ export default function ManageInvoice() {
           bastp.general_services.length > 0 && (
             <div className="bg-white rounded-lg shadow">
               <div className="p-6 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  🛠️ General Services Pricing
+                <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                  <Wrench className="w-5 h-5" /> General Services Pricing
                 </h2>
                 <p className="text-sm text-gray-600 mt-1">
                   Enter unit price (per day) for each service. Payment price
@@ -1069,11 +1084,11 @@ export default function ManageInvoice() {
                       .sort(
                         (a: any, b: any) =>
                           (a.service_type?.display_order || 0) -
-                          (b.service_type?.display_order || 0)
+                          (b.service_type?.display_order || 0),
                       )
                       .map((service: any) => {
                         const priceItem = generalServicePrices.find(
-                          (p) => p.service_type_id === service.service_type_id
+                          (p) => p.service_type_id === service.service_type_id,
                         );
 
                         return (
@@ -1102,7 +1117,7 @@ export default function ManageInvoice() {
                                 onChange={(e) =>
                                   handleServiceUnitPriceChange(
                                     service.service_type_id,
-                                    e.target.value
+                                    e.target.value,
                                   )
                                 }
                                 onFocus={(e) => {
@@ -1114,11 +1129,11 @@ export default function ManageInvoice() {
                                     e.clipboardData.getData("text");
                                   const numericValue = pasteData.replace(
                                     /\D/g,
-                                    ""
+                                    "",
                                   );
                                   handleServiceUnitPriceChange(
                                     service.service_type_id,
-                                    numericValue
+                                    numericValue,
                                   );
                                 }}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right"
@@ -1153,8 +1168,8 @@ export default function ManageInvoice() {
         {/* Work Details Pricing Section */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">
-              💰 Work Details Pricing
+            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+              <DollarSign className="w-5 h-5" /> Work Details Pricing
             </h2>
             <p className="text-sm text-gray-600 mt-1">
               Enter unit price for each work detail. Payment price will be
@@ -1190,7 +1205,7 @@ export default function ManageInvoice() {
                 bastp.bastp_work_details.length > 0 ? (
                   bastp.bastp_work_details.map((item) => {
                     const priceItem = workDetailPrices.find(
-                      (p) => p.work_details_id === item.work_details_id
+                      (p) => p.work_details_id === item.work_details_id,
                     );
 
                     return (
@@ -1242,7 +1257,7 @@ export default function ManageInvoice() {
                             onChange={(e) =>
                               handleUnitPriceChange(
                                 item.work_details_id,
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             onFocus={(e) => {
@@ -1254,7 +1269,7 @@ export default function ManageInvoice() {
                               const numericValue = pasteData.replace(/\D/g, "");
                               handleUnitPriceChange(
                                 item.work_details_id,
-                                numericValue
+                                numericValue,
                               );
                             }}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right"
@@ -1311,8 +1326,8 @@ export default function ManageInvoice() {
                       {formatCurrency(
                         workDetailPrices.reduce(
                           (sum, item) => sum + item.payment_price,
-                          0
-                        )
+                          0,
+                        ),
                       )}
                     </span>
                   </div>
@@ -1322,8 +1337,8 @@ export default function ManageInvoice() {
                       {formatCurrency(
                         generalServicePrices.reduce(
                           (sum, item) => sum + item.payment_price,
-                          0
-                        )
+                          0,
+                        ),
                       )}
                     </span>
                   </div>
@@ -1385,7 +1400,7 @@ export default function ManageInvoice() {
               disabled={saving}
               className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              🗑️ Delete Invoice
+              <Trash2 className="w-4 h-4" /> Delete Invoice
             </button>
           )}
 
@@ -1405,11 +1420,14 @@ export default function ManageInvoice() {
             >
               {saving ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <Loader className="w-4 h-4 animate-spin" />
                   {isEditMode ? "Updating..." : "Creating..."}
                 </>
               ) : (
-                <>💾 {isEditMode ? "Update Invoice" : "Create Invoice"}</>
+                <>
+                  <Save className="w-4 h-4" />{" "}
+                  {isEditMode ? "Update Invoice" : "Create Invoice"}
+                </>
               )}
             </button>
           </div>
@@ -1422,14 +1440,15 @@ export default function ManageInvoice() {
           <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] flex flex-col shadow-2xl">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">
-                📄 BASTP Document - {bastp?.number}
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FileText className="w-5 h-5" /> BASTP Document -{" "}
+                {bastp?.number}
               </h3>
               <button
                 onClick={handleCloseModal}
-                className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
+                className="text-gray-500 hover:text-gray-700"
               >
-                ✕
+                <X className="w-6 h-6" />
               </button>
             </div>
 
@@ -1455,8 +1474,9 @@ export default function ManageInvoice() {
               ) : (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center">
-                    <p className="text-gray-600 mb-4 text-lg">
-                      📄 Cannot preview this file type in browser
+                    <p className="text-gray-600 mb-4 text-lg flex items-center gap-2 justify-center">
+                      <FileText className="w-5 h-5" /> Cannot preview this file
+                      type in browser
                     </p>
                     <a
                       href={documentUrl}
@@ -1473,8 +1493,9 @@ export default function ManageInvoice() {
 
             {/* Modal Footer */}
             <div className="p-4 border-t border-gray-200 flex justify-between items-center bg-white">
-              <p className="text-xs text-gray-500">
-                🔒 Secure signed URL - Expires in 5 minutes
+              <p className="text-xs text-gray-500 flex items-center gap-1">
+                <Lock className="w-3 h-3" /> Secure signed URL - Expires in 5
+                minutes
               </p>
               <div className="flex gap-2">
                 <a
@@ -1483,14 +1504,14 @@ export default function ManageInvoice() {
                   rel="noopener noreferrer"
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 inline-flex items-center gap-2 text-sm font-medium"
                 >
-                  🔗 New Tab
+                  <ExternalLink className="w-4 h-4" /> New Tab
                 </a>
                 <a
                   href={documentUrl}
                   download={`BASTP-${bastp?.number}.pdf`}
                   className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 inline-flex items-center gap-2 text-sm font-medium"
                 >
-                  ⬇️ Download
+                  <Download className="w-4 h-4" /> Download
                 </a>
                 <button
                   onClick={handleCloseModal}

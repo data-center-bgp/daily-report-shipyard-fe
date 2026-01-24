@@ -8,6 +8,16 @@ import {
   deleteWorkPermitFile,
 } from "../../utils/uploadHandler";
 import { openPermitFile } from "../../utils/urlHandler";
+import {
+  Ship,
+  HardHat,
+  ArrowLeft,
+  Save,
+  FileText,
+  AlertTriangle,
+  Wrench,
+  X,
+} from "lucide-react";
 
 interface Location {
   id: number;
@@ -95,7 +105,7 @@ export default function EditWorkDetails() {
 
   // Original data for comparison
   const [originalData, setOriginalData] = useState<WorkDetailsData | null>(
-    null
+    null,
   );
 
   // UI state
@@ -274,7 +284,7 @@ export default function EditWorkDetails() {
             id,
             work_scope
           )
-        `
+        `,
         )
         .eq("id", parseInt(workDetailsId))
         .single();
@@ -318,7 +328,7 @@ export default function EditWorkDetails() {
     } catch (err) {
       console.error("Error fetching work details:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to load work details"
+        err instanceof Error ? err.message : "Failed to load work details",
       );
     } finally {
       setLoading(false);
@@ -390,7 +400,7 @@ export default function EditWorkDetails() {
   const handleInputChange = (
     e: React.ChangeEvent<
       HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >
+    >,
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -432,7 +442,7 @@ export default function EditWorkDetails() {
         const endDate = new Date(formData.target_close_date);
         if (startDate > endDate) {
           errors.push(
-            "Target close date must be on or after planned start date"
+            "Target close date must be on or after planned start date",
           );
         }
       }
@@ -450,7 +460,7 @@ export default function EditWorkDetails() {
         const actualClose = new Date(formData.actual_close_date);
         if (actualStart > actualClose) {
           errors.push(
-            "Actual close date must be on or after actual start date"
+            "Actual close date must be on or after actual start date",
           );
         }
       }
@@ -491,12 +501,12 @@ export default function EditWorkDetails() {
           const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
           const customPath = `work-orders/${workOrderNumber}/permits/${timestamp}_${selectedFile.name.replace(
             /[^a-zA-Z0-9.-]/g,
-            "_"
+            "_",
           )}`;
 
           const uploadResult = await uploadWorkPermitFile(
             selectedFile,
-            customPath
+            customPath,
           );
 
           setUploadProgress(false);
@@ -583,7 +593,7 @@ export default function EditWorkDetails() {
     } catch (err) {
       console.error("Error updating work details:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to update work details"
+        err instanceof Error ? err.message : "Failed to update work details",
       );
     } finally {
       setSaving(false);
@@ -675,26 +685,29 @@ export default function EditWorkDetails() {
               {originalData.work_order.vessel.name}
             </p>
             {isPPIC && (
-              <p className="text-sm text-blue-600 mt-1">
-                🔧 PPIC Mode: Editing planning and scope fields
+              <p className="text-sm text-blue-600 mt-1 flex items-center gap-1">
+                <Wrench className="w-4 h-4" /> PPIC Mode: Editing planning and
+                scope fields
               </p>
             )}
             {isProduction && (
-              <p className="text-sm text-green-600 mt-1">
-                🏭 PRODUCTION Mode: Editing execution and documentation fields
+              <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
+                <HardHat className="w-4 h-4" /> PRODUCTION Mode: Editing
+                execution and documentation fields
               </p>
             )}
             {!isPPIC && !isProduction && (
-              <p className="text-sm text-purple-600 mt-1">
-                👑 MASTER Mode: Full access to all fields (PPIC + PRODUCTION)
+              <p className="text-sm text-purple-600 mt-1 flex items-center gap-1">
+                <Ship className="w-4 h-4" /> MASTER Mode: Full access to all
+                fields (PPIC + PRODUCTION)
               </p>
             )}
           </div>
           <button
             onClick={handleCancel}
-            className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
+            className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors flex items-center gap-2"
           >
-            ← Back
+            <ArrowLeft className="w-4 h-4" /> Back
           </button>
         </div>
       </div>
@@ -702,14 +715,14 @@ export default function EditWorkDetails() {
       {/* Work Order Info */}
       <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex items-center">
-          <span className="text-lg mr-3">🏗️</span>
+          <HardHat className="w-5 h-5 mr-3 text-blue-600" />
           <div>
             <div className="font-semibold text-blue-800">
               Work Order: {originalData.work_order.shipyard_wo_number}
             </div>
-            <div className="text-sm text-blue-600">
-              🚢 {originalData.work_order.vessel.name} (
-              {originalData.work_order.vessel.type}) -{" "}
+            <div className="flex items-center gap-1 text-sm text-blue-600">
+              <Ship className="w-4 h-4" /> {originalData.work_order.vessel.name}{" "}
+              ({originalData.work_order.vessel.type}) -{" "}
               {originalData.work_order.vessel.company}
             </div>
           </div>
@@ -795,7 +808,7 @@ export default function EditWorkDetails() {
                           onClick={handleClearLocationSearch}
                           className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                         >
-                          ✕
+                          <X className="w-4 h-4" />
                         </button>
                       )}
                     </div>
@@ -851,7 +864,7 @@ export default function EditWorkDetails() {
                           onClick={handleClearWorkScopeSearch}
                           className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                         >
-                          ✕
+                          <X className="w-4 h-4" />
                         </button>
                       )}
                     </div>
@@ -1039,8 +1052,9 @@ export default function EditWorkDetails() {
             {isProduction && (
               <>
                 <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                    📋 Planning Information (Read-only)
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4" /> Planning Information
+                    (Read-only)
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                     <div>
@@ -1071,11 +1085,11 @@ export default function EditWorkDetails() {
                       <span className="text-gray-500">Planned Dates:</span>
                       <div className="font-medium text-gray-900">
                         {new Date(
-                          formData.planned_start_date
+                          formData.planned_start_date,
                         ).toLocaleDateString()}{" "}
                         -{" "}
                         {new Date(
-                          formData.target_close_date
+                          formData.target_close_date,
                         ).toLocaleDateString()}
                       </div>
                     </div>
@@ -1250,7 +1264,7 @@ export default function EditWorkDetails() {
                     <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center">
-                          <span className="text-green-600 mr-2">📄</span>
+                          <FileText className="w-5 h-5 text-green-600 mr-2" />
                           <div>
                             <div className="text-sm font-medium text-green-800">
                               Current Work Permit
@@ -1283,7 +1297,7 @@ export default function EditWorkDetails() {
                     <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center">
-                          <span className="text-red-600 mr-2">⚠️</span>
+                          <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
                           <div>
                             <div className="text-sm font-medium text-red-800">
                               Work Permit Will Be Removed
@@ -1307,7 +1321,7 @@ export default function EditWorkDetails() {
                   {!originalData.storage_path && (
                     <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                       <div className="flex items-center">
-                        <span className="text-yellow-600 mr-2">⚠️</span>
+                        <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
                         <div>
                           <div className="text-sm font-medium text-yellow-800">
                             No Work Permit Uploaded
@@ -1333,7 +1347,7 @@ export default function EditWorkDetails() {
                         htmlFor="work_permit_file"
                         className="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
-                        📄{" "}
+                        <FileText className="w-4 h-4 mr-2" />
                         {originalData.storage_path
                           ? "Replace with New PDF"
                           : "Upload PDF File"}
@@ -1350,7 +1364,7 @@ export default function EditWorkDetails() {
                       <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center">
-                            <span className="text-blue-600 mr-2">📄</span>
+                            <FileText className="w-5 h-5 text-blue-600 mr-2" />
                             <div>
                               <div className="text-sm font-medium text-blue-800">
                                 {selectedFile.name}
@@ -1402,7 +1416,9 @@ export default function EditWorkDetails() {
                   {uploadProgress ? "Uploading file..." : "Saving..."}
                 </>
               ) : (
-                <>✅ Save Changes</>
+                <>
+                  <Save className="w-4 h-4" /> Save Changes
+                </>
               )}
             </button>
           </div>

@@ -6,6 +6,18 @@ import {
   type WorkOrder,
   type Vessel,
 } from "../../lib/supabase";
+import {
+  ArrowLeft,
+  Wrench,
+  MapPin,
+  User,
+  Clock,
+  Ship,
+  BarChart3,
+  CheckCircle2,
+  AlertTriangle,
+  ChevronDown,
+} from "lucide-react";
 
 interface WorkDetailsWithProgress extends WorkDetails {
   current_progress?: number;
@@ -69,7 +81,7 @@ export default function VerifyWorkDetails() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [verificationDate, setVerificationDate] = useState(
-    new Date().toISOString().split("T")[0]
+    new Date().toISOString().split("T")[0],
   );
   const [verificationNotes, setVerificationNotes] = useState("");
   const [expandedSections, setExpandedSections] = useState({
@@ -123,7 +135,7 @@ export default function VerifyWorkDetails() {
         email
       )
     )
-  `
+  `,
         )
         .eq("id", parseInt(workDetailsId))
         .single();
@@ -146,7 +158,7 @@ export default function VerifyWorkDetails() {
         const sortedProgress = progressRecords.sort(
           (a: WorkProgressItem, b: WorkProgressItem) =>
             new Date(b.report_date).getTime() -
-            new Date(a.report_date).getTime()
+            new Date(a.report_date).getTime(),
         );
 
         current_progress = sortedProgress[0]?.progress_percentage || 0;
@@ -156,7 +168,7 @@ export default function VerifyWorkDetails() {
       // Check if work details is completed (100%)
       if (current_progress !== 100) {
         throw new Error(
-          "Work details is not completed yet (must be 100% progress)"
+          "Work details is not completed yet (must be 100% progress)",
         );
       }
 
@@ -181,8 +193,8 @@ export default function VerifyWorkDetails() {
 
         throw new Error(
           `Work details has already been verified on ${new Date(
-            existing.verification_date
-          ).toLocaleDateString()} by ${profileName || "Unknown User"}`
+            existing.verification_date,
+          ).toLocaleDateString()} by ${profileName || "Unknown User"}`,
         );
       }
 
@@ -197,7 +209,7 @@ export default function VerifyWorkDetails() {
     } catch (err) {
       console.error("Error fetching work details:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to load work details"
+        err instanceof Error ? err.message : "Failed to load work details",
       );
     } finally {
       setLoading(false);
@@ -255,11 +267,11 @@ export default function VerifyWorkDetails() {
         state: {
           successMessage: `✅ Work verification recorded successfully!\n\nWork: "${workDetails.description.substring(
             0,
-            50
+            50,
           )}${
             workDetails.description.length > 50 ? "..." : ""
           }"\nVerified by: ${userProfile.name}\nVerification Date: ${new Date(
-            verificationDate
+            verificationDate,
           ).toLocaleDateString()}\nWork Order: ${
             workDetails.work_order?.shipyard_wo_number || "N/A"
           }\nVessel: ${workDetails.work_order?.vessel?.name || "N/A"}${
@@ -276,7 +288,7 @@ export default function VerifyWorkDetails() {
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to record work verification"
+          : "Failed to record work verification",
       );
     } finally {
       setSubmitting(false);
@@ -327,7 +339,7 @@ export default function VerifyWorkDetails() {
         <div className="max-w-md w-full bg-white rounded-xl shadow-lg border border-red-200 p-6">
           <div className="text-center">
             <div className="w-12 h-12 bg-gradient-to-br from-red-400 to-red-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-md">
-              <span className="text-white text-xl">⚠️</span>
+              <AlertTriangle className="w-6 h-6 text-white" />
             </div>
             <h2 className="text-lg font-semibold text-slate-800 mb-2">
               Cannot Verify Work Details
@@ -383,7 +395,7 @@ export default function VerifyWorkDetails() {
                 onClick={() => navigate("/work-verification")}
                 className="text-slate-400 hover:text-slate-600 transition-colors p-2 rounded-lg hover:bg-slate-100"
               >
-                ←
+                <ArrowLeft className="w-5 h-5" />
               </button>
               <div>
                 <h1 className="text-lg font-semibold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
@@ -427,7 +439,7 @@ export default function VerifyWorkDetails() {
             <div className="bg-white rounded-xl shadow-lg border border-slate-200/50 overflow-hidden">
               <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-indigo-50">
                 <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                  🔧 Work Details
+                  <Wrench className="w-5 h-5" /> Work Details
                 </h3>
               </div>
               <div className="p-4 space-y-4">
@@ -444,8 +456,9 @@ export default function VerifyWorkDetails() {
                     <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       Location
                     </label>
-                    <p className="mt-1 text-sm text-slate-700 bg-gradient-to-r from-slate-50 to-slate-100 p-2 rounded-lg border">
-                      📍 {workDetails.location?.location || "-"}
+                    <p className="mt-1 text-sm text-slate-700 bg-gradient-to-r from-slate-50 to-slate-100 p-2 rounded-lg border flex items-center gap-1">
+                      <MapPin className="w-4 h-4" />{" "}
+                      {workDetails.location?.location || "-"}
                     </p>
                   </div>
                   <div>
@@ -460,24 +473,26 @@ export default function VerifyWorkDetails() {
                     <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       PIC
                     </label>
-                    <p className="mt-1 text-sm text-slate-700 bg-gradient-to-r from-slate-50 to-slate-100 p-2 rounded-lg border">
-                      👤 {workDetails.pic}
+                    <p className="mt-1 text-sm text-slate-700 bg-gradient-to-r from-slate-50 to-slate-100 p-2 rounded-lg border flex items-center gap-1">
+                      <User className="w-4 h-4" /> {workDetails.pic}
                     </p>
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       Target Period
                     </label>
-                    <p className="mt-1 text-sm text-slate-700 bg-gradient-to-r from-slate-50 to-slate-100 p-2 rounded-lg border">
-                      ⏰ {workDetails.period_close_target}
+                    <p className="mt-1 text-sm text-slate-700 bg-gradient-to-r from-slate-50 to-slate-100 p-2 rounded-lg border flex items-center gap-1">
+                      <Clock className="w-4 h-4" />{" "}
+                      {workDetails.period_close_target}
                     </p>
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       Vessel
                     </label>
-                    <p className="mt-1 text-sm text-slate-700 bg-gradient-to-r from-blue-50 to-indigo-50 p-2 rounded-lg border border-blue-200">
-                      🚢 {workDetails.work_order?.vessel?.name || "-"}
+                    <p className="mt-1 text-sm text-slate-700 bg-gradient-to-r from-blue-50 to-indigo-50 p-2 rounded-lg border border-blue-200 flex items-center gap-1">
+                      <Ship className="w-4 h-4" />{" "}
+                      {workDetails.work_order?.vessel?.name || "-"}
                     </p>
                     <p className="text-xs text-slate-500 mt-1">
                       {workDetails.work_order?.vessel?.type || "-"} •{" "}
@@ -496,27 +511,17 @@ export default function VerifyWorkDetails() {
               >
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                    📊 Progress History
+                    <BarChart3 className="w-5 h-5" /> Progress History
                     <span className="bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 px-2 py-1 rounded-full text-xs font-semibold border border-blue-200">
                       {workDetails.work_progress?.length || 0}
                     </span>
                   </h3>
                   <div className="flex items-center justify-center w-6 h-6">
-                    <svg
+                    <ChevronDown
                       className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${
                         expandedSections.progress ? "rotate-180" : "rotate-0"
                       }`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 9l-7 7-7-7"
-                      />
-                    </svg>
+                    />
                   </div>
                 </div>
               </button>
@@ -535,7 +540,7 @@ export default function VerifyWorkDetails() {
                         .sort(
                           (a: WorkProgressItem, b: WorkProgressItem) =>
                             new Date(b.report_date).getTime() -
-                            new Date(a.report_date).getTime()
+                            new Date(a.report_date).getTime(),
                         )
                         .map((progress, index) => (
                           <div
@@ -548,10 +553,10 @@ export default function VerifyWorkDetails() {
                                   progress.progress_percentage === 100
                                     ? "bg-gradient-to-r from-emerald-100 to-green-100 text-emerald-800 border border-emerald-200"
                                     : progress.progress_percentage >= 75
-                                    ? "bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-800 border border-blue-200"
-                                    : progress.progress_percentage >= 50
-                                    ? "bg-gradient-to-r from-yellow-100 to-amber-100 text-yellow-800 border border-yellow-200"
-                                    : "bg-gradient-to-r from-slate-100 to-gray-100 text-slate-700 border border-slate-200"
+                                      ? "bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-800 border border-blue-200"
+                                      : progress.progress_percentage >= 50
+                                        ? "bg-gradient-to-r from-yellow-100 to-amber-100 text-yellow-800 border border-yellow-200"
+                                        : "bg-gradient-to-r from-slate-100 to-gray-100 text-slate-700 border border-slate-200"
                                 }`}
                               >
                                 {progress.progress_percentage}%
@@ -593,7 +598,7 @@ export default function VerifyWorkDetails() {
             <div className="bg-white rounded-xl shadow-lg border border-slate-200/50 sticky top-24 overflow-hidden">
               <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-green-50">
                 <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                  ✅ Record Verification
+                  <CheckCircle2 className="w-5 h-5" /> Record Verification
                 </h3>
                 <p className="text-xs text-slate-600 mt-1 font-medium">
                   Record site verification in system
@@ -666,7 +671,9 @@ export default function VerifyWorkDetails() {
                         Recording...
                       </>
                     ) : (
-                      <>✅ Record Verification</>
+                      <>
+                        <CheckCircle2 className="w-4 h-4" /> Record Verification
+                      </>
                     )}
                   </button>
 

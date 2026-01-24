@@ -3,6 +3,18 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import type { BASTPWithDetails, BASTPStatus } from "../../types/bastp.types";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  Plus,
+  AlertTriangle,
+  Search,
+  BarChart3,
+  FileEdit,
+  CheckCircle2,
+  DollarSign,
+  FileCheck,
+  FileText,
+  Calendar,
+} from "lucide-react";
 
 export default function BASTP() {
   const navigate = useNavigate();
@@ -19,9 +31,8 @@ export default function BASTP() {
       setError(null);
 
       // ✅ STEP 1: Fetch all profiles first using RPC function
-      const { data: allProfiles, error: profilesError } = await supabase.rpc(
-        "get_all_profiles"
-      );
+      const { data: allProfiles, error: profilesError } =
+        await supabase.rpc("get_all_profiles");
 
       if (profilesError) {
         console.error("Error fetching profiles:", profilesError);
@@ -36,7 +47,7 @@ export default function BASTP() {
         allProfiles.forEach(
           (profile: { id: number; name: string; email: string }) => {
             profilesMap[profile.id] = profile;
-          }
+          },
         );
       }
 
@@ -71,7 +82,7 @@ export default function BASTP() {
       close_date,
       total_days
     )
-  `
+  `,
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
@@ -120,10 +131,10 @@ export default function BASTP() {
 
           if (!error) {
             const verifiedIds = (verifications || []).map(
-              (v) => v.work_details_id
+              (v) => v.work_details_id,
             );
             const allVerified = workDetailIds.every((id) =>
-              verifiedIds.includes(id)
+              verifiedIds.includes(id),
             );
             if (allVerified) {
               await supabase
@@ -179,20 +190,32 @@ export default function BASTP() {
 
   const getStatusBadge = (status: BASTPStatus) => {
     const statusConfig = {
-      DRAFT: { bg: "bg-gray-100", text: "text-gray-700", icon: "📝" },
-      VERIFIED: { bg: "bg-blue-100", text: "text-blue-700", icon: "✅" },
+      DRAFT: {
+        bg: "bg-gray-100",
+        text: "text-gray-700",
+        icon: <FileEdit className="w-3 h-3" />,
+      },
+      VERIFIED: {
+        bg: "bg-blue-100",
+        text: "text-blue-700",
+        icon: <CheckCircle2 className="w-3 h-3" />,
+      },
       READY_FOR_INVOICE: {
         bg: "bg-green-100",
         text: "text-green-700",
-        icon: "💰",
+        icon: <DollarSign className="w-3 h-3" />,
       },
-      INVOICED: { bg: "bg-emerald-100", text: "text-emerald-700", icon: "✓" },
+      INVOICED: {
+        bg: "bg-emerald-100",
+        text: "text-emerald-700",
+        icon: <FileCheck className="w-3 h-3" />,
+      },
     };
 
     const config = statusConfig[status];
     return (
       <span
-        className={`px-3 py-1 rounded-full text-xs font-medium ${config.bg} ${config.text}`}
+        className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${config.bg} ${config.text}`}
       >
         {config.icon} {status.replace(/_/g, " ")}
       </span>
@@ -249,7 +272,7 @@ export default function BASTP() {
             onClick={() => navigate("/bastp/create")}
             className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-3 rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
           >
-            ➕ Create BASTP
+            <Plus className="w-5 h-5" /> Create BASTP
           </button>
         )}
       </div>
@@ -258,7 +281,7 @@ export default function BASTP() {
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center">
-            <span className="text-red-600 mr-2">⚠️</span>
+            <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
             <p className="text-red-700 font-medium">{error}</p>
           </div>
         </div>
@@ -294,8 +317,8 @@ export default function BASTP() {
       <div className="bg-white rounded-lg shadow p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              🔍 Search
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+              <Search className="w-4 h-4" /> Search
             </label>
             <input
               type="text"
@@ -306,8 +329,8 @@ export default function BASTP() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              📊 Status Filter
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+              <BarChart3 className="w-4 h-4" /> Status Filter
             </label>
             <select
               value={statusFilter}
@@ -367,8 +390,8 @@ export default function BASTP() {
                         {bastp.number}
                       </div>
                       {bastp.storage_path && (
-                        <div className="text-xs text-green-600">
-                          📄 Document
+                        <div className="flex items-center gap-1 text-xs text-green-600">
+                          <FileText className="w-3 h-3" /> Document
                         </div>
                       )}
                     </td>
@@ -397,7 +420,7 @@ export default function BASTP() {
                               const services = bastp.general_services;
                               const dates = services
                                 .filter(
-                                  (s: any) => s.start_date && s.close_date
+                                  (s: any) => s.start_date && s.close_date,
                                 )
                                 .flatMap((s: any) => [
                                   new Date(s.start_date),
@@ -407,15 +430,15 @@ export default function BASTP() {
                               if (dates.length === 0) return null;
 
                               const minDate = new Date(
-                                Math.min(...dates.map((d) => d.getTime()))
+                                Math.min(...dates.map((d) => d.getTime())),
                               );
                               const maxDate = new Date(
-                                Math.max(...dates.map((d) => d.getTime()))
+                                Math.max(...dates.map((d) => d.getTime())),
                               );
 
                               return (
-                                <span>
-                                  📅{" "}
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
                                   {minDate.toLocaleDateString("en-US", {
                                     month: "short",
                                     day: "numeric",
@@ -460,7 +483,7 @@ export default function BASTP() {
           </div>
         ) : (
           <div className="text-center py-12">
-            <span className="text-gray-400 text-4xl mb-4 block">📋</span>
+            <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-500 text-lg">No BASTPs found</p>
             {!isReadOnly && (
               <button

@@ -2,6 +2,18 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { uploadProgressEvidence } from "../../utils/progressEvidenceHandler";
+import {
+  FileText,
+  Ship,
+  Wrench,
+  BarChart3,
+  Calendar,
+  FileEdit,
+  Image,
+  Paperclip,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 
 interface AddWorkProgressProps {
   workDetailsId?: number;
@@ -62,13 +74,13 @@ export default function AddWorkProgress({
   const [vessels, setVessels] = useState<VesselFormData[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrderFormData[]>([]);
   const [workDetailsList, setWorkDetailsList] = useState<WorkDetailsFormData[]>(
-    []
+    [],
   );
 
   const [selectedVesselId, setSelectedVesselId] = useState<number>(0);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<number>(0);
   const [selectedWorkDetailsId, setSelectedWorkDetailsId] = useState<number>(
-    effectiveWorkDetailsId || 0
+    effectiveWorkDetailsId || 0,
   );
 
   const [formData, setFormData] = useState({
@@ -333,7 +345,7 @@ export default function AddWorkProgress({
           location
         ), 
         pic
-      `
+      `,
         )
         .eq("work_order_id", workOrderId)
         .is("deleted_at", null)
@@ -349,7 +361,7 @@ export default function AddWorkProgress({
             ? item.location[0]
             : item.location,
           pic: item.pic,
-        })
+        }),
       );
 
       setWorkDetailsList(workDetailsData);
@@ -378,7 +390,7 @@ export default function AddWorkProgress({
               name
             )
           )
-        `
+        `,
         )
         .eq("id", workDetailsId)
         .single();
@@ -513,7 +525,7 @@ export default function AddWorkProgress({
   };
 
   const handleWorkDetailsSelectFromDropdown = (
-    workDetails: WorkDetailsFormData
+    workDetails: WorkDetailsFormData,
   ) => {
     setSelectedWorkDetailsId(workDetails.id);
     setWorkDetailsSearchTerm(workDetails.description);
@@ -527,7 +539,7 @@ export default function AddWorkProgress({
   };
 
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
 
@@ -629,13 +641,13 @@ export default function AddWorkProgress({
 
         // If profile doesn't exist, this is a serious issue
         throw new Error(
-          "Your user profile was not found. Please contact the administrator to ensure your profile is properly set up."
+          "Your user profile was not found. Please contact the administrator to ensure your profile is properly set up.",
         );
       }
 
       if (!userProfile || !userProfile.id) {
         throw new Error(
-          "Invalid user profile. Please contact the administrator."
+          "Invalid user profile. Please contact the administrator.",
         );
       }
 
@@ -643,7 +655,7 @@ export default function AddWorkProgress({
         "Creating work progress with user_id:",
         userProfile.id,
         "Name:",
-        userProfile.name
+        userProfile.name,
       );
 
       // Insert work progress with the correct user_id from profiles table
@@ -664,7 +676,7 @@ export default function AddWorkProgress({
       if (insertError) {
         console.error("Insert error:", insertError);
         throw new Error(
-          `Failed to create progress report: ${insertError.message}`
+          `Failed to create progress report: ${insertError.message}`,
         );
       }
 
@@ -679,7 +691,7 @@ export default function AddWorkProgress({
     } catch (err) {
       console.error("Error creating work progress:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to create progress report"
+        err instanceof Error ? err.message : "Failed to create progress report",
       );
     } finally {
       setSubmitting(false);
@@ -688,10 +700,10 @@ export default function AddWorkProgress({
 
   const selectedVessel = vessels.find((v) => v.id === selectedVesselId);
   const selectedWorkOrder = workOrders.find(
-    (wo) => wo.id === selectedWorkOrderId
+    (wo) => wo.id === selectedWorkOrderId,
   );
   const selectedWorkDetails = workDetailsList.find(
-    (wd) => wd.id === selectedWorkDetailsId
+    (wd) => wd.id === selectedWorkDetailsId,
   );
 
   const progressValue = formData.progress_percentage
@@ -775,14 +787,14 @@ export default function AddWorkProgress({
         {/* Selection Panel */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sticky top-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              📋 Work Selection
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <FileText className="w-5 h-5" /> Work Selection
             </h3>
 
             <div className="mb-4">
               <div className="relative" ref={kaproDropdownRef}>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  📋 Step 1: Select Kapro
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                  <FileText className="w-4 h-4" /> Step 1: Select Kapro
                 </label>
                 <div className="relative">
                   <input
@@ -827,8 +839,8 @@ export default function AddWorkProgress({
 
             <div className="mb-4">
               <div className="relative" ref={vesselDropdownRef}>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  🚢 Step 2: Select Vessel
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                  <Ship className="w-4 h-4" /> Step 2: Select Vessel
                 </label>
                 <div className="relative">
                   <input
@@ -879,8 +891,8 @@ export default function AddWorkProgress({
             </div>
 
             <div className="relative" ref={workOrderDropdownRef}>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                📋 Step 3: Select Work Order
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                <FileText className="w-4 h-4" /> Step 3: Select Work Order
               </label>
               <div className="relative">
                 <input
@@ -938,8 +950,8 @@ export default function AddWorkProgress({
             </div>
 
             <div className="relative" ref={workDetailsDropdownRef}>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                🔧 Step 4: Select Work Details
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                <Wrench className="w-4 h-4" /> Step 4: Select Work Details
               </label>
               <div className="relative">
                 <input
@@ -1029,7 +1041,7 @@ export default function AddWorkProgress({
                         {selectedWorkOrder.shipyard_wo_date && (
                           <div className="text-xs text-gray-500">
                             {formatWorkOrderDate(
-                              selectedWorkOrder.shipyard_wo_date
+                              selectedWorkOrder.shipyard_wo_date,
                             )}
                           </div>
                         )}
@@ -1069,15 +1081,15 @@ export default function AddWorkProgress({
         <div className="lg:col-span-2">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">
-                📈 Progress Information
+              <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
+                <BarChart3 className="w-5 h-5" /> Progress Information
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Progress Percentage */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    📊 Progress Percentage *
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                    <BarChart3 className="w-4 h-4" /> Progress Percentage *
                   </label>
                   <div className="relative">
                     <input
@@ -1101,12 +1113,13 @@ export default function AddWorkProgress({
                   {formData.progress_percentage !== "" && (
                     <div className="mt-1">
                       {progressValue >= 0 && progressValue <= 100 ? (
-                        <span className="text-xs text-green-600">
-                          ✅ Valid percentage
+                        <span className="text-xs text-green-600 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Valid percentage
                         </span>
                       ) : (
-                        <span className="text-xs text-red-600">
-                          ❌ Must be between 0-100
+                        <span className="text-xs text-red-600 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" /> Must be between
+                          0-100
                         </span>
                       )}
                     </div>
@@ -1115,8 +1128,8 @@ export default function AddWorkProgress({
 
                 {/* Report Date */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    📅 Report Date *
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                    <Calendar className="w-4 h-4" /> Report Date *
                   </label>
                   <input
                     type="date"
@@ -1151,8 +1164,8 @@ export default function AddWorkProgress({
 
               {/* Notes */}
               <div className="mt-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  📝 Notes (Optional)
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                  <FileEdit className="w-4 h-4" /> Notes (Optional)
                 </label>
                 <textarea
                   name="notes"
@@ -1171,8 +1184,8 @@ export default function AddWorkProgress({
 
             {/* Evidence Upload */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">
-                🖼️ Progress Evidence (Optional)
+              <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
+                <Image className="w-5 h-5" /> Progress Evidence (Optional)
               </h3>
 
               <div>
@@ -1195,7 +1208,7 @@ export default function AddWorkProgress({
               {formData.evidence_file && (
                 <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-center gap-2">
-                    <span className="text-blue-600">📎</span>
+                    <Paperclip className="w-4 h-4 text-blue-600" />
                     <span className="text-sm text-blue-800 font-medium">
                       {formData.evidence_file.name}
                     </span>

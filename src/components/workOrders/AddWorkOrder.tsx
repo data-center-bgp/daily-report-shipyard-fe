@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase, type Vessel, type Kapro } from "../../lib/supabase";
 import { ActivityLogService } from "../../services/activityLogService";
 import { useAuth } from "../../hooks/useAuth";
+import { ArrowLeft, FileText, Plus } from "lucide-react";
 
 export default function AddWorkOrder() {
   const navigate = useNavigate();
@@ -42,7 +43,7 @@ export default function AddWorkOrder() {
   useEffect(() => {
     if (location.state?.preselectedVesselId) {
       const preselectedVessel = vessels.find(
-        (v) => v.id === location.state.preselectedVesselId
+        (v) => v.id === location.state.preselectedVesselId,
       );
       if (preselectedVessel) {
         setFormData((prev) => ({
@@ -50,7 +51,7 @@ export default function AddWorkOrder() {
           vessel_id: location.state.preselectedVesselId.toString(),
         }));
         setVesselSearchTerm(
-          `${preselectedVessel.name} - ${preselectedVessel.type} (${preselectedVessel.company})`
+          `${preselectedVessel.name} - ${preselectedVessel.type} (${preselectedVessel.company})`,
         );
       }
     }
@@ -175,7 +176,7 @@ export default function AddWorkOrder() {
   };
 
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
   ) => {
     const { name, value, type } = e.target;
 
@@ -238,7 +239,7 @@ export default function AddWorkOrder() {
       if (profileError) {
         console.error("Error querying user profile:", profileError);
         throw new Error(
-          `Failed to query user profile: ${profileError.message}`
+          `Failed to query user profile: ${profileError.message}`,
         );
       }
 
@@ -275,7 +276,7 @@ export default function AddWorkOrder() {
             userId = existingProfile.id;
           } else {
             throw new Error(
-              `Failed to create user profile: ${createError.message}`
+              `Failed to create user profile: ${createError.message}`,
             );
           }
         } else {
@@ -355,8 +356,8 @@ export default function AddWorkOrder() {
             {loadingVessels
               ? "Loading vessels..."
               : loadingKapros
-              ? "Loading kapros..."
-              : "Loading user information..."}
+                ? "Loading kapros..."
+                : "Loading user information..."}
           </p>
         </div>
       </div>
@@ -372,9 +373,9 @@ export default function AddWorkOrder() {
             <div className="flex items-center">
               <button
                 onClick={handleCancel}
-                className="mr-4 text-gray-600 hover:text-gray-900"
+                className="mr-4 text-gray-600 hover:text-gray-900 flex items-center gap-2"
               >
-                ← Back
+                <ArrowLeft className="w-4 h-4" /> Back
               </button>
               <h1 className="text-2xl font-bold text-gray-900">
                 Add New Work Order
@@ -395,7 +396,7 @@ export default function AddWorkOrder() {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex">
                 <div className="flex-shrink-0">
-                  <span className="text-blue-400 text-xl">📋</span>
+                  <FileText className="w-6 h-6 text-blue-500" />
                 </div>
                 <div className="ml-3">
                   <p className="text-blue-800 font-medium">
@@ -669,7 +670,9 @@ export default function AddWorkOrder() {
                     Creating...
                   </>
                 ) : (
-                  <>➕ Create Work Order</>
+                  <>
+                    <Plus className="w-4 h-4" /> Create Work Order
+                  </>
                 )}
               </button>
             </div>

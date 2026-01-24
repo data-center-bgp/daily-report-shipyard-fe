@@ -3,6 +3,25 @@ import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import type { BASTPWithDetails } from "../../types/bastp.types";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  ArrowLeft,
+  Edit,
+  FileText,
+  AlertTriangle,
+  FileEdit,
+  CheckCircle2,
+  DollarSign,
+  FileCheck,
+  Calendar,
+  MapPin,
+  User,
+  Eye,
+  Lock,
+  Download,
+  X,
+  Wrench,
+  Lightbulb,
+} from "lucide-react";
 
 export default function BASTPDetails() {
   const navigate = useNavigate();
@@ -91,7 +110,7 @@ export default function BASTPDetails() {
         display_order
       )
     )
-  `
+  `,
         )
         .eq("id", bastpId)
         .is("deleted_at", null)
@@ -133,22 +152,34 @@ export default function BASTPDetails() {
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<
       string,
-      { bg: string; text: string; icon: string }
+      { bg: string; text: string; icon: React.ReactElement }
     > = {
-      DRAFT: { bg: "bg-gray-100", text: "text-gray-700", icon: "📝" },
-      VERIFIED: { bg: "bg-blue-100", text: "text-blue-700", icon: "✅" },
+      DRAFT: {
+        bg: "bg-gray-100",
+        text: "text-gray-700",
+        icon: <FileEdit className="w-3 h-3" />,
+      },
+      VERIFIED: {
+        bg: "bg-blue-100",
+        text: "text-blue-700",
+        icon: <CheckCircle2 className="w-3 h-3" />,
+      },
       READY_FOR_INVOICE: {
         bg: "bg-green-100",
         text: "text-green-700",
-        icon: "💰",
+        icon: <DollarSign className="w-3 h-3" />,
       },
-      INVOICED: { bg: "bg-emerald-100", text: "text-emerald-700", icon: "✓" },
+      INVOICED: {
+        bg: "bg-emerald-100",
+        text: "text-emerald-700",
+        icon: <FileCheck className="w-3 h-3" />,
+      },
     };
 
     const config = statusConfig[status] || statusConfig.DRAFT;
     return (
       <span
-        className={`px-3 py-1 rounded-full text-sm font-medium ${config.bg} ${config.text}`}
+        className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${config.bg} ${config.text}`}
       >
         {config.icon} {status.replace(/_/g, " ")}
       </span>
@@ -235,7 +266,7 @@ export default function BASTPDetails() {
       <div className="p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center">
-            <span className="text-red-600 mr-2">⚠️</span>
+            <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
             <p className="text-red-700 font-medium">
               {error || "BASTP not found"}
             </p>
@@ -243,9 +274,9 @@ export default function BASTPDetails() {
         </div>
         <button
           onClick={() => navigate("/bastp")}
-          className="mt-4 text-blue-600 hover:text-blue-800"
+          className="mt-4 flex items-center gap-2 text-blue-600 hover:text-blue-800"
         >
-          ← Back to BASTP List
+          <ArrowLeft className="w-4 h-4" /> Back to BASTP List
         </button>
       </div>
     );
@@ -263,16 +294,16 @@ export default function BASTPDetails() {
           {!isReadOnly && (
             <button
               onClick={() => navigate(`/bastp/edit/${bastp.id}`)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
             >
-              ✏️ Edit
+              <Edit className="w-4 h-4" /> Edit
             </button>
           )}
           <button
             onClick={() => navigate("/bastp")}
-            className="text-blue-600 hover:text-blue-800"
+            className="flex items-center gap-2 text-blue-600 hover:text-blue-800"
           >
-            ← Back to List
+            <ArrowLeft className="w-4 h-4" /> Back to List
           </button>
         </div>
       </div>
@@ -280,8 +311,8 @@ export default function BASTPDetails() {
       {/* BASTP Information */}
       <div className="bg-white rounded-lg shadow">
         <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">
-            📋 BASTP Information
+          <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+            <FileText className="w-5 h-5" /> BASTP Information
           </h2>
         </div>
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -359,26 +390,33 @@ export default function BASTPDetails() {
           <div className="p-6 border-t border-gray-200 bg-green-50">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  📄 Signed Document
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <FileText className="w-5 h-5" /> Signed Document
                 </h3>
                 <p className="text-sm text-gray-600 mt-1">
                   Uploaded on {formatDate(bastp.bastp_upload_date || "")}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  🔒 Secure document - link expires after 5 minutes
+                <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                  <Lock className="w-3 h-3" /> Secure document - link expires
+                  after 5 minutes
                 </p>
               </div>
               <button
                 onClick={handleViewDocument}
                 disabled={viewingDocument}
-                className={`px-4 py-2 rounded-lg transition-colors ${
+                className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
                   viewingDocument
                     ? "bg-gray-400 cursor-not-allowed"
                     : "bg-blue-600 hover:bg-blue-700"
                 } text-white`}
               >
-                {viewingDocument ? "Loading..." : "View Document 🔍"}
+                {viewingDocument ? (
+                  "Loading..."
+                ) : (
+                  <>
+                    <Eye className="w-4 h-4" /> View Document
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -388,8 +426,9 @@ export default function BASTPDetails() {
       {/* Work Orders Summary */}
       <div className="bg-white rounded-lg shadow">
         <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">
-            📋 Work Orders Included ({uniqueWorkOrders.length})
+          <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+            <FileText className="w-5 h-5" /> Work Orders Included (
+            {uniqueWorkOrders.length})
           </h2>
         </div>
         <div className="p-6 space-y-4">
@@ -429,8 +468,8 @@ export default function BASTPDetails() {
                     <label className="block text-xs font-medium text-gray-500 mb-1">
                       Shipyard WO Date
                     </label>
-                    <div className="flex items-center text-sm text-gray-900">
-                      <span className="mr-2">📅</span>
+                    <div className="flex items-center gap-2 text-sm text-gray-900">
+                      <Calendar className="w-4 h-4" />
                       {formatDate(wo.shipyard_wo_date)}
                     </div>
                   </div>
@@ -440,8 +479,8 @@ export default function BASTPDetails() {
                     <label className="block text-xs font-medium text-gray-500 mb-1">
                       Customer WO Date
                     </label>
-                    <div className="flex items-center text-sm text-gray-900">
-                      <span className="mr-2">📅</span>
+                    <div className="flex items-center gap-2 text-sm text-gray-900">
+                      <Calendar className="w-4 h-4" />
                       {formatDate(wo.customer_wo_date)}
                     </div>
                   </div>
@@ -463,8 +502,8 @@ export default function BASTPDetails() {
                     <label className="block text-xs font-medium text-gray-500 mb-1">
                       Work Location
                     </label>
-                    <div className="flex items-center text-sm text-gray-900">
-                      <span className="mr-2">📍</span>
+                    <div className="flex items-center gap-2 text-sm text-gray-900">
+                      <MapPin className="w-4 h-4" />
                       {wo.work_location}
                     </div>
                   </div>
@@ -474,8 +513,8 @@ export default function BASTPDetails() {
                     <label className="block text-xs font-medium text-gray-500 mb-1">
                       KAPRO
                     </label>
-                    <div className="flex items-center text-sm text-gray-900">
-                      <span className="mr-2">👤</span>
+                    <div className="flex items-center gap-2 text-sm text-gray-900">
+                      <User className="w-4 h-4" />
                       {wo.kapro.kapro_name}
                     </div>
                   </div>
@@ -515,8 +554,9 @@ export default function BASTPDetails() {
       {/* Work Details List */}
       <div className="bg-white rounded-lg shadow">
         <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">
-            🔧 Work Details ({bastp.bastp_work_details?.length || 0})
+          <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+            <Wrench className="w-5 h-5" /> Work Details (
+            {bastp.bastp_work_details?.length || 0})
           </h2>
         </div>
         <div className="overflow-x-auto">
@@ -566,13 +606,18 @@ export default function BASTPDetails() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    📍 {bwd.work_details?.location?.location || "-"}
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />{" "}
+                      {bwd.work_details?.location?.location || "-"}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {bwd.work_details?.quantity} {bwd.work_details?.uom}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    👤 {bwd.work_details?.pic}
+                    <span className="flex items-center gap-1">
+                      <User className="w-3 h-3" /> {bwd.work_details?.pic}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
                     <div>
@@ -597,8 +642,8 @@ export default function BASTPDetails() {
         bastp.general_services.length > 0 && (
           <div className="bg-white rounded-lg shadow">
             <div className="p-6 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">
-                🛠️ General Services
+              <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                <Wrench className="w-5 h-5" /> General Services
               </h2>
               <p className="text-sm text-gray-600 mt-1">
                 Services used during vessel work
@@ -634,7 +679,7 @@ export default function BASTPDetails() {
                       .sort(
                         (a: any, b: any) =>
                           (a.service_type?.display_order || 0) -
-                          (b.service_type?.display_order || 0)
+                          (b.service_type?.display_order || 0),
                       )
                       .map((service: any, index: number) => (
                         <tr key={service.id} className="hover:bg-gray-50">
@@ -689,10 +734,13 @@ export default function BASTPDetails() {
 
               {/* Info Notice */}
               <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  💡 <strong>Note:</strong> Total days includes both start and
-                  close dates. Pricing information is managed by Finance during
-                  invoice creation.
+                <p className="text-sm text-blue-800 flex items-start gap-2">
+                  <Lightbulb className="w-4 h-4 mt-0.5 flex-shrink-0" />{" "}
+                  <span>
+                    <strong>Note:</strong> Total days includes both start and
+                    close dates. Pricing information is managed by Finance
+                    during invoice creation.
+                  </span>
                 </p>
               </div>
             </div>
@@ -705,14 +753,14 @@ export default function BASTPDetails() {
           <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] flex flex-col shadow-2xl">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">
-                📄 BASTP Document - {bastp.number}
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FileText className="w-5 h-5" /> BASTP Document - {bastp.number}
               </h3>
               <button
                 onClick={handleCloseModal}
-                className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
+                className="text-gray-500 hover:text-gray-700"
               >
-                ✕
+                <X className="w-6 h-6" />
               </button>
             </div>
 
@@ -750,16 +798,16 @@ export default function BASTPDetails() {
 
             {/* Modal Footer */}
             <div className="p-4 border-t border-gray-200 flex justify-between items-center">
-              <p className="text-xs text-gray-500">
-                🔒 This link expires in 5 minutes
+              <p className="text-xs text-gray-500 flex items-center gap-1">
+                <Lock className="w-3 h-3" /> This link expires in 5 minutes
               </p>
               <div className="space-x-2">
                 <a
                   href={documentUrl}
                   download
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 inline-block"
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 inline-flex items-center gap-2"
                 >
-                  ⬇️ Download
+                  <Download className="w-4 h-4" /> Download
                 </a>
                 <button
                   onClick={handleCloseModal}

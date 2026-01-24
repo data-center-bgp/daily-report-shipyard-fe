@@ -1,5 +1,6 @@
 import WorkOrderDashboard from "./WorkOrderDashboard";
 import { useAuth } from "../../hooks/useAuth";
+import { Lock, Info } from "lucide-react";
 
 export default function WorkOrders() {
   const { isReadOnly } = useAuth();
@@ -22,7 +23,7 @@ export default function WorkOrders() {
           {isReadOnly && (
             <div className="flex items-center gap-2">
               <span className="px-3 py-1.5 bg-yellow-100 text-yellow-800 text-sm font-medium rounded-full border border-yellow-200 flex items-center gap-1.5">
-                🔒 Read Only Access
+                <Lock className="w-4 h-4" /> Read Only Access
               </span>
             </div>
           )}
@@ -32,7 +33,7 @@ export default function WorkOrders() {
         {isReadOnly && (
           <div className="mt-4 bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <span className="text-yellow-600 text-xl">ℹ️</span>
+              <Info className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold text-yellow-900">Viewing Mode</p>
                 <p className="text-sm text-yellow-700 mt-1">

@@ -2,6 +2,16 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { supabase, type WorkOrder, type Vessel } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  Ship,
+  HardHat,
+  X,
+  Plus,
+  Trash2,
+  CheckCircle2,
+  ArrowLeft,
+  Wrench,
+} from "lucide-react";
 
 interface WorkOrderWithVessel extends WorkOrder {
   vessel?: Vessel;
@@ -73,7 +83,7 @@ export default function AddWorkDetails() {
   const [selectedWorkOrder, setSelectedWorkOrder] =
     useState<WorkOrderWithVessel | null>(null);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<number>(
-    workOrderId ? parseInt(workOrderId) : 0
+    workOrderId ? parseInt(workOrderId) : 0,
   );
 
   // Loading states
@@ -170,7 +180,7 @@ export default function AddWorkDetails() {
     } catch (err) {
       console.error("Error fetching work scopes:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to load work scopes"
+        err instanceof Error ? err.message : "Failed to load work scopes",
       );
     } finally {
       setLoadingWorkScopes(false);
@@ -191,7 +201,7 @@ export default function AddWorkDetails() {
             type,
             company
           )
-        `
+        `,
         )
         .eq("vessel_id", vesselId)
         .is("deleted_at", null)
@@ -202,7 +212,7 @@ export default function AddWorkDetails() {
     } catch (err) {
       console.error("Error fetching work orders:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to load work orders"
+        err instanceof Error ? err.message : "Failed to load work orders",
       );
     } finally {
       setLoadingWorkOrders(false);
@@ -229,7 +239,7 @@ export default function AddWorkDetails() {
                 type,
                 company
               )
-            `
+            `,
             )
             .eq("id", parseInt(workOrderId))
             .single();
@@ -241,7 +251,7 @@ export default function AddWorkDetails() {
             setSelectedWorkOrder(workOrder);
             setSelectedWorkOrderId(workOrder.id);
             setVesselSearchTerm(
-              `${workOrder.vessel.name} - ${workOrder.vessel.type} (${workOrder.vessel.company})`
+              `${workOrder.vessel.name} - ${workOrder.vessel.type} (${workOrder.vessel.company})`,
             );
             setWorkOrderSearchTerm(workOrder.shipyard_wo_number);
             await fetchWorkOrdersForVessel(workOrder.vessel.id);
@@ -306,12 +316,12 @@ export default function AddWorkDetails() {
   const handleWorkDetailChange = (
     id: string,
     field: keyof WorkDetailFormData,
-    value: string | number | boolean
+    value: string | number | boolean,
   ) => {
     setWorkDetailsList(
       workDetailsList.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item
-      )
+        item.id === id ? { ...item, [field]: value } : item,
+      ),
     );
   };
 
@@ -339,7 +349,7 @@ export default function AddWorkDetails() {
 
   // Work Order handlers
   const handleWorkOrderSelectFromDropdown = (
-    workOrder: WorkOrderWithVessel
+    workOrder: WorkOrderWithVessel,
   ) => {
     setSelectedWorkOrderId(workOrder.id);
     setWorkOrderSearchTerm(workOrder.shipyard_wo_number || "");
@@ -399,7 +409,7 @@ export default function AddWorkDetails() {
           errors.push(
             `Row ${
               index + 1
-            }: Target close date must be on or after planned start date`
+            }: Target close date must be on or after planned start date`,
           );
         }
       }
@@ -481,7 +491,7 @@ export default function AddWorkDetails() {
     } catch (err) {
       console.error("Error creating work details:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to create work details"
+        err instanceof Error ? err.message : "Failed to create work details",
       );
     } finally {
       setLoading(false);
@@ -534,21 +544,23 @@ export default function AddWorkDetails() {
               )}
             </p>
             {isPPIC && (
-              <p className="text-sm text-blue-600 mt-1">
-                🔧 PPIC Mode: Creating planning and scope fields
+              <p className="text-sm text-blue-600 mt-1 flex items-center gap-1">
+                <Wrench className="w-4 h-4" /> PPIC Mode: Creating planning and
+                scope fields
               </p>
             )}
             {!isPPIC && profile?.role === "MASTER" && (
-              <p className="text-sm text-purple-600 mt-1">
-                👑 MASTER Mode: Full access to create work details
+              <p className="text-sm text-purple-600 mt-1 flex items-center gap-1">
+                <Ship className="w-4 h-4" /> MASTER Mode: Full access to create
+                work details
               </p>
             )}
           </div>
           <button
             onClick={handleCancel}
-            className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
+            className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors flex items-center gap-2"
           >
-            ← Back
+            <ArrowLeft className="w-4 h-4" /> Back
           </button>
         </div>
       </div>
@@ -589,7 +601,7 @@ export default function AddWorkDetails() {
               {workOrderId && selectedWorkOrder ? (
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-center">
-                    <span className="text-lg mr-2">🚢</span>
+                    <Ship className="w-5 h-5 mr-2 text-blue-600" />
                     <div>
                       <div className="font-semibold text-blue-800">
                         {selectedWorkOrder.vessel?.name || "Unknown Vessel"}
@@ -624,7 +636,7 @@ export default function AddWorkDetails() {
                       onClick={handleClearVesselSearch}
                       className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                     >
-                      ✕
+                      <X className="w-4 h-4" />
                     </button>
                   )}
 
@@ -665,7 +677,7 @@ export default function AddWorkDetails() {
               {workOrderId && selectedWorkOrder ? (
                 <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                   <div className="flex items-center">
-                    <span className="text-lg mr-2">🏗️</span>
+                    <HardHat className="w-5 h-5 mr-2 text-green-600" />
                     <div>
                       <div className="font-semibold text-green-800">
                         {selectedWorkOrder.shipyard_wo_number}
@@ -700,7 +712,7 @@ export default function AddWorkDetails() {
                       onClick={handleClearWorkOrderSearch}
                       className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                     >
-                      ✕
+                      <X className="w-4 h-4" />
                     </button>
                   )}
 
@@ -744,7 +756,7 @@ export default function AddWorkDetails() {
                   onClick={handleAddWorkDetail}
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
                 >
-                  ➕ Add Row
+                  <Plus className="w-4 h-4" /> Add Row
                 </button>
               </div>
 
@@ -763,7 +775,7 @@ export default function AddWorkDetails() {
                         onClick={() => handleRemoveWorkDetail(item.id)}
                         className="text-red-600 hover:text-red-800 text-sm flex items-center gap-1"
                       >
-                        🗑️ Remove
+                        <Trash2 className="w-4 h-4" /> Remove
                       </button>
                     )}
                   </div>
@@ -780,7 +792,7 @@ export default function AddWorkDetails() {
                           handleWorkDetailChange(
                             item.id,
                             "description",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         rows={2}
@@ -800,7 +812,7 @@ export default function AddWorkDetails() {
                           handleWorkDetailChange(
                             item.id,
                             "location_id",
-                            parseInt(e.target.value)
+                            parseInt(e.target.value),
                           )
                         }
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -825,7 +837,7 @@ export default function AddWorkDetails() {
                           handleWorkDetailChange(
                             item.id,
                             "work_scope_id",
-                            parseInt(e.target.value)
+                            parseInt(e.target.value),
                           )
                         }
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -851,7 +863,7 @@ export default function AddWorkDetails() {
                           handleWorkDetailChange(
                             item.id,
                             "quantity",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         min="0"
@@ -893,7 +905,7 @@ export default function AddWorkDetails() {
                           handleWorkDetailChange(
                             item.id,
                             "planned_start_date",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -912,7 +924,7 @@ export default function AddWorkDetails() {
                           handleWorkDetailChange(
                             item.id,
                             "target_close_date",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -930,7 +942,7 @@ export default function AddWorkDetails() {
                           handleWorkDetailChange(
                             item.id,
                             "period_close_target",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -961,7 +973,7 @@ export default function AddWorkDetails() {
                             handleWorkDetailChange(
                               item.id,
                               "is_additional_wo_details",
-                              e.target.checked
+                              e.target.checked,
                             )
                           }
                           className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
@@ -999,7 +1011,10 @@ export default function AddWorkDetails() {
                     Creating...
                   </>
                 ) : (
-                  <>✅ Create {workDetailsList.length} Work Detail(s)</>
+                  <>
+                    <CheckCircle2 className="w-4 h-4" /> Create{" "}
+                    {workDetailsList.length} Work Detail(s)
+                  </>
                 )}
               </button>
             </div>

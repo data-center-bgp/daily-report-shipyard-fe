@@ -2,6 +2,17 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase, type Kapro } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  RefreshCw,
+  Plus,
+  CheckCircle2,
+  X,
+  FileText,
+  Ship,
+  BarChart3,
+  Filter,
+  ChevronRight,
+} from "lucide-react";
 
 interface WorkOrderStats {
   totalWorkOrders: number;
@@ -119,7 +130,7 @@ export default function WorkOrderDashboard() {
             type,
             company
           )
-        `
+        `,
         )
         .is("deleted_at", null);
 
@@ -135,14 +146,14 @@ export default function WorkOrderDashboard() {
 
       // Filter out work orders without vessel data
       const validWorkOrders = workOrdersData.filter(
-        (wo) => wo.vessel?.id != null
+        (wo) => wo.vessel?.id != null,
       );
 
       if (validWorkOrders.length < workOrdersData.length) {
         console.warn(
           `⚠️ Filtered out ${
             workOrdersData.length - validWorkOrders.length
-          } work orders without vessel data`
+          } work orders without vessel data`,
         );
       }
 
@@ -227,7 +238,7 @@ export default function WorkOrderDashboard() {
           setError("Session expired. Please refresh the page and login again.");
         } else if (err.message.includes("permission")) {
           setError(
-            "Permission denied. Please contact your administrator to enable RLS policies."
+            "Permission denied. Please contact your administrator to enable RLS policies.",
           );
         } else {
           setError(err.message);
@@ -292,7 +303,7 @@ export default function WorkOrderDashboard() {
         (vessel) =>
           vessel.name?.toLowerCase().includes(searchLower) ||
           vessel.type?.toLowerCase().includes(searchLower) ||
-          vessel.company?.toLowerCase().includes(searchLower)
+          vessel.company?.toLowerCase().includes(searchLower),
       );
     }
 
@@ -449,14 +460,14 @@ export default function WorkOrderDashboard() {
             onClick={fetchWorkOrders}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
           >
-            🔄 Refresh
+            <RefreshCw className="w-4 h-4" /> Refresh
           </button>
           {!isReadOnly && (
             <button
               onClick={handleAddWorkOrder}
               className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
             >
-              ➕ Add Work Order
+              <Plus className="w-5 h-5" /> Add Work Order
             </button>
           )}
         </div>
@@ -465,7 +476,7 @@ export default function WorkOrderDashboard() {
       {showSuccessMessage && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center justify-between">
           <div className="flex items-center">
-            <span className="text-green-600 mr-2">✅</span>
+            <CheckCircle2 className="w-5 h-5 text-green-600 mr-2" />
             <p className="text-green-700 font-medium">
               Work order created successfully!
             </p>
@@ -474,7 +485,7 @@ export default function WorkOrderDashboard() {
             onClick={() => setShowSuccessMessage(false)}
             className="text-green-600 hover:text-green-800"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
@@ -491,7 +502,7 @@ export default function WorkOrderDashboard() {
                 {stats.totalWorkOrders}
               </p>
             </div>
-            <span className="text-blue-500 text-2xl">📋</span>
+            <FileText className="w-8 h-8 text-blue-500" />
           </div>
         </div>
 
@@ -503,7 +514,7 @@ export default function WorkOrderDashboard() {
                 {vessels.length}
               </p>
             </div>
-            <span className="text-purple-500 text-2xl">🚢</span>
+            <Ship className="w-8 h-8 text-purple-500" />
           </div>
         </div>
 
@@ -520,7 +531,7 @@ export default function WorkOrderDashboard() {
                   : 0}
               </p>
             </div>
-            <span className="text-green-500 text-2xl">📊</span>
+            <BarChart3 className="w-8 h-8 text-green-500" />
           </div>
         </div>
       </div>
@@ -616,7 +627,7 @@ export default function WorkOrderDashboard() {
                       : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                   }`}
                 >
-                  🔽 Filters
+                  <Filter className="w-4 h-4" /> Filters
                   {hasActiveFilters && (
                     <span className="bg-white text-blue-600 px-2 py-0.5 rounded-full text-xs font-bold">
                       ●
@@ -793,7 +804,7 @@ export default function WorkOrderDashboard() {
                   >
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center">
-                        <span className="text-2xl mr-3">🚢</span>
+                        <Ship className="w-8 h-8 text-blue-600 mr-3 flex-shrink-0" />
                         <div>
                           <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
                             {vessel.name}
@@ -804,9 +815,7 @@ export default function WorkOrderDashboard() {
                           </p>
                         </div>
                       </div>
-                      <span className="text-blue-500 text-lg group-hover:text-blue-700 transition-colors">
-                        →
-                      </span>
+                      <ChevronRight className="w-5 h-5 text-blue-500 group-hover:text-blue-700 transition-colors flex-shrink-0" />
                     </div>
 
                     <div className="text-center">
@@ -866,7 +875,7 @@ export default function WorkOrderDashboard() {
                               {pageNum}
                             </button>
                           );
-                        }
+                        },
                       )}
                     </div>
 
@@ -885,7 +894,7 @@ export default function WorkOrderDashboard() {
             </>
           ) : (
             <div className="text-center py-12">
-              <span className="text-gray-400 text-4xl mb-4 block">🚢</span>
+              <Ship className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               {vesselSearchTerm || selectedVesselId || hasActiveFilters ? (
                 <>
                   <p className="text-gray-500 text-lg mb-2">
@@ -922,7 +931,7 @@ export default function WorkOrderDashboard() {
                     onClick={handleAddWorkOrder}
                     className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"
                   >
-                    ➕ Add Your First Work Order
+                    <Plus className="w-4 h-4" /> Add Your First Work Order
                   </button>
                 </>
               )}

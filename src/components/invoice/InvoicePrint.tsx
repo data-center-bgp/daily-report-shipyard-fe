@@ -1,5 +1,6 @@
 import { forwardRef } from "react";
 import type { Invoice } from "../../types/invoiceTypes";
+import { CheckCircle2 } from "lucide-react";
 
 interface InvoicePrintProps {
   invoice: Invoice;
@@ -28,7 +29,7 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
       return (
         invoice.invoice_work_details?.reduce(
           (sum, item) => sum + (item.payment_price || 0),
-          0
+          0,
         ) || 0
       );
     };
@@ -37,7 +38,7 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
       return (
         invoice.bastp?.general_services?.reduce(
           (sum, service) => sum + (service.payment_price || 0),
-          0
+          0,
         ) || 0
       );
     };
@@ -237,7 +238,7 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
                             .sort(
                               (a, b) =>
                                 (a.service_type?.display_order || 0) -
-                                (b.service_type?.display_order || 0)
+                                (b.service_type?.display_order || 0),
                             )
                             .map((service, index) => (
                               <tr key={service.id}>
@@ -427,7 +428,7 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
                 <td>
                   <div className="bg-green-50 border border-green-200 rounded p-3 mb-4 text-xs section-block">
                     <div className="flex items-center gap-2">
-                      <span className="text-green-600 text-lg">✅</span>
+                      <CheckCircle2 className="w-5 h-5 text-green-600" />
                       <div>
                         <p className="font-semibold text-green-900">
                           Payment Received
@@ -541,7 +542,7 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
         </table>
       </div>
     );
-  }
+  },
 );
 
 InvoicePrint.displayName = "InvoicePrint";
