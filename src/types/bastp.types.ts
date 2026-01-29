@@ -1,4 +1,5 @@
 import type { GeneralService } from "./generalService.types";
+import type { MaterialControl } from "./materialControl.types";
 
 export type BASTPStatus =
   | "DRAFT"
@@ -62,6 +63,7 @@ export interface BASTPWithDetails extends BASTP {
           shipyard_wo_number: string;
           customer_wo_number: string;
         };
+        material_control?: MaterialControl[];
       };
     }
   >;

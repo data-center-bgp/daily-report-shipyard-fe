@@ -21,6 +21,7 @@ import {
   X,
   Wrench,
   Lightbulb,
+  Package,
 } from "lucide-react";
 
 export default function BASTPDetails() {
@@ -92,6 +93,20 @@ export default function BASTPDetails() {
             id,
             name,
             email
+          )
+        ),
+        material_control (
+          id,
+          material_id,
+          size,
+          amount,
+          uom,
+          deleted_at,
+          material_list:material_id (
+            id,
+            material,
+            specification,
+            category
           )
         )
       )
@@ -292,12 +307,20 @@ export default function BASTPDetails() {
         </div>
         <div className="flex items-center gap-3">
           {!isReadOnly && (
-            <button
-              onClick={() => navigate(`/bastp/edit/${bastp.id}`)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-            >
-              <Edit className="w-4 h-4" /> Edit
-            </button>
+            <>
+              <button
+                onClick={() => navigate(`/bastp/edit/${bastp.id}`)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+              >
+                <Edit className="w-4 h-4" /> Edit
+              </button>
+              <button
+                onClick={() => navigate(`/bastp/${bastp.id}/materials`)}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+              >
+                <Package className="w-4 h-4" /> Material Control
+              </button>
+            </>
           )}
           <button
             onClick={() => navigate("/bastp")}
@@ -587,50 +610,119 @@ export default function BASTPDetails() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {bastp.bastp_work_details?.map((bwd, index) => (
-                <tr key={bwd.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {index + 1}
-                  </td>
-                  <td className="px-6 py-4">
-                    <p className="text-sm font-medium text-gray-900">
-                      {bwd.work_details?.description}
-                    </p>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
-                      {bwd.work_details?.work_order?.shipyard_wo_number}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {bwd.work_details?.work_order?.customer_wo_number}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />{" "}
-                      {bwd.work_details?.location?.location || "-"}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {bwd.work_details?.quantity} {bwd.work_details?.uom}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <span className="flex items-center gap-1">
-                      <User className="w-3 h-3" /> {bwd.work_details?.pic}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
-                    <div>
-                      Start:{" "}
-                      {formatDate(bwd.work_details?.planned_start_date || "")}
-                    </div>
-                    <div>
-                      Target:{" "}
-                      {formatDate(bwd.work_details?.target_close_date || "")}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {bastp.bastp_work_details?.map((bwd, index) => {
+                const materials = (
+                  bwd.work_details?.material_control || []
+                ).filter((m: any) => !m.deleted_at);
+                return (
+                  <>
+                    <tr key={bwd.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {index + 1}
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="text-sm font-medium text-gray-900">
+                          {bwd.work_details?.description}
+                        </p>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {bwd.work_details?.work_order?.shipyard_wo_number}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {bwd.work_details?.work_order?.customer_wo_number}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />{" "}
+                          {bwd.work_details?.location?.location || "-"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {bwd.work_details?.quantity} {bwd.work_details?.uom}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <User className="w-3 h-3" /> {bwd.work_details?.pic}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
+                        <div>
+                          Start:{" "}
+                          {formatDate(
+                            bwd.work_details?.planned_start_date || "",
+                          )}
+                        </div>
+                        <div>
+                          Target:{" "}
+                          {formatDate(
+                            bwd.work_details?.target_close_date || "",
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {/* Materials Row */}
+                    {materials.length > 0 && (
+                      <tr key={`${bwd.id}-materials`} className="bg-blue-50">
+                        <td className="px-6 py-3" colSpan={7}>
+                          <div className="flex items-start gap-2">
+                            <Package className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                              <div className="text-xs font-semibold text-blue-900 mb-2">
+                                Materials Used ({materials.length})
+                              </div>
+                              <div className="bg-white rounded border border-blue-200 overflow-hidden">
+                                <table className="min-w-full">
+                                  <thead className="bg-gray-50">
+                                    <tr>
+                                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
+                                        Material
+                                      </th>
+                                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
+                                        Specification
+                                      </th>
+                                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
+                                        Size
+                                      </th>
+                                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-700">
+                                        Amount
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-200">
+                                    {materials.map((material: any) => (
+                                      <tr
+                                        key={material.id}
+                                        className="hover:bg-gray-50"
+                                      >
+                                        <td className="px-3 py-2 text-xs text-gray-900 font-medium">
+                                          {material.material_list?.material ||
+                                            "-"}
+                                        </td>
+                                        <td className="px-3 py-2 text-xs text-gray-600">
+                                          {material.material_list
+                                            ?.specification || "-"}
+                                        </td>
+                                        <td className="px-3 py-2 text-xs text-gray-700">
+                                          {material.size || "-"}
+                                        </td>
+                                        <td className="px-3 py-2 text-xs text-right font-semibold text-blue-700">
+                                          {material.amount} {material.uom}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                );
+              })}
             </tbody>
           </table>
         </div>

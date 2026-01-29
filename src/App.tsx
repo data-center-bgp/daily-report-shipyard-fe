@@ -35,6 +35,7 @@ import { ExportData } from "./components/exportData";
 import BASTP from "./components/bastp/BASTP";
 import CreateBASTP from "./components/bastp/CreateBASTP";
 import BASTPDetails from "./components/bastp/BASTPDetails";
+import BASTPMaterialsPage from "./components/bastp/BASTPMaterialsPage";
 import ActivityLogPage from "./components/activityLog/ActivityLogPage";
 
 function AppRoutes() {
@@ -124,6 +125,10 @@ function AppRoutes() {
         <Route path="/bastp/create" element={<CreateBASTP />} />
         <Route path="/bastp/edit/:bastpId" element={<CreateBASTP />} />
         <Route path="/bastp/:bastpId" element={<BASTPDetails />} />
+        <Route
+          path="/bastp/:bastpId/materials"
+          element={<BASTPMaterialsPage />}
+        />
 
         {/* Invoice Routes */}
         <Route path="/invoices" element={<InvoiceList />} />
