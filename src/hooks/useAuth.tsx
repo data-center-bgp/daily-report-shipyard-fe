@@ -37,7 +37,7 @@ interface AuthContextType {
   loading: boolean;
   signIn: (
     email: string,
-    password: string
+    password: string,
   ) => Promise<{ user: User | null; profile: UserProfile | null; error: any }>;
   signOut: () => Promise<void>;
   hasRole: (roles: string | string[]) => boolean;
@@ -130,10 +130,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
       try {
-        console.log(
-          `🔄 Fetching profile for user: ${userId} (attempt ${retryCount + 1})`
-        );
-
         const { data, error } = await supabase
           .from("profiles")
           .select("*")
@@ -155,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               error.code === "PGRST301")
           ) {
             await new Promise((resolve) =>
-              setTimeout(resolve, 1000 * (retryCount + 1))
+              setTimeout(resolve, 1000 * (retryCount + 1)),
             );
             return fetchProfile(userId, retryCount + 1);
           }
@@ -163,7 +159,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return null;
         }
 
-        console.log("✅ Profile fetched successfully:", data?.email);
         return data;
       } catch (err) {
         clearTimeout(timeoutId);
@@ -175,7 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (retryCount < MAX_RETRIES) {
           await new Promise((resolve) =>
-            setTimeout(resolve, 1000 * (retryCount + 1))
+            setTimeout(resolve, 1000 * (retryCount + 1)),
           );
           return fetchProfile(userId, retryCount + 1);
         }
@@ -183,7 +178,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
     },
-    []
+    [],
   );
 
   const signIn = async (email: string, password: string) => {
@@ -250,8 +245,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initAuth = async () => {
       try {
-        console.log("🔐 Initializing auth...");
-
         const {
           data: { session },
           error,
@@ -268,8 +261,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (!isMounted.current) return;
 
-        console.log("📋 Session status:", session ? "Active" : "None");
-
         setSession(session);
         setUser(session?.user ?? null);
 
@@ -279,7 +270,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!isMounted.current) return;
 
           if (!userProfile) {
-            console.warn("⚠️ No profile found, signing out");
             await supabase.auth.signOut();
             setSession(null);
             setUser(null);
@@ -292,7 +282,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (isMounted.current) {
           setLoading(false);
           isInitializing.current = false;
-          console.log("✅ Auth initialization complete");
         }
       } catch (err) {
         console.error("💥 Auth init error:", err);
@@ -311,18 +300,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!isMounted.current) return;
 
       if (isInitializing.current) {
-        console.log("⏭️ Skipping auth change during init:", event);
         return;
       }
 
       if (event === "TOKEN_REFRESHED") {
-        console.log("⏭️ Token refreshed, keeping existing profile");
         setSession(session);
         setUser(session?.user ?? null);
         return;
       }
-
-      console.log("🔔 Auth state changed:", event);
 
       setSession(session);
       setUser(session?.user ?? null);
@@ -339,7 +324,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted.current = false;
       subscription.unsubscribe();
-      console.log("🧹 Auth cleanup");
     };
   }, [fetchProfile]);
 

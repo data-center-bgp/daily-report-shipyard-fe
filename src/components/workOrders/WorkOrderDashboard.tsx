@@ -117,8 +117,6 @@ export default function WorkOrderDashboard() {
       setLoading(true);
       setError(null);
 
-      console.log("🔄 Fetching work orders...");
-
       const { data, error: fetchError } = await supabase
         .from("work_order")
         .select(
@@ -142,20 +140,11 @@ export default function WorkOrderDashboard() {
       }
 
       const workOrdersData = data || [];
-      console.log("✅ Fetched work orders:", workOrdersData.length);
 
       // Filter out work orders without vessel data
       const validWorkOrders = workOrdersData.filter(
         (wo) => wo.vessel?.id != null,
       );
-
-      if (validWorkOrders.length < workOrdersData.length) {
-        console.warn(
-          `⚠️ Filtered out ${
-            workOrdersData.length - validWorkOrders.length
-          } work orders without vessel data`,
-        );
-      }
 
       // Calculate stats
       setStats({
@@ -225,7 +214,6 @@ export default function WorkOrderDashboard() {
         workOrders: vessel.workOrders,
       }));
 
-      console.log("📊 Vessel summaries:", vesselSummaries.length);
       setVessels(vesselSummaries);
     } catch (err) {
       clearTimeout(timeoutId);

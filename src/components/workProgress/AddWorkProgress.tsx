@@ -652,13 +652,6 @@ export default function AddWorkProgress({
         );
       }
 
-      console.log(
-        "Creating work progress with user_id:",
-        userProfile.id,
-        "Name:",
-        userProfile.name,
-      );
-
       // Insert work progress with the correct user_id from profiles table
       const { data: insertedProgress, error: insertError } = await supabase
         .from("work_progress")
@@ -680,8 +673,6 @@ export default function AddWorkProgress({
           `Failed to create progress report: ${insertError.message}`,
         );
       }
-
-      console.log("Progress created successfully:", insertedProgress);
 
       // Log the activity
       await ActivityLogService.logActivity({

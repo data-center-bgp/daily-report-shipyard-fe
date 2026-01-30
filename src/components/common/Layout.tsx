@@ -29,10 +29,10 @@ interface LayoutProps {
 export default function Layout({ children, onLogout }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [_user, setUser] = useState<any>(null);
   const location = useLocation();
   const navigate = useNavigate();
-  const { canAccess } = useAuth();
+  const { canAccess, profile } = useAuth();
 
   useEffect(() => {
     const getUser = async () => {
@@ -226,9 +226,9 @@ export default function Layout({ children, onLogout }: LayoutProps) {
               <>
                 <div className="flex items-center space-x-3 mb-4">
                   <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center ring-2 ring-blue-400 flex-shrink-0">
-                    {user?.email ? (
+                    {profile?.name ? (
                       <span className="text-white text-sm font-bold">
-                        {user.email.charAt(0).toUpperCase()}
+                        {profile.name.charAt(0).toUpperCase()}
                       </span>
                     ) : (
                       <User className="w-5 h-5 text-white" />
@@ -236,11 +236,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white truncate">
-                      {user?.email || "User"}
-                    </p>
-                    <p className="text-xs text-blue-200 flex items-center">
-                      <span className="w-2 h-2 bg-green-400 rounded-full mr-1"></span>
-                      Online
+                      {profile?.name || "User"}
                     </p>
                   </div>
                 </div>
@@ -256,16 +252,16 @@ export default function Layout({ children, onLogout }: LayoutProps) {
               <div className="flex flex-col items-center space-y-3">
                 <div className="relative group">
                   <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center ring-2 ring-blue-400 cursor-pointer">
-                    {user?.email ? (
+                    {profile?.name ? (
                       <span className="text-white text-sm font-bold">
-                        {user.email.charAt(0).toUpperCase()}
+                        {profile.name.charAt(0).toUpperCase()}
                       </span>
                     ) : (
                       <User className="w-5 h-5 text-white" />
                     )}
                   </div>
                   <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white px-2 py-1 rounded text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 pointer-events-none">
-                    {user?.email || "User"} - Online
+                    {profile?.name || "User"}
                     <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 rotate-45"></div>
                   </div>
                 </div>
@@ -342,9 +338,9 @@ export default function Layout({ children, onLogout }: LayoutProps) {
             <div className="flex-shrink-0 p-4 border-t border-blue-700 bg-blue-800">
               <div className="flex items-center space-x-3 mb-4">
                 <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center ring-2 ring-blue-400">
-                  {user?.email ? (
+                  {profile?.name ? (
                     <span className="text-white text-sm font-bold">
-                      {user.email.charAt(0).toUpperCase()}
+                      {profile.name.charAt(0).toUpperCase()}
                     </span>
                   ) : (
                     <User className="w-5 h-5 text-white" />
@@ -352,11 +348,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-white truncate">
-                    {user?.email || "User"}
-                  </p>
-                  <p className="text-xs text-blue-200 flex items-center">
-                    <span className="w-2 h-2 bg-green-400 rounded-full mr-1"></span>
-                    Online
+                    {profile?.name || "User"}
                   </p>
                 </div>
               </div>
