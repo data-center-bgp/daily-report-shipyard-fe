@@ -6,6 +6,7 @@ import type {
   GeneralServiceType,
   GeneralServiceInput,
 } from "../../types/generalService.types";
+import { ActivityLogService } from "../../services/activityLogService";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -614,6 +615,16 @@ export default function CreateBASTP() {
           if (servicesError) throw servicesError;
         }
 
+        // Log the activity for update
+        await ActivityLogService.logActivity({
+          action: "update",
+          tableName: "bastp",
+          recordId: parseInt(bastpId),
+          oldData: existingBastp || undefined,
+          newData: { ...formData, id: parseInt(bastpId) },
+          description: `Updated BASTP ${formData.number}`,
+        });
+
         navigate(`/bastp/${bastpId}`);
       } else {
         // ========== CREATE MODE ==========
@@ -665,6 +676,15 @@ export default function CreateBASTP() {
 
           if (servicesError) throw servicesError;
         }
+
+        // Log the activity for create
+        await ActivityLogService.logActivity({
+          action: "create",
+          tableName: "bastp",
+          recordId: bastpData.id,
+          newData: bastpData,
+          description: `Created BASTP ${bastpData.number}`,
+        });
 
         navigate(`/bastp/${bastpData.id}`);
       }

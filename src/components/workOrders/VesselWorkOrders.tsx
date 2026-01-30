@@ -6,6 +6,7 @@ import {
   type WorkDetailsWithProgress,
 } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import { ActivityLogService } from "../../services/activityLogService";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -304,20 +305,47 @@ export default function VesselWorkOrders() {
       setIsDeleting(true);
 
       // First, soft delete all associated work details
-      const { error: detailsError } = await supabase
+      const { data: workDetailsData, error: detailsError } = await supabase
         .from("work_details")
         .update({ deleted_at: new Date().toISOString() })
-        .eq("work_order_id", workOrderToDelete.id);
+        .eq("work_order_id", workOrderToDelete.id)
+        .select();
 
       if (detailsError) throw detailsError;
 
+      // Log activity for each deleted work detail
+      if (workDetailsData && workDetailsData.length > 0) {
+        for (const detail of workDetailsData) {
+          await ActivityLogService.logActivity({
+            action: "delete",
+            tableName: "work_details",
+            recordId: detail.id,
+            oldData: detail,
+            description: `Soft deleted work detail: ${detail.description} (via work order deletion)`,
+          });
+        }
+      }
+
       // Then, soft delete the work order
-      const { error: workOrderError } = await supabase
+      const { data: workOrderData, error: workOrderError } = await supabase
         .from("work_order")
         .update({ deleted_at: new Date().toISOString() })
-        .eq("id", workOrderToDelete.id);
+        .eq("id", workOrderToDelete.id)
+        .select()
+        .single();
 
       if (workOrderError) throw workOrderError;
+
+      // Log activity for work order deletion
+      if (workOrderData) {
+        await ActivityLogService.logActivity({
+          action: "delete",
+          tableName: "work_order",
+          recordId: workOrderData.id,
+          oldData: workOrderData,
+          description: `Soft deleted work order ${workOrderToDelete.shipyard_wo_number}`,
+        });
+      }
 
       // Refresh the list
       fetchVesselWorkOrders();

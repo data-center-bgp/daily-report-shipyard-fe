@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import { ActivityLogService } from "../../services/activityLogService";
 import {
   uploadWorkPermitFile,
   validateWorkPermitFile,
@@ -568,7 +569,7 @@ export default function EditWorkDetails() {
         };
       }
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("work_details")
         .update(updateData)
         .eq("id", parseInt(workDetailsId!))
@@ -578,6 +579,18 @@ export default function EditWorkDetails() {
       if (error) {
         console.error("Database update error:", error);
         throw error;
+      }
+
+      // Log the activity
+      if (data) {
+        await ActivityLogService.logActivity({
+          action: "update",
+          tableName: "work_details",
+          recordId: data.id,
+          oldData: originalData || undefined,
+          newData: data,
+          description: `Updated work detail: ${data.description}`,
+        });
       }
 
       const returnFilters = location.state?.returnFilters;

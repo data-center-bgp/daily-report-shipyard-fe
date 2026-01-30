@@ -8,6 +8,7 @@ import {
 } from "../../lib/supabase";
 import { openPermitFile } from "../../utils/urlHandler";
 import { useAuth } from "../../hooks/useAuth";
+import { ActivityLogService } from "../../services/activityLogService";
 import {
   Ship,
   FileText,
@@ -579,12 +580,25 @@ export default function WODetailsTable({
 
     try {
       setIsDeleting(true);
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("work_details")
         .update({ deleted_at: new Date().toISOString() })
-        .eq("id", detailToDelete.id);
+        .eq("id", detailToDelete.id)
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Log the soft delete activity
+      if (data) {
+        await ActivityLogService.logActivity({
+          action: "delete",
+          tableName: "work_details",
+          recordId: data.id,
+          oldData: detailToDelete,
+          description: `Soft deleted work detail: ${detailToDelete.description}`,
+        });
+      }
 
       const newTotalItems = totalItems - 1;
       const newTotalPages = Math.ceil(newTotalItems / itemsPerPage);

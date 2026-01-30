@@ -6,6 +6,7 @@ import {
   type WorkOrder,
   type Vessel,
 } from "../../lib/supabase";
+import { ActivityLogService } from "../../services/activityLogService";
 import {
   ArrowLeft,
   Wrench,
@@ -253,14 +254,29 @@ export default function VerifyWorkDetails() {
         throw new Error("Failed to fetch user profile");
       }
 
-      const { error } = await supabase.from("work_verification").insert({
-        verification_date: verificationDate,
-        work_details_id: workDetails.id,
-        user_id: userProfile.id,
-        verification_notes: verificationNotes.trim() || null,
-      });
+      const { data: verificationData, error } = await supabase
+        .from("work_verification")
+        .insert({
+          verification_date: verificationDate,
+          work_details_id: workDetails.id,
+          user_id: userProfile.id,
+          verification_notes: verificationNotes.trim() || null,
+        })
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Log the activity
+      if (verificationData) {
+        await ActivityLogService.logActivity({
+          action: "create",
+          tableName: "work_verification",
+          recordId: verificationData.id,
+          newData: verificationData,
+          description: `Verified work details: ${workDetails.description.substring(0, 50)}${workDetails.description.length > 50 ? "..." : ""}`,
+        });
+      }
 
       // Navigate back with success message
       navigate("/work-verification", {

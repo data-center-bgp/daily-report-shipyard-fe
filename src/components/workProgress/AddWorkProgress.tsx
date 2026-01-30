@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { uploadProgressEvidence } from "../../utils/progressEvidenceHandler";
+import { ActivityLogService } from "../../services/activityLogService";
 import {
   FileText,
   Ship,
@@ -681,6 +682,15 @@ export default function AddWorkProgress({
       }
 
       console.log("Progress created successfully:", insertedProgress);
+
+      // Log the activity
+      await ActivityLogService.logActivity({
+        action: "create",
+        tableName: "work_progress",
+        recordId: insertedProgress.id,
+        newData: insertedProgress,
+        description: `Created work progress report (${progressValue}%) for work details ID ${selectedWorkDetailsId}`,
+      });
 
       // Navigate to appropriate page
       if (effectiveWorkDetailsId) {

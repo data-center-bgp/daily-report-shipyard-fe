@@ -132,7 +132,7 @@ export interface ActivityLog {
   user_id: number;
   user_name: string;
   user_email: string;
-  action: "create" | "update" | "delete" | "restore";
+  action: "create" | "update" | "delete";
   table_name: string;
   record_id: number;
   old_data?: Record<string, any>;

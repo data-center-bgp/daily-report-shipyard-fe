@@ -2,7 +2,7 @@ import { supabase } from "../lib/supabase";
 import type { ActivityLog } from "../lib/supabase";
 
 interface LogActivityParams {
-  action: "create" | "update" | "delete" | "restore";
+  action: "create" | "update" | "delete";
   tableName: string;
   recordId: number;
   oldData?: Record<string, any>;
@@ -29,19 +29,21 @@ export class ActivityLogService {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        console.warn("No user found, skipping activity log");
         return;
       }
 
       // Get user profile
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("id, name, email")
         .eq("auth_user_id", user.id)
         .single();
 
+      if (profileError) {
+        return;
+      }
+
       if (!profile) {
-        console.warn("No profile found, skipping activity log");
         return;
       }
 
@@ -63,24 +65,26 @@ export class ActivityLogService {
       const ipAddress = await this.getIpAddress();
       const userAgent = navigator.userAgent;
 
-      // Insert activity log
-      const { error } = await supabase.from("activity_logs").insert({
+      const logData = {
         user_id: profile.id,
         user_name: profile.name,
         user_email: profile.email,
         action,
         table_name: tableName,
         record_id: recordId,
-        old_data: oldData,
-        new_data: newData,
-        changes,
-        ip_address: ipAddress,
-        user_agent: userAgent,
-        description,
-      });
+        old_data: oldData || null,
+        new_data: newData || null,
+        changes: changes || null,
+        ip_address: ipAddress || null,
+        user_agent: userAgent || null,
+        description: description || null,
+      };
+
+      // Insert activity log
+      const { error } = await supabase.from("activity_logs").insert(logData);
 
       if (error) {
-        console.error("Failed to log activity:", error);
+        console.error("Failed to insert activity log:", error);
       }
     } catch (error) {
       console.error("Error logging activity:", error);
@@ -105,7 +109,7 @@ export class ActivityLogService {
    */
   static async getActivityLogs(
     tableName: string,
-    recordId: number
+    recordId: number,
   ): Promise<ActivityLog[]> {
     const { data, error } = await supabase
       .from("activity_logs")
@@ -134,7 +138,7 @@ export class ActivityLogService {
       action?: string;
       startDate?: string;
       endDate?: string;
-    }
+    },
   ): Promise<{ data: ActivityLog[]; count: number }> {
     let query = supabase
       .from("activity_logs")
@@ -174,7 +178,7 @@ export class ActivityLogService {
    */
   static async getMyActivityLogs(
     page: number = 1,
-    pageSize: number = 50
+    pageSize: number = 50,
   ): Promise<{ data: ActivityLog[]; count: number }> {
     const {
       data: { user },

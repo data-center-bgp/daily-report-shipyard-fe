@@ -19,6 +19,7 @@ export default function ActivityLogList({
   const [totalCount, setTotalCount] = useState(0);
   const [filters, setFilters] = useState({
     action: "",
+    tableName: "",
     startDate: "",
     endDate: "",
   });
@@ -29,6 +30,56 @@ export default function ActivityLogList({
     loadLogs();
   }, [page, tableName, recordId, filters]);
 
+  // Format table names to human-readable format
+  const formatTableName = (tableName: string): string => {
+    const tableNameMap: Record<string, string> = {
+      work_order: "Work Order",
+      work_details: "Work Details",
+      work_progress: "Work Progress",
+      work_verification: "Work Verification",
+      bastp: "BASTP",
+      invoice_details: "Invoice",
+      activity_logs: "Activity Log",
+      profiles: "Profile",
+    };
+    return tableNameMap[tableName] || tableName;
+  };
+
+  // Get unique table names for filter
+  const getUniqueTableNames = (): string[] => {
+    return [
+      "work_order",
+      "work_details",
+      "work_progress",
+      "work_verification",
+      "bastp",
+      "invoice_details",
+    ];
+  };
+
+  // Generate activity description
+  const generateActivityDescription = (log: ActivityLog): string => {
+    const action = log.action.toLowerCase();
+    const table = formatTableName(log.table_name);
+
+    if (log.description) {
+      // Use custom description if available
+      return `${log.user_name} ${log.description}`;
+    }
+
+    // Generate default description
+    switch (action) {
+      case "create":
+        return `${log.user_name} created new ${table} (ID: ${log.record_id})`;
+      case "update":
+        return `${log.user_name} updated ${table} (ID: ${log.record_id})`;
+      case "delete":
+        return `${log.user_name} deleted ${table} (ID: ${log.record_id})`;
+      default:
+        return `${log.user_name} performed ${action} on ${table} (ID: ${log.record_id})`;
+    }
+  };
+
   const loadLogs = async () => {
     setLoading(true);
     try {
@@ -36,7 +87,7 @@ export default function ActivityLogList({
         // Get logs for specific record
         const data = await ActivityLogService.getActivityLogs(
           tableName,
-          recordId
+          recordId,
         );
         setLogs(data);
         setTotalCount(data.length);
@@ -46,11 +97,11 @@ export default function ActivityLogList({
           page,
           pageSize,
           {
-            tableName: filters.action ? undefined : tableName,
+            tableName: filters.tableName || undefined,
             action: filters.action || undefined,
             startDate: filters.startDate || undefined,
             endDate: filters.endDate || undefined,
-          }
+          },
         );
         setLogs(data);
         setTotalCount(count);
@@ -70,8 +121,6 @@ export default function ActivityLogList({
         return "bg-blue-100 text-blue-800";
       case "delete":
         return "bg-red-100 text-red-800";
-      case "restore":
-        return "bg-yellow-100 text-yellow-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -103,7 +152,7 @@ export default function ActivityLogList({
       {showFilters && (
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">Filters</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 Action
@@ -119,7 +168,25 @@ export default function ActivityLogList({
                 <option value="create">Create</option>
                 <option value="update">Update</option>
                 <option value="delete">Delete</option>
-                <option value="restore">Restore</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Table
+              </label>
+              <select
+                value={filters.tableName}
+                onChange={(e) =>
+                  setFilters({ ...filters, tableName: e.target.value })
+                }
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Tables</option>
+                {getUniqueTableNames().map((table) => (
+                  <option key={table} value={table}>
+                    {formatTableName(table)}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
@@ -162,16 +229,13 @@ export default function ActivityLogList({
                   Date & Time
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                  User
+                  Activity Description
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">
                   Action
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">
                   Table
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                  Record ID
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">
                   Changes
@@ -182,7 +246,7 @@ export default function ActivityLogList({
               {logs.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={5}
                     className="px-4 py-8 text-center text-gray-500"
                   >
                     No activity logs found
@@ -191,30 +255,29 @@ export default function ActivityLogList({
               ) : (
                 logs.map((log) => (
                   <tr key={log.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-900">
+                    <td className="px-4 py-3 text-gray-900 whitespace-nowrap">
                       {formatDate(log.created_at)}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-gray-900 font-medium">
-                        {log.user_name}
+                      <div className="text-gray-900">
+                        {generateActivityDescription(log)}
                       </div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-gray-500 mt-1">
                         {log.user_email}
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getActionBadgeColor(
-                          log.action
+                          log.action,
                         )}`}
                       >
                         {log.action.toUpperCase()}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-700">
-                      {log.table_name}
+                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                      {formatTableName(log.table_name)}
                     </td>
-                    <td className="px-4 py-3 text-gray-700">{log.record_id}</td>
                     <td className="px-4 py-3">
                       {log.changes && Object.keys(log.changes).length > 0 ? (
                         <details className="text-xs">

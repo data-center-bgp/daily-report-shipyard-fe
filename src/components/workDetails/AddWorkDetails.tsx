@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { supabase, type WorkOrder, type Vessel } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import { ActivityLogService } from "../../services/activityLogService";
 import {
   Ship,
   HardHat,
@@ -469,11 +470,25 @@ export default function AddWorkDetails() {
         ptw_number: null,
       }));
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("work_details")
-        .insert(workDetailsData);
+        .insert(workDetailsData)
+        .select();
 
       if (error) throw error;
+
+      // Log the activity for each work detail created
+      if (data && data.length > 0) {
+        for (const workDetail of data) {
+          await ActivityLogService.logActivity({
+            action: "create",
+            tableName: "work_details",
+            recordId: workDetail.id,
+            newData: workDetail,
+            description: `Created work detail: ${workDetail.description}`,
+          });
+        }
+      }
 
       // ✅ ADD: Navigate back with filter state
       const returnFilters = location.state?.returnFilters;

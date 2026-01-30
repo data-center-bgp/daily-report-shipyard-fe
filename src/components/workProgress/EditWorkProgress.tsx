@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { uploadProgressEvidence } from "../../utils/progressEvidenceHandler";
 import { useAuth } from "../../hooks/useAuth";
+import { ActivityLogService } from "../../services/activityLogService";
 import {
   ArrowLeft,
   FileText,
@@ -312,7 +313,7 @@ export default function EditWorkProgress() {
         storagePath = "";
       }
 
-      const { error: updateError } = await supabase
+      const { data: updatedData, error: updateError } = await supabase
         .from("work_progress")
         .update({
           progress_percentage: progressValue,
@@ -321,13 +322,27 @@ export default function EditWorkProgress() {
           evidence_url: evidenceUrl || null,
           storage_path: storagePath || null,
         })
-        .eq("id", progressData.id);
+        .eq("id", progressData.id)
+        .select()
+        .single();
 
       if (updateError) {
         console.error("Update error:", updateError);
         throw new Error(
           `Failed to update progress report: ${updateError.message}`,
         );
+      }
+
+      // Log the activity
+      if (updatedData) {
+        await ActivityLogService.logActivity({
+          action: "update",
+          tableName: "work_progress",
+          recordId: updatedData.id,
+          oldData: progressData || undefined,
+          newData: updatedData,
+          description: `Updated work progress report (${progressValue}%) for work details ID ${progressData.work_details_id}`,
+        });
       }
 
       const returnFilters = location.state?.returnFilters;

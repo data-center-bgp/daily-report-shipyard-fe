@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import type { BASTPWithDetails } from "../../types/bastp.types";
 import type { Invoice } from "../../types/invoiceTypes";
+import { ActivityLogService } from "../../services/activityLogService";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -541,6 +542,16 @@ export default function ManageInvoice() {
           if (serviceError) throw serviceError;
         }
 
+        // Log the activity for update
+        await ActivityLogService.logActivity({
+          action: "update",
+          tableName: "invoice_details",
+          recordId: Number(invoiceId),
+          oldData: existingInvoice || undefined,
+          newData: formData,
+          description: `Updated invoice ${formData.invoice_number}`,
+        });
+
         setSuccess("✅ Invoice updated successfully!");
         setTimeout(() => navigate(`/invoices/${invoiceId}`), 1500);
       } else if (isCreateMode && bastpId) {
@@ -614,6 +625,15 @@ export default function ManageInvoice() {
 
         if (bastpUpdateError) throw bastpUpdateError;
 
+        // Log the activity for create
+        await ActivityLogService.logActivity({
+          action: "create",
+          tableName: "invoice_details",
+          recordId: invoiceData.id,
+          newData: invoiceData,
+          description: `Created invoice ${invoiceData.invoice_number}`,
+        });
+
         setSuccess("✅ Invoice created successfully!");
         setTimeout(() => navigate(`/invoices/${invoiceData.id}`), 1500);
       }
@@ -661,6 +681,15 @@ export default function ManageInvoice() {
 
         if (bastpError) throw bastpError;
       }
+
+      // Log the activity for delete
+      await ActivityLogService.logActivity({
+        action: "delete",
+        tableName: "invoice_details",
+        recordId: Number(invoiceId),
+        oldData: existingInvoice || undefined,
+        description: `Deleted invoice ${existingInvoice?.invoice_number || invoiceId}`,
+      });
 
       navigate("/invoices", {
         state: { successMessage: "Invoice deleted successfully" },
