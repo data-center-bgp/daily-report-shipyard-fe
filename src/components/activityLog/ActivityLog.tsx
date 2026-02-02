@@ -37,6 +37,7 @@ export default function ActivityLogList({
       work_details: "Work Details",
       work_progress: "Work Progress",
       work_verification: "Work Verification",
+      material_control: "Material Control",
       bastp: "BASTP",
       invoice_details: "Invoice",
       activity_logs: "Activity Log",
@@ -52,6 +53,7 @@ export default function ActivityLogList({
       "work_details",
       "work_progress",
       "work_verification",
+      "material_control",
       "bastp",
       "invoice_details",
     ];

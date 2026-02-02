@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import { ActivityLogService } from "../../services/activityLogService";
 import type {
   MaterialControlWithDetails,
   MaterialList,
@@ -298,7 +299,8 @@ export default function MaterialControl({
 
       if (editingId) {
         // Update existing material
-        const { error: updateError } = await supabase
+        const oldMaterial = materials.find((m) => m.id === editingId);
+        const { data: updatedData, error: updateError } = await supabase
           .from("material_control")
           .update({
             material_id: editFormData.material_id,
@@ -307,9 +309,23 @@ export default function MaterialControl({
             uom: editFormData.uom.trim(),
             updated_at: new Date().toISOString(),
           })
-          .eq("id", editingId);
+          .eq("id", editingId)
+          .select()
+          .single();
 
         if (updateError) throw updateError;
+
+        // Log the activity
+        if (updatedData) {
+          await ActivityLogService.logActivity({
+            action: "update",
+            tableName: "material_control",
+            recordId: updatedData.id,
+            oldData: oldMaterial,
+            newData: updatedData,
+            description: `Updated material control for ${workDetailsDescription}`,
+          });
+        }
       } else {
         // Create multiple materials
         const materialsToInsert = materialEntries.map((entry) => ({
@@ -321,11 +337,25 @@ export default function MaterialControl({
           bastp_id: bastpId,
         }));
 
-        const { error: insertError } = await supabase
+        const { data: insertedData, error: insertError } = await supabase
           .from("material_control")
-          .insert(materialsToInsert);
+          .insert(materialsToInsert)
+          .select();
 
         if (insertError) throw insertError;
+
+        // Log the activity for each created material
+        if (insertedData && insertedData.length > 0) {
+          for (const material of insertedData) {
+            await ActivityLogService.logActivity({
+              action: "create",
+              tableName: "material_control",
+              recordId: material.id,
+              newData: material,
+              description: `Added material control for ${workDetailsDescription}`,
+            });
+          }
+        }
       }
 
       // Reset form and refresh list
@@ -371,15 +401,29 @@ export default function MaterialControl({
     try {
       setError(null);
 
-      const { error: deleteError } = await supabase
+      const materialToDelete = materials.find((m) => m.id === id);
+      const { data: deletedData, error: deleteError } = await supabase
         .from("material_control")
         .update({
           deleted_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
-        .eq("id", id);
+        .eq("id", id)
+        .select()
+        .single();
 
       if (deleteError) throw deleteError;
+
+      // Log the activity
+      if (deletedData) {
+        await ActivityLogService.logActivity({
+          action: "delete",
+          tableName: "material_control",
+          recordId: deletedData.id,
+          oldData: materialToDelete,
+          description: `Deleted material control for ${workDetailsDescription}`,
+        });
+      }
 
       await fetchMaterials();
     } catch (err) {
