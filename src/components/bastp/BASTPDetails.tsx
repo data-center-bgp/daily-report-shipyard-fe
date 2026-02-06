@@ -783,7 +783,6 @@ export default function BASTPDetails() {
                               {service.service_type?.service_name}
                             </div>
                           </td>
-                          {/* ✅ ADD: Start Date */}
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
                               {service.start_date ? (
@@ -795,7 +794,6 @@ export default function BASTPDetails() {
                               )}
                             </div>
                           </td>
-                          {/* ✅ ADD: Close Date */}
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
                               {service.close_date ? (

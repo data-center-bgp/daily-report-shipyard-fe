@@ -115,7 +115,7 @@ export default function WorkProgressTable({
     workTypeFilter ||
     additionalWoFilter;
 
-  // ✅ Dynamically filter work orders based on active filters
+  // Filter work orders based on active filters
   const filteredWorkOrders = useMemo(() => {
     let filtered = allWorkOrders;
 
@@ -181,7 +181,7 @@ export default function WorkProgressTable({
     customerWoFilter,
   ]);
 
-  // ✅ Available vessels based on filtered work orders
+  // Available vessels based on filtered work orders
   const availableVessels = useMemo(() => {
     if (!hasActiveFilters) return allVessels;
 
@@ -189,7 +189,7 @@ export default function WorkProgressTable({
     return allVessels.filter((vessel) => vesselIds.has(vessel.id));
   }, [allVessels, filteredWorkOrders, hasActiveFilters]);
 
-  // ✅ Available shipyard WO numbers based on filtered work orders
+  // Available shipyard WO numbers
   const availableShipyardWoNumbers = useMemo(() => {
     const numbers = filteredWorkOrders
       .map((wo) => wo.shipyard_wo_number)
@@ -197,7 +197,7 @@ export default function WorkProgressTable({
     return Array.from(new Set(numbers)).sort();
   }, [filteredWorkOrders]);
 
-  // ✅ Available customer WO numbers based on filtered work orders
+  // Available customer WO numbers
   const availableCustomerWoNumbers = useMemo(() => {
     const numbers = filteredWorkOrders
       .map((wo) => wo.customer_wo_number)
@@ -205,7 +205,7 @@ export default function WorkProgressTable({
     return Array.from(new Set(numbers)).sort();
   }, [filteredWorkOrders]);
 
-  // ✅ Available work types based on filtered work orders
+  // Available work types
   const availableWorkTypes = useMemo(() => {
     const types = filteredWorkOrders
       .map((wo) => wo.work_type)
@@ -213,7 +213,7 @@ export default function WorkProgressTable({
     return Array.from(new Set(types)).sort();
   }, [filteredWorkOrders]);
 
-  // ✅ Available work locations based on filtered work orders
+  // Available work locations
   const availableWorkLocations = useMemo(() => {
     const locations = filteredWorkOrders
       .map((wo) => wo.work_location)
@@ -221,7 +221,7 @@ export default function WorkProgressTable({
     return Array.from(new Set(locations)).sort();
   }, [filteredWorkOrders]);
 
-  // ✅ FIXED: Available kapros based on filtered work orders
+  // Available kapros based on filtered work orders
   const availableKapros = useMemo(() => {
     if (!hasActiveFilters) {
       return {
@@ -242,7 +242,7 @@ export default function WorkProgressTable({
     return { kapros: filteredKapros, hasUnassigned };
   }, [allKapros, filteredWorkOrders, hasActiveFilters, allWorkOrders]);
 
-  // ✅ Filtered vessels for search dropdown
+  // Filtered vessels for search dropdown
   const filteredVesselsForSearch = useMemo(() => {
     if (!vesselSearchTerm) return availableVessels;
 
@@ -304,7 +304,7 @@ export default function WorkProgressTable({
       setLoading(true);
       setError(null);
 
-      // ✅ STEP 1: Fetch all profiles first using RPC function
+      // Fetch all profiles first
       const { data: allProfiles, error: profilesError } =
         await supabase.rpc("get_all_profiles");
 
@@ -320,7 +320,7 @@ export default function WorkProgressTable({
         });
       }
 
-      // ✅ STEP 2: Fetch work progress WITHOUT profiles join
+      // Fetch work progress data
       let query = supabase.from("work_progress").select(
         `
         id,
@@ -398,13 +398,13 @@ export default function WorkProgressTable({
 
       if (error) throw error;
 
-      // ✅ STEP 3: Transform data and attach profiles from map
+      // Transform data and attach profiles from map
       const progressData = (data || []).map((item: any) => {
         const workDetails = Array.isArray(item.work_details)
           ? item.work_details[0]
           : item.work_details;
 
-        // ✅ Get profile from map using user_id
+        // Get profile from map
         const profile = item.user_id ? profilesMap[item.user_id] : undefined;
 
         return {
@@ -434,7 +434,7 @@ export default function WorkProgressTable({
                 : workDetails.work_order.vessel,
             },
           },
-          profiles: profile, // ✅ Now properly mapped from profilesMap
+          profiles: profile,
         } as WorkProgressWithDetails;
       });
 
@@ -592,7 +592,7 @@ export default function WorkProgressTable({
 
       if (workDetailsError) throw workDetailsError;
 
-      // ✅ FIX: Transform the data inline instead of using deleted function
+      // Transform the data inline
       const workOrder = Array.isArray(workDetailsData.work_order)
         ? workDetailsData.work_order[0]
         : workDetailsData.work_order;

@@ -30,7 +30,7 @@ export default function BASTP() {
       setLoading(true);
       setError(null);
 
-      // ✅ STEP 1: Fetch all profiles first using RPC function
+      // Fetch all profiles first
       const { data: allProfiles, error: profilesError } =
         await supabase.rpc("get_all_profiles");
 
@@ -51,7 +51,7 @@ export default function BASTP() {
         );
       }
 
-      // ✅ STEP 2: Fetch BASTPs WITHOUT profiles join
+      // Fetch BASTPs data
       const { data, error: fetchError } = await supabase
         .from("bastp")
         .select(
@@ -89,7 +89,7 @@ export default function BASTP() {
 
       if (fetchError) throw fetchError;
 
-      // ✅ STEP 3: Attach profiles from map
+      // Attach profiles from map
       const bastpsWithProfiles = (data || []).map((bastp) => ({
         ...bastp,
         profiles: bastp.user_id ? profilesMap[bastp.user_id] : undefined,
@@ -149,7 +149,6 @@ export default function BASTP() {
 
         // 2. If document uploaded and status is VERIFIED -> READY_FOR_INVOICE
         if (bastp.storage_path && bastp.status === "VERIFIED") {
-          // ✅ Check storage_path instead
           await supabase
             .from("bastp")
             .update({ status: "READY_FOR_INVOICE" })

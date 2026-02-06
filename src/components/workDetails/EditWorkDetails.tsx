@@ -449,7 +449,7 @@ export default function EditWorkDetails() {
       }
     }
 
-    // PRODUCTION fields validation
+    // Validate production-specific fields
     if (isProduction) {
       if (!formData.pic.trim()) {
         errors.push("Person in charge (PIC) is required");
@@ -554,7 +554,7 @@ export default function EditWorkDetails() {
       }
 
       if (!isPPIC) {
-        // NOT PPIC (PRODUCTION and MASTER) can update PRODUCTION fields
+        // PRODUCTION and MASTER roles can update production fields
         updateData = {
           ...updateData,
           pic: formData.pic.trim(),
@@ -797,8 +797,6 @@ export default function EditWorkDetails() {
 
                 {/* Location */}
                 <div>
-                  {" "}
-                  {/* ✅ Already single column */}
                   <label
                     htmlFor="location_id"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -853,8 +851,6 @@ export default function EditWorkDetails() {
 
                 {/* Work Scope */}
                 <div>
-                  {" "}
-                  {/* ✅ Already single column */}
                   <label
                     htmlFor="work_scope_id"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -909,8 +905,6 @@ export default function EditWorkDetails() {
 
                 {/* Quantity */}
                 <div>
-                  {" "}
-                  {/* ✅ Already single column */}
                   <label
                     htmlFor="quantity"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -933,8 +927,6 @@ export default function EditWorkDetails() {
 
                 {/* UOM */}
                 <div>
-                  {" "}
-                  {/* ✅ Already single column */}
                   <label
                     htmlFor="uom"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -959,8 +951,6 @@ export default function EditWorkDetails() {
 
                 {/* Planned Start Date */}
                 <div>
-                  {" "}
-                  {/* ✅ Already single column */}
                   <label
                     htmlFor="planned_start_date"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -981,8 +971,6 @@ export default function EditWorkDetails() {
 
                 {/* Target Close Date */}
                 <div>
-                  {" "}
-                  {/* ✅ Already single column */}
                   <label
                     htmlFor="target_close_date"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -1116,13 +1104,11 @@ export default function EditWorkDetails() {
                 </div>
               </>
             )}
-            {/* PRODUCTION FIELDS - Show for NOT PPIC (includes PRODUCTION and MASTER) */}
+            {/* Production fields - Non-PPIC roles */}
             {!isPPIC && (
               <>
                 {/* Person in Charge */}
                 <div>
-                  {" "}
-                  {/* ✅ Already single column */}
                   <label
                     htmlFor="pic"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -1144,8 +1130,6 @@ export default function EditWorkDetails() {
 
                 {/* SPK Number */}
                 <div>
-                  {" "}
-                  {/* ✅ Already single column */}
                   <label
                     htmlFor="spk_number"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -1166,8 +1150,6 @@ export default function EditWorkDetails() {
 
                 {/* SPKK Number */}
                 <div>
-                  {" "}
-                  {/* ✅ Already single column */}
                   <label
                     htmlFor="spkk_number"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -1188,8 +1170,6 @@ export default function EditWorkDetails() {
 
                 {/* Actual Start Date */}
                 <div>
-                  {" "}
-                  {/* ✅ Already single column */}
                   <label
                     htmlFor="actual_start_date"
                     className="block text-sm font-medium text-gray-700 mb-2"
@@ -1209,8 +1189,6 @@ export default function EditWorkDetails() {
 
                 {/* Actual Close Date */}
                 <div>
-                  {" "}
-                  {/* ✅ Already single column */}
                   <label
                     htmlFor="actual_close_date"
                     className="block text-sm font-medium text-gray-700 mb-2"

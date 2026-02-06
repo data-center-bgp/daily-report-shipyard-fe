@@ -165,7 +165,7 @@ export default function WODetailsTable({
 
   // ==================== COMPUTED VALUES ====================
 
-  // ✅ FIXED: Added customer_wo_number to search filter
+  // Search filter includes all relevant fields
   const filteredWorkDetailsForDisplay = useMemo(() => {
     if (!workDetailsSearchTerm) return workDetails;
 
@@ -180,7 +180,7 @@ export default function WODetailsTable({
           .includes(searchLower) ||
         wd.work_order?.customer_wo_number
           ?.toLowerCase()
-          .includes(searchLower) || // ✅ ADDED
+          .includes(searchLower) ||
         wd.spk_number?.toLowerCase().includes(searchLower) ||
         wd.spkk_number?.toLowerCase().includes(searchLower) ||
         wd.ptw_number?.toLowerCase().includes(searchLower) ||
@@ -431,7 +431,6 @@ export default function WODetailsTable({
     setWorkOrderSearchTerm("");
     setCurrentPage(1);
 
-    // ✅ Persist to URL
     updateUrlParams({
       vesselId: vessel.id,
       vesselSearch: vesselDisplayText,
@@ -453,7 +452,6 @@ export default function WODetailsTable({
     setCurrentPage(1);
     setSelectedWorkOrderDetails(null);
 
-    // ✅ Clear URL params
     updateUrlParams({
       vesselId: null,
       vesselSearch: null,
@@ -477,7 +475,6 @@ export default function WODetailsTable({
     setShowWorkOrderDropdown(false);
     setCurrentPage(1);
 
-    // ✅ Persist to URL
     updateUrlParams({
       workOrderId: workOrder.id,
       woSearch: workOrder.shipyard_wo_number || "",
@@ -494,7 +491,6 @@ export default function WODetailsTable({
     setCurrentPage(1);
     setSelectedWorkOrderDetails(null);
 
-    // ✅ Clear URL params
     updateUrlParams({
       workOrderId: null,
       woSearch: null,
@@ -509,7 +505,6 @@ export default function WODetailsTable({
     setSortDirection(newDirection);
     setCurrentPage(1);
 
-    // ✅ Persist to URL
     updateUrlParams({
       sortField: field,
       sortDirection: newDirection,
@@ -520,7 +515,6 @@ export default function WODetailsTable({
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
 
-    // ✅ Persist to URL
     updateUrlParams({ page });
 
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -647,7 +641,6 @@ export default function WODetailsTable({
     setWorkDetailsSearchTerm(value);
     setCurrentPage(1);
 
-    // ✅ Persist to URL with debounce
     updateUrlParams({
       search: value,
       page: 1,
@@ -679,7 +672,6 @@ export default function WODetailsTable({
         icon: <Clock className="w-4 h-4" />,
       };
     } else {
-      // ✅ REMOVED: storage_path check
       return {
         text: "Not Ready",
         color: "bg-red-100 text-red-600 border-red-200",
@@ -720,7 +712,7 @@ export default function WODetailsTable({
 
   // ==================== EFFECTS ====================
 
-  // ✅ IMPROVED: Better click outside handling with proper cleanup
+  // Click outside handling for dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -741,7 +733,7 @@ export default function WODetailsTable({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // ✅ IMPROVED: Added ESC key to close dropdowns
+  // ESC key to close dropdowns
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -790,7 +782,7 @@ export default function WODetailsTable({
       // Create an async function to restore filters in sequence
       const restoreFiltersAndFetch = async () => {
         try {
-          // Step 1: Restore simple filters immediately
+          // Restore simple filters
           if (navigationState.search) {
             setWorkDetailsSearchTerm(navigationState.search);
           }
@@ -802,7 +794,7 @@ export default function WODetailsTable({
             setCurrentPage(navigationState.page);
           }
 
-          // Step 2: Restore vessel and work order filters
+          // Restore vessel and work order filters
           if (navigationState.vesselId) {
             console.log("Restoring vessel:", navigationState.vesselId);
             setSelectedVesselId(navigationState.vesselId);
@@ -821,7 +813,7 @@ export default function WODetailsTable({
             }
           }
 
-          // Step 3: Update URL params to match restored state
+          // Update URL params to match restored state
           const newParams = new URLSearchParams();
           Object.entries(navigationState).forEach(([key, value]) => {
             if (value && value !== 0) {
@@ -830,15 +822,13 @@ export default function WODetailsTable({
           });
           setSearchParams(newParams, { replace: true });
 
-          // Step 4: Clear navigation state to prevent re-triggering
+          // Clear navigation state to prevent re-triggering
           window.history.replaceState(
             { ...window.history.state, usr: undefined },
             "",
           );
 
-          console.log("✅ Filters restored, now fetching work details...");
-
-          // Step 5: Wait for state updates then fetch with a longer delay
+          // Wait for state updates then fetch
           setTimeout(() => {
             // Force refetch by directly calling the fetch with the restored values
             fetchWorkDetailsWithFilters(
@@ -1016,7 +1006,6 @@ export default function WODetailsTable({
         >
           Description {getSortIcon("description")}
         </th>
-        {/* ✅ MERGED: SPK & SPKK Column */}
         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
           SPK & SPKK
         </th>
@@ -1052,7 +1041,7 @@ export default function WODetailsTable({
             <button
               onClick={() => toggleRowExpansion(detail.id)}
               className="flex items-center gap-2 text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
-              aria-label={isExpanded ? "Hide details" : "Show details"} // ✅ ADDED
+              aria-label={isExpanded ? "Hide details" : "Show details"}
             >
               <ChevronRight
                 className={`w-5 h-5 transform transition-transform duration-200 ${

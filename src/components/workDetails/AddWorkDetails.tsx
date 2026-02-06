@@ -458,7 +458,7 @@ export default function AddWorkDetails() {
         target_close_date: item.target_close_date,
         period_close_target: item.period_close_target.trim(),
         user_id: userProfile.id,
-        // PRODUCTION fields set to null initially
+        // Production fields initialized
         pic: "",
         spk_number: null,
         spkk_number: null,
@@ -490,7 +490,7 @@ export default function AddWorkDetails() {
         }
       }
 
-      // ✅ ADD: Navigate back with filter state
+      // Navigate back with filter state
       const returnFilters = location.state?.returnFilters;
 
       if (workOrderId) {

@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
-// ✅ Import icons from lucide-react
 import {
   LayoutDashboard,
   FileText,
@@ -57,7 +56,6 @@ export default function Layout({ children, onLogout }: LayoutProps) {
     localStorage.setItem("sidebar-collapsed", JSON.stringify(newState));
   };
 
-  // ✅ Updated navigation with Lucide icons
   const navigation = [
     {
       name: "Dashboard",
@@ -150,14 +148,14 @@ export default function Layout({ children, onLogout }: LayoutProps) {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar for desktop - ✅ FIXED: Added fixed positioning and height constraints */}
+      {/* Sidebar for desktop */}
       <div className="hidden lg:flex lg:flex-shrink-0 lg:fixed lg:inset-y-0 lg:z-30">
         <div
           className={`flex flex-col h-screen bg-gradient-to-b from-blue-900 via-blue-800 to-blue-900 shadow-xl transition-all duration-300 ease-in-out ${
             sidebarCollapsed ? "w-16" : "w-64"
           }`}
         >
-          {/* Logo/Header - ✅ FIXED: Now sticky at top */}
+          {/* Logo/Header */}
           <div className="flex-shrink-0 flex items-center justify-between h-16 px-4 bg-blue-800 border-b border-blue-700">
             <div className="flex items-center space-x-3 min-w-0">
               <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
@@ -184,7 +182,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
             </button>
           </div>
 
-          {/* Navigation - ✅ FIXED: Now scrollable independently */}
+          {/* Navigation */}
           <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-blue-700 scrollbar-track-blue-900">
             {visibleNavigation.map((item) => {
               const IconComponent = item.icon;
@@ -220,7 +218,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
             })}
           </nav>
 
-          {/* User Info & Logout - ✅ FIXED: Now sticky at bottom */}
+          {/* User Info & Logout */}
           <div className="flex-shrink-0 p-3 border-t border-blue-700 bg-blue-800">
             {!sidebarCollapsed ? (
               <>
@@ -364,7 +362,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
         </div>
       )}
 
-      {/* Main content - ✅ FIXED: Added left margin to account for fixed sidebar */}
+      {/* Main content */}
       <div
         className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${
           sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
