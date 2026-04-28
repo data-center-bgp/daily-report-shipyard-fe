@@ -32,6 +32,7 @@ import {
   ManageInvoice,
 } from "./components/invoice";
 import { ExportData } from "./components/exportData";
+import { ImportData } from "./components/importData";
 import BASTP from "./components/bastp/BASTP";
 import CreateBASTP from "./components/bastp/CreateBASTP";
 import BASTPDetails from "./components/bastp/BASTPDetails";
@@ -141,6 +142,7 @@ function AppRoutes() {
 
         {/* Import/Export Routes */}
         <Route path="/export-data" element={<ExportData />} />
+        <Route path="/import-data" element={<ImportData />} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" />} />

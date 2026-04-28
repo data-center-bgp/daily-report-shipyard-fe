@@ -12,6 +12,7 @@ import {
   Receipt,
   ScrollText,
   Download,
+  Upload,
   Ship,
   Menu,
   LogOut,
@@ -140,6 +141,13 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       href: "/export-data",
       icon: Download,
       current: location.pathname === "/export-data",
+      show: canAccess("exportData"),
+    },
+    {
+      name: "Import Data",
+      href: "/import-data",
+      icon: Upload,
+      current: location.pathname === "/import-data",
       show: canAccess("exportData"),
     },
   ];
