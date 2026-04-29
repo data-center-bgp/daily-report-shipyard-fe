@@ -273,8 +273,15 @@ export function generateCombinedTemplateXLSX(): Uint8Array {
   );
   const woWs = XLSX.utils.aoa_to_sheet([woLabelRow, ...WO_TEMPLATE_SAMPLE]);
   woWs["!cols"] = [
-    { wch: 22 }, { wch: 20 }, { wch: 26 }, { wch: 22 }, { wch: 24 },
-    { wch: 20 }, { wch: 18 }, { wch: 16 }, { wch: 16 },
+    { wch: 22 },
+    { wch: 20 },
+    { wch: 26 },
+    { wch: 22 },
+    { wch: 24 },
+    { wch: 20 },
+    { wch: 18 },
+    { wch: 16 },
+    { wch: 16 },
   ];
   XLSX.utils.book_append_sheet(wb, woWs, "Work Orders");
 
@@ -282,10 +289,22 @@ export function generateCombinedTemplateXLSX(): Uint8Array {
   const wdLabelRow = WORK_DETAILS_TEMPLATE_HEADERS.map(
     (h) => HEADER_LABELS[h] ?? h,
   );
-  const wdWs = XLSX.utils.aoa_to_sheet([wdLabelRow, ...WORK_DETAILS_TEMPLATE_SAMPLE]);
+  const wdWs = XLSX.utils.aoa_to_sheet([
+    wdLabelRow,
+    ...WORK_DETAILS_TEMPLATE_SAMPLE,
+  ]);
   wdWs["!cols"] = [
-    { wch: 22 }, { wch: 18 }, { wch: 42 }, { wch: 18 }, { wch: 18 },
-    { wch: 10 }, { wch: 8 }, { wch: 22 }, { wch: 28 }, { wch: 28 }, { wch: 22 },
+    { wch: 22 },
+    { wch: 18 },
+    { wch: 42 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 10 },
+    { wch: 8 },
+    { wch: 22 },
+    { wch: 28 },
+    { wch: 28 },
+    { wch: 22 },
   ];
   XLSX.utils.book_append_sheet(wb, wdWs, "Work Details");
 
@@ -296,9 +315,15 @@ export function generateCombinedTemplateXLSX(): Uint8Array {
     ["HOW TO USE"],
     ["1. Fill in the 'Work Orders' sheet first (starting from row 2)."],
     ["2. Fill in the 'Work Details' sheet next (starting from row 2)."],
-    ["3. vessel_name must match an existing vessel exactly (case-insensitive)."],
-    ["4. work_order_number in 'Work Details' must match a shipyard_wo_number in 'Work Orders' sheet OR an existing WO in the system."],
-    ["5. kapro_name, location, and work_scope must match existing records (case-insensitive). Leave kapro_name blank if not applicable."],
+    [
+      "3. vessel_name must match an existing vessel exactly (case-insensitive).",
+    ],
+    [
+      "4. work_order_number in 'Work Details' must match a shipyard_wo_number in 'Work Orders' sheet OR an existing WO in the system.",
+    ],
+    [
+      "5. kapro_name, location, and work_scope must match existing records (case-insensitive). Leave kapro_name blank if not applicable.",
+    ],
     ["6. Dates: YYYY-MM-DD format (e.g. 2024-06-15)."],
     ["7. is_additional_wo / is_additional_wo_details: enter 'yes' or 'no'."],
     [""],
@@ -310,7 +335,10 @@ export function generateCombinedTemplateXLSX(): Uint8Array {
     ["customer_wo_date", "Optional — YYYY-MM-DD"],
     ["is_additional_wo", "yes or no"],
     ["kapro_name", "Optional — must match existing Kapro record"],
-    ["work_location", "Optional — city of the work (e.g. Samarinda, Balikpapan)"],
+    [
+      "work_location",
+      "Optional — city of the work (e.g. Samarinda, Balikpapan)",
+    ],
     ["work_type", "Optional free text (e.g. Repair, Maintenance)"],
     [""],
     ["WORK DETAILS COLUMNS"],
@@ -739,10 +767,13 @@ export function parseWorkOrderCSV(csvText: string): ParsedWORow[] {
     for (let i = 0; i < line.length; i++) {
       const char = line[i];
       if (char === '"') {
-        if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
-        else inQuotes = !inQuotes;
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else inQuotes = !inQuotes;
       } else if (char === "," && !inQuotes) {
-        result.push(current.trim()); current = "";
+        result.push(current.trim());
+        current = "";
       } else {
         current += char;
       }
@@ -758,7 +789,9 @@ export function parseWorkOrderCSV(csvText: string): ParsedWORow[] {
   for (let i = 1; i < lines.length; i++) {
     const values = parseCSVLineFn(lines[i]);
     const obj: Record<string, string> = {};
-    headers.forEach((h, idx) => { obj[h] = values[idx] ?? ""; });
+    headers.forEach((h, idx) => {
+      obj[h] = values[idx] ?? "";
+    });
     rows.push({
       rowNumber: i + 1,
       vessel_name: obj["vessel_name"] ?? "",
@@ -778,15 +811,27 @@ export function parseWorkOrderCSV(csvText: string): ParsedWORow[] {
 // ─── WO XLSX Parser ───────────────────────────────────────────────────────────
 
 export function parseWorkOrderXLSX(buffer: ArrayBuffer): ParsedWORow[] {
-  const wb = XLSX.read(buffer, { type: "array", cellText: true, cellDates: false });
+  const wb = XLSX.read(buffer, {
+    type: "array",
+    cellText: true,
+    cellDates: false,
+  });
   const sheetName = wb.SheetNames[0];
   if (!sheetName) return [];
   const ws = wb.Sheets[sheetName];
-  const raw = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "", raw: false });
+  const raw = XLSX.utils.sheet_to_json<string[]>(ws, {
+    header: 1,
+    defval: "",
+    raw: false,
+  });
   if (raw.length < 2) return [];
 
   const norm = (h: string) =>
-    String(h).replace(/\*|\(.*?\)/g, "").trim().toLowerCase().replace(/\s+/g, "_");
+    String(h)
+      .replace(/\*|\(.*?\)/g, "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "_");
   const headers = (raw[0] as string[]).map(norm);
 
   const rows: ParsedWORow[] = [];
@@ -794,7 +839,9 @@ export function parseWorkOrderXLSX(buffer: ArrayBuffer): ParsedWORow[] {
     const values = raw[i] as string[];
     if (values.every((v) => String(v).trim() === "")) continue;
     const obj: Record<string, string> = {};
-    headers.forEach((h, idx) => { obj[h] = String(values[idx] ?? "").trim(); });
+    headers.forEach((h, idx) => {
+      obj[h] = String(values[idx] ?? "").trim();
+    });
     rows.push({
       rowNumber: i + 1,
       vessel_name: obj["vessel_name"] ?? "",
@@ -813,7 +860,9 @@ export function parseWorkOrderXLSX(buffer: ArrayBuffer): ParsedWORow[] {
 
 // ─── WO Validation ────────────────────────────────────────────────────────────
 
-export async function validateWORows(rows: ParsedWORow[]): Promise<ValidatedWORow[]> {
+export async function validateWORows(
+  rows: ParsedWORow[],
+): Promise<ValidatedWORow[]> {
   const [vesselsRes, kaprosRes] = await Promise.all([
     supabase.from("vessel").select("id, name").is("deleted_at", null),
     supabase.from("kapro").select("id, kapro_name").is("deleted_at", null),
@@ -850,7 +899,9 @@ export async function validateWORows(rows: ParsedWORow[]): Promise<ValidatedWORo
     } else if (vessel_id) {
       const batchKey = `${vessel_id}:${row.shipyard_wo_number.toLowerCase().trim()}`;
       if (batchKeys.has(batchKey)) {
-        errors.push(`Duplicate WO number in this file: "${row.shipyard_wo_number}"`);
+        errors.push(
+          `Duplicate WO number in this file: "${row.shipyard_wo_number}"`,
+        );
       } else {
         batchKeys.add(batchKey);
       }
@@ -924,10 +975,18 @@ export function parseCombinedXLSX(buffer: ArrayBuffer): {
   woRows: ParsedWORow[];
   wdRows: ParsedImportRow[];
 } {
-  const wb = XLSX.read(buffer, { type: "array", cellText: true, cellDates: false });
+  const wb = XLSX.read(buffer, {
+    type: "array",
+    cellText: true,
+    cellDates: false,
+  });
 
   const norm = (h: string) =>
-    String(h).replace(/\*|\(.*?\)/g, "").trim().toLowerCase().replace(/\s+/g, "_");
+    String(h)
+      .replace(/\*|\(.*?\)/g, "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "_");
 
   const parseSheet = <T>(
     sheetName: string,
@@ -935,7 +994,11 @@ export function parseCombinedXLSX(buffer: ArrayBuffer): {
   ): T[] => {
     const ws = wb.Sheets[sheetName];
     if (!ws) return [];
-    const raw = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "", raw: false });
+    const raw = XLSX.utils.sheet_to_json<string[]>(ws, {
+      header: 1,
+      defval: "",
+      raw: false,
+    });
     if (raw.length < 2) return [];
     const headers = (raw[0] as string[]).map(norm);
     const rows: T[] = [];
@@ -943,7 +1006,9 @@ export function parseCombinedXLSX(buffer: ArrayBuffer): {
       const values = raw[i] as string[];
       if (values.every((v) => String(v).trim() === "")) continue;
       const obj: Record<string, string> = {};
-      headers.forEach((h, idx) => { obj[h] = String(values[idx] ?? "").trim(); });
+      headers.forEach((h, idx) => {
+        obj[h] = String(values[idx] ?? "").trim();
+      });
       rows.push(buildRow(obj, i + 1));
     }
     return rows;
@@ -985,4 +1050,3 @@ export function parseCombinedXLSX(buffer: ArrayBuffer): {
 
   return { woRows, wdRows };
 }
-

@@ -329,9 +329,7 @@ function ResultCard({
             <ul className="text-xs text-red-600 list-disc list-inside space-y-1">
               {result.failedRows.map((f, i) => (
                 <li key={i}>
-                  {f.rowNumber > 0
-                    ? `Row ${f.rowNumber}: ${f.error}`
-                    : f.error}
+                  {f.rowNumber > 0 ? `Row ${f.rowNumber}: ${f.error}` : f.error}
                 </li>
               ))}
             </ul>
@@ -487,14 +485,11 @@ export default function ImportData() {
 
   // ─── Work Order upload ─────────────────────────────────────────────────────
 
-  const handleWOFileChange = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handleWOFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const isCSV = file.name.endsWith(".csv");
-    const isXLSX =
-      file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
+    const isXLSX = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
     if (!isCSV && !isXLSX) {
       setWoParseError(
         "Please upload a CSV (.csv) or Excel (.xlsx / .xls) file",
@@ -517,9 +512,7 @@ export default function ImportData() {
             setWoRows(validatedWO);
             setWoStep("preview");
           } else {
-            setWoParseError(
-              "No work order rows found in the first sheet.",
-            );
+            setWoParseError("No work order rows found in the first sheet.");
             setWoValidating(false);
             return;
           }
@@ -597,8 +590,7 @@ export default function ImportData() {
         failedRows: [
           {
             rowNumber: 0,
-            error:
-              err instanceof Error ? err.message : "Unknown error",
+            error: err instanceof Error ? err.message : "Unknown error",
           },
         ],
       });
@@ -618,14 +610,11 @@ export default function ImportData() {
 
   // ─── Work Details upload ───────────────────────────────────────────────────
 
-  const handleWDFileChange = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handleWDFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const isCSV = file.name.endsWith(".csv");
-    const isXLSX =
-      file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
+    const isXLSX = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
     if (!isCSV && !isXLSX) {
       setWdParseError(
         "Please upload a CSV (.csv) or Excel (.xlsx / .xls) file",
@@ -695,8 +684,7 @@ export default function ImportData() {
         failedRows: [
           {
             rowNumber: 0,
-            error:
-              err instanceof Error ? err.message : "Unknown error",
+            error: err instanceof Error ? err.message : "Unknown error",
           },
         ],
       });
@@ -751,8 +739,8 @@ export default function ImportData() {
           </p>
           <p className="text-indigo-700 text-xs mt-0.5">
             Download the combined Excel template (3 sheets). Fill in the Work
-            Orders and Work Details sheets, then upload in the Work Orders tab
-            — both will be validated automatically.
+            Orders and Work Details sheets, then upload in the Work Orders tab —
+            both will be validated automatically.
           </p>
         </div>
         <button
@@ -842,9 +830,7 @@ export default function ImportData() {
                           </code>
                         ))}
                       </div>
-                      <p className="font-medium mt-2 mb-1">
-                        Optional columns:
-                      </p>
+                      <p className="font-medium mt-2 mb-1">Optional columns:</p>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-1">
                         {[
                           "customer_wo_number",
@@ -943,8 +929,7 @@ export default function ImportData() {
                   >
                     {woImporting ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin" />{" "}
-                        Importing…
+                        <Loader2 className="w-4 h-4 animate-spin" /> Importing…
                       </>
                     ) : (
                       <>
@@ -1083,8 +1068,7 @@ export default function ImportData() {
                   >
                     {wdImporting ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin" />{" "}
-                        Importing…
+                        <Loader2 className="w-4 h-4 animate-spin" /> Importing…
                       </>
                     ) : (
                       <>
