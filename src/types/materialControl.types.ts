@@ -1,3 +1,14 @@
+// Material density lookup table
+export interface MaterialDensity {
+  id: number;
+  name: string;
+  density: number;
+  unit: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 // Master material list interface
 export interface MaterialList {
   id: number;
@@ -7,6 +18,8 @@ export interface MaterialList {
   material: string;
   specification: string | null;
   category: string | null;
+  material_density_id: number | null;
+  material_density?: MaterialDensity | null;
 }
 
 // Material control interface (actual usage)
@@ -16,8 +29,13 @@ export interface MaterialControl {
   updated_at: string;
   deleted_at: string | null;
   material_id: number;
-  size: string | null;
+  material_density_id: number | null;
+  length: number | null;
+  width: number | null;
+  thickness: number | null;
+  density: number | null;
   amount: number;
+  total_amount: number | null;
   uom: string;
   work_details_id: number;
   bastp_id: number;
@@ -26,6 +44,7 @@ export interface MaterialControl {
 // Material control with related data
 export interface MaterialControlWithDetails extends MaterialControl {
   material_list?: MaterialList;
+  material_density?: MaterialDensity | null;
   work_details?: {
     id: number;
     description: string;
@@ -45,7 +64,12 @@ export interface MaterialControlWithDetails extends MaterialControl {
 // Form data for creating/editing material control
 export interface MaterialControlFormData {
   material_id: number;
-  size: string;
+  material_density_id: number;
+  length: number;
+  width: number;
+  thickness: number;
+  density: number;
   amount: number;
+  total_amount: number;
   uom: string;
 }

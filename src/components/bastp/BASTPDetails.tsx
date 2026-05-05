@@ -98,8 +98,12 @@ export default function BASTPDetails() {
         material_control (
           id,
           material_id,
-          size,
+          length,
+          width,
+          thickness,
+          density,
           amount,
+          total_amount,
           uom,
           deleted_at,
           material_list:material_id (
@@ -107,6 +111,12 @@ export default function BASTPDetails() {
             material,
             specification,
             category
+          ),
+          material_density:material_density_id (
+            id,
+            name,
+            density,
+            unit
           )
         )
       )
@@ -682,11 +692,23 @@ export default function BASTPDetails() {
                                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
                                         Specification
                                       </th>
-                                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
-                                        Size
+                                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-700">
+                                        Length
+                                      </th>
+                                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-700">
+                                        Width
+                                      </th>
+                                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-700">
+                                        Thickness
+                                      </th>
+                                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-700">
+                                        Density
                                       </th>
                                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-700">
                                         Amount
+                                      </th>
+                                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-700">
+                                        Total
                                       </th>
                                     </tr>
                                   </thead>
@@ -704,11 +726,34 @@ export default function BASTPDetails() {
                                           {material.material_list
                                             ?.specification || "-"}
                                         </td>
-                                        <td className="px-3 py-2 text-xs text-gray-700">
-                                          {material.size || "-"}
+                                        <td className="px-3 py-2 text-xs text-right text-gray-700">
+                                          {material.length ?? "-"}
+                                        </td>
+                                        <td className="px-3 py-2 text-xs text-right text-gray-700">
+                                          {material.width ?? "-"}
+                                        </td>
+                                        <td className="px-3 py-2 text-xs text-right text-gray-700">
+                                          {material.thickness ?? "-"}
+                                        </td>
+                                        <td className="px-3 py-2 text-xs text-right text-gray-700">
+                                          {material.material_density?.name ? (
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 mr-1">
+                                              {material.material_density.name}
+                                            </span>
+                                          ) : null}
+                                          {material.density ?? "-"}
                                         </td>
                                         <td className="px-3 py-2 text-xs text-right font-semibold text-blue-700">
                                           {material.amount} {material.uom}
+                                        </td>
+                                        <td className="px-3 py-2 text-xs text-right font-semibold text-blue-700">
+                                          {material.total_amount != null
+                                            ? Number(
+                                                material.total_amount.toFixed(
+                                                  4,
+                                                ),
+                                              ).toLocaleString()
+                                            : "-"}
                                         </td>
                                       </tr>
                                     ))}

@@ -5,6 +5,7 @@ import { ActivityLogService } from "../../services/activityLogService";
 import type {
   MaterialControlWithDetails,
   MaterialList,
+  MaterialDensity,
 } from "../../types/materialControl.types";
 import {
   Package,
@@ -18,6 +19,7 @@ import {
   Loader,
   Search,
   Minus,
+  ChevronDown,
 } from "lucide-react";
 
 interface MaterialControlProps {
@@ -31,10 +33,41 @@ interface MaterialEntry {
   tempId: string;
   material_id: number;
   materialSearchTerm: string;
-  size: string;
+  material_density_id: number;
+  length: number;
+  width: number;
+  thickness: number;
+  density: number;
   amount: number;
+  total_amount: number;
   uom: string;
 }
+
+const UOM_OPTIONS: { value: string; label: string; description: string }[] = [
+  { value: "m", label: "m", description: "Meter (length)" },
+  { value: "kg", label: "kg", description: "Kilogram (mass)" },
+  { value: "pcs", label: "pcs", description: "Pieces (count)" },
+];
+
+// Each dimension is in millimeters; multiply by 0.001 to convert to meters.
+// If a dimension is missing (0 or falsy), it's skipped (treated as 1) so the
+// material can have 1, 2, or 3 dimensions and amount is still applied.
+const DIM_FACTOR = 0.001;
+
+const calcTotal = (
+  length: number,
+  width: number,
+  thickness: number,
+  density: number,
+  amount: number,
+) => {
+  const l = length > 0 ? length * DIM_FACTOR : 1;
+  const w = width > 0 ? width * DIM_FACTOR : 1;
+  const t = thickness > 0 ? thickness * DIM_FACTOR : 1;
+  const d = density > 0 ? density : 1;
+  const a = amount > 0 ? amount : 0;
+  return l * w * t * d * a;
+};
 
 export default function MaterialControl({
   bastpId,
@@ -45,6 +78,9 @@ export default function MaterialControl({
   const { isReadOnly } = useAuth();
   const [materials, setMaterials] = useState<MaterialControlWithDetails[]>([]);
   const [materialLists, setMaterialLists] = useState<MaterialList[]>([]);
+  const [materialDensities, setMaterialDensities] = useState<MaterialDensity[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -56,6 +92,16 @@ export default function MaterialControl({
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
   const materialDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Density dropdown state (batch form)
+  const [densityOpenId, setDensityOpenId] = useState<string | null>(null);
+  const [densitySearchTerms, setDensitySearchTerms] = useState<
+    Record<string, string>
+  >({});
+
+  // Density dropdown state (edit form)
+  const [editDensityOpen, setEditDensityOpen] = useState(false);
+  const [editDensitySearch, setEditDensitySearch] = useState("");
+
   // Category display
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
 
@@ -63,8 +109,13 @@ export default function MaterialControl({
   const [editFormData, setEditFormData] = useState({
     material_id: 0,
     materialSearchTerm: "",
-    size: "",
+    material_density_id: 0,
+    length: 0,
+    width: 0,
+    thickness: 0,
+    density: 0,
     amount: 0,
+    total_amount: 0,
     uom: "",
   });
 
@@ -85,6 +136,7 @@ export default function MaterialControl({
 
   useEffect(() => {
     fetchMaterialLists();
+    fetchMaterialDensities();
     fetchMaterials();
   }, [workDetailsId, bastpId]);
 
@@ -92,7 +144,9 @@ export default function MaterialControl({
     try {
       const { data, error: fetchError } = await supabase
         .from("material_lists")
-        .select("*")
+        .select(
+          "*, material_density:material_density_id(id, name, density, unit)",
+        )
         .is("deleted_at", null)
         .order("category", { ascending: true })
         .order("material", { ascending: true });
@@ -111,6 +165,22 @@ export default function MaterialControl({
     }
   };
 
+  const fetchMaterialDensities = async () => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from("material_densities")
+        .select("*")
+        .is("deleted_at", null)
+        .order("name", { ascending: true });
+
+      if (fetchError) throw fetchError;
+
+      setMaterialDensities(data || []);
+    } catch (err) {
+      console.error("Error fetching material densities:", err);
+    }
+  };
+
   const fetchMaterials = async () => {
     try {
       setLoading(true);
@@ -125,7 +195,14 @@ export default function MaterialControl({
             id,
             material,
             specification,
-            category
+            category,
+            material_density_id
+          ),
+          material_density:material_density_id (
+            id,
+            name,
+            density,
+            unit
           ),
           work_details:work_details_id (
             id,
@@ -157,8 +234,13 @@ export default function MaterialControl({
       tempId: `temp-${Date.now()}-${Math.random()}`,
       material_id: 0,
       materialSearchTerm: "",
-      size: "",
+      material_density_id: 0,
+      length: 0,
+      width: 0,
+      thickness: 0,
+      density: 0,
       amount: 0,
+      total_amount: 0,
       uom: "",
     };
     setMaterialEntries([...materialEntries, newEntry]);
@@ -178,10 +260,83 @@ export default function MaterialControl({
     value: any,
   ) => {
     setMaterialEntries(
-      materialEntries.map((entry) =>
-        entry.tempId === tempId ? { ...entry, [field]: value } : entry,
-      ),
+      materialEntries.map((entry) => {
+        if (entry.tempId !== tempId) return entry;
+        const updated = { ...entry, [field]: value };
+        if (
+          ["length", "width", "thickness", "density", "amount"].includes(
+            field as string,
+          )
+        ) {
+          updated.total_amount = calcTotal(
+            updated.length,
+            updated.width,
+            updated.thickness,
+            updated.density,
+            updated.amount,
+          );
+        }
+        return updated;
+      }),
     );
+  };
+
+  const handleEditCalcChange = (field: string, value: number) => {
+    setEditFormData((prev) => {
+      const updated = { ...prev, [field]: value };
+      updated.total_amount = calcTotal(
+        updated.length,
+        updated.width,
+        updated.thickness,
+        updated.density,
+        updated.amount,
+      );
+      return updated;
+    });
+  };
+
+  const handleDensityTypeChangeForEntry = (
+    tempId: string,
+    densityId: number,
+  ) => {
+    const selected = materialDensities.find((d) => d.id === densityId);
+    setMaterialEntries(
+      materialEntries.map((entry) => {
+        if (entry.tempId !== tempId) return entry;
+        const updated = {
+          ...entry,
+          material_density_id: densityId,
+          density: selected?.density ?? entry.density,
+        };
+        updated.total_amount = calcTotal(
+          updated.length,
+          updated.width,
+          updated.thickness,
+          updated.density,
+          updated.amount,
+        );
+        return updated;
+      }),
+    );
+  };
+
+  const handleEditDensityTypeChange = (densityId: number) => {
+    const selected = materialDensities.find((d) => d.id === densityId);
+    setEditFormData((prev) => {
+      const updated = {
+        ...prev,
+        material_density_id: densityId,
+        density: selected?.density ?? prev.density,
+      };
+      updated.total_amount = calcTotal(
+        updated.length,
+        updated.width,
+        updated.thickness,
+        updated.density,
+        updated.amount,
+      );
+      return updated;
+    });
   };
 
   // Handle material selection for a specific entry
@@ -189,32 +344,34 @@ export default function MaterialControl({
     tempId: string,
     material: MaterialList,
   ) => {
-    console.log("=== Material Selected ===");
-    console.log("TempID:", tempId);
-    console.log("Material:", material);
-    console.log("Material ID:", material.id);
-
     const displayText = material.specification
       ? `${material.material} ${material.specification}`
       : material.material;
 
-    console.log("Display Text:", displayText);
+    const densityId = material.material_density_id || 0;
+    const densityVal = material.material_density?.density || 0;
 
-    // Update both fields in a single operation to avoid state race condition
     setMaterialEntries(
-      materialEntries.map((entry) =>
-        entry.tempId === tempId
-          ? {
-              ...entry,
-              material_id: material.id,
-              materialSearchTerm: displayText,
-            }
-          : entry,
-      ),
+      materialEntries.map((entry) => {
+        if (entry.tempId !== tempId) return entry;
+        const updated = {
+          ...entry,
+          material_id: material.id,
+          materialSearchTerm: displayText,
+          material_density_id: densityId,
+          density: densityVal,
+        };
+        updated.total_amount = calcTotal(
+          updated.length,
+          updated.width,
+          updated.thickness,
+          updated.density,
+          updated.amount,
+        );
+        return updated;
+      }),
     );
     setActiveDropdownId(null);
-
-    console.log("Material selection complete");
   };
 
   // Edit mode handlers
@@ -227,11 +384,25 @@ export default function MaterialControl({
     const displayText = material.specification
       ? `${material.material} ${material.specification}`
       : material.material;
-    setEditFormData({
-      ...editFormData,
-      material_id: material.id,
-      materialSearchTerm: displayText,
-      uom: editFormData.uom || "",
+    const densityId = material.material_density_id || 0;
+    const densityVal = material.material_density?.density || 0;
+    setEditFormData((prev) => {
+      const updated = {
+        ...prev,
+        material_id: material.id,
+        materialSearchTerm: displayText,
+        material_density_id: densityId,
+        density: densityVal,
+        uom: prev.uom || "",
+      };
+      updated.total_amount = calcTotal(
+        updated.length,
+        updated.width,
+        updated.thickness,
+        updated.density,
+        updated.amount,
+      );
+      return updated;
     });
     setActiveDropdownId(null);
   };
@@ -304,8 +475,13 @@ export default function MaterialControl({
           .from("material_control")
           .update({
             material_id: editFormData.material_id,
-            size: editFormData.size.trim() || null,
+            material_density_id: editFormData.material_density_id || null,
+            length: editFormData.length || null,
+            width: editFormData.width || null,
+            thickness: editFormData.thickness || null,
+            density: editFormData.density || null,
             amount: editFormData.amount,
+            total_amount: editFormData.total_amount || null,
             uom: editFormData.uom.trim(),
             updated_at: new Date().toISOString(),
           })
@@ -330,8 +506,13 @@ export default function MaterialControl({
         // Create multiple materials
         const materialsToInsert = materialEntries.map((entry) => ({
           material_id: entry.material_id,
-          size: entry.size.trim() || null,
+          material_density_id: entry.material_density_id || null,
+          length: entry.length || null,
+          width: entry.width || null,
+          thickness: entry.thickness || null,
+          density: entry.density || null,
           amount: entry.amount,
+          total_amount: entry.total_amount || null,
           uom: entry.uom.trim(),
           work_details_id: workDetailsId,
           bastp_id: bastpId,
@@ -383,8 +564,13 @@ export default function MaterialControl({
     setEditFormData({
       material_id: material.material_id,
       materialSearchTerm: displayText,
-      size: material.size || "",
+      material_density_id: material.material_density_id || 0,
+      length: material.length || 0,
+      width: material.width || 0,
+      thickness: material.thickness || 0,
+      density: material.density || 0,
       amount: material.amount,
+      total_amount: material.total_amount || 0,
       uom: material.uom,
     });
     setMaterialEntries([]); // Clear batch entries when editing
@@ -438,8 +624,13 @@ export default function MaterialControl({
     setEditFormData({
       material_id: 0,
       materialSearchTerm: "",
-      size: "",
+      material_density_id: 0,
+      length: 0,
+      width: 0,
+      thickness: 0,
+      density: 0,
       amount: 0,
+      total_amount: 0,
       uom: "",
     });
     setMaterialEntries([]);
@@ -708,26 +899,262 @@ export default function MaterialControl({
                           )}
                       </div>
 
-                      {/* Size, Amount, UOM */}
-                      <div className="grid grid-cols-3 gap-3">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Size
-                          </label>
-                          <input
-                            type="text"
-                            value={entry.size}
-                            onChange={(e) =>
-                              updateMaterialEntry(
-                                entry.tempId,
-                                "size",
-                                e.target.value,
+                      {/* Material Density Type */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Material Density Type
+                          {entry.material_density_id > 0 && (
+                            <span className="ml-2 text-xs text-green-600 font-normal">
+                              ✓ Auto-filled
+                            </span>
+                          )}
+                        </label>
+                        <div className="relative">
+                          {densityOpenId === entry.tempId && (
+                            <div
+                              className="fixed inset-0 z-10"
+                              onClick={() => setDensityOpenId(null)}
+                            />
+                          )}
+                          {/* Trigger */}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDensityOpenId(
+                                densityOpenId === entry.tempId
+                                  ? null
+                                  : entry.tempId,
                               )
                             }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                            placeholder="e.g., 10mm"
-                          />
+                            className="w-full flex items-center justify-between px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                          >
+                            {entry.material_density_id > 0 ? (
+                              (() => {
+                                const sel = materialDensities.find(
+                                  (d) => d.id === entry.material_density_id,
+                                );
+                                return sel ? (
+                                  <span className="flex items-center gap-2 min-w-0">
+                                    <span className="font-medium text-gray-900 truncate">
+                                      {sel.name}
+                                    </span>
+                                    <span className="text-gray-400 flex-shrink-0 text-xs">
+                                      {sel.density} {sel.unit}
+                                    </span>
+                                  </span>
+                                ) : null;
+                              })()
+                            ) : (
+                              <span className="text-gray-400">
+                                Select density type...
+                              </span>
+                            )}
+                            <ChevronDown
+                              className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${
+                                densityOpenId === entry.tempId
+                                  ? "rotate-180"
+                                  : ""
+                              }`}
+                            />
+                          </button>
+                          {/* Dropdown panel */}
+                          {densityOpenId === entry.tempId && (
+                            <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
+                              <div className="p-2 border-b border-gray-100">
+                                <div className="relative">
+                                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                                  <input
+                                    type="text"
+                                    autoFocus
+                                    value={
+                                      densitySearchTerms[entry.tempId] ?? ""
+                                    }
+                                    onChange={(e) =>
+                                      setDensitySearchTerms((prev) => ({
+                                        ...prev,
+                                        [entry.tempId]: e.target.value,
+                                      }))
+                                    }
+                                    placeholder="Search density..."
+                                    className="w-full pl-7 pr-3 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+                              <div className="max-h-48 overflow-y-auto">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleDensityTypeChangeForEntry(
+                                      entry.tempId,
+                                      0,
+                                    );
+                                    setDensityOpenId(null);
+                                  }}
+                                  className={`w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-gray-50 ${
+                                    !entry.material_density_id
+                                      ? "bg-blue-50 text-blue-700"
+                                      : "text-gray-700"
+                                  }`}
+                                >
+                                  <span className="font-medium">None</span>
+                                  <span className="text-xs text-gray-400">
+                                    Manual entry
+                                  </span>
+                                </button>
+                                {materialDensities
+                                  .filter((d) =>
+                                    d.name
+                                      .toLowerCase()
+                                      .includes(
+                                        (
+                                          densitySearchTerms[entry.tempId] ?? ""
+                                        ).toLowerCase(),
+                                      ),
+                                  )
+                                  .map((d) => (
+                                    <button
+                                      key={d.id}
+                                      type="button"
+                                      onClick={() => {
+                                        handleDensityTypeChangeForEntry(
+                                          entry.tempId,
+                                          d.id,
+                                        );
+                                        setDensityOpenId(null);
+                                      }}
+                                      className={`w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-gray-50 ${
+                                        entry.material_density_id === d.id
+                                          ? "bg-blue-50 text-blue-700"
+                                          : "text-gray-700"
+                                      }`}
+                                    >
+                                      <span className="font-medium">
+                                        {d.name}
+                                      </span>
+                                      <span className="text-xs text-gray-400">
+                                        {d.density} {d.unit}
+                                      </span>
+                                    </button>
+                                  ))}
+                                {materialDensities.filter((d) =>
+                                  d.name
+                                    .toLowerCase()
+                                    .includes(
+                                      (
+                                        densitySearchTerms[entry.tempId] ?? ""
+                                      ).toLowerCase(),
+                                    ),
+                                ).length === 0 && (
+                                  <p className="text-center text-sm text-gray-400 py-3">
+                                    No matches
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
+                      </div>
+
+                      {/* Dimensions */}
+                      <div>
+                        <div className="text-xs text-gray-500 mb-1">
+                          Dimensions in <span className="font-medium">mm</span>{" "}
+                          (auto-converted to meters; leave blank if not
+                          applicable)
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Length (mm)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.0001"
+                              value={entry.length || ""}
+                              onChange={(e) =>
+                                updateMaterialEntry(
+                                  entry.tempId,
+                                  "length",
+                                  parseFloat(e.target.value) || 0,
+                                )
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                              placeholder="0"
+                              min="0"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Width (mm)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.0001"
+                              value={entry.width || ""}
+                              onChange={(e) =>
+                                updateMaterialEntry(
+                                  entry.tempId,
+                                  "width",
+                                  parseFloat(e.target.value) || 0,
+                                )
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                              placeholder="0"
+                              min="0"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Thickness (mm)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.0001"
+                              value={entry.thickness || ""}
+                              onChange={(e) =>
+                                updateMaterialEntry(
+                                  entry.tempId,
+                                  "thickness",
+                                  parseFloat(e.target.value) || 0,
+                                )
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                              placeholder="0"
+                              min="0"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Density (separate row, different unit) */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Density (g/cm³)
+                          {entry.material_density_id > 0 && (
+                            <span className="ml-1 text-xs text-amber-600 font-normal">
+                              override
+                            </span>
+                          )}
+                        </label>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={entry.density || ""}
+                          onChange={(e) =>
+                            updateMaterialEntry(
+                              entry.tempId,
+                              "density",
+                              parseFloat(e.target.value) || 0,
+                            )
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          placeholder="0"
+                          min="0"
+                        />
+                      </div>
+
+                      {/* Amount, UOM, Total */}
+                      <div className="grid grid-cols-3 gap-3">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Amount <span className="text-red-600">*</span>
@@ -752,18 +1179,52 @@ export default function MaterialControl({
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             UOM <span className="text-red-600">*</span>
                           </label>
+                          <div
+                            role="radiogroup"
+                            aria-label="Unit of measurement"
+                            className="inline-flex w-full rounded-lg border border-gray-300 bg-gray-50 p-1 gap-1"
+                          >
+                            {UOM_OPTIONS.map((opt) => {
+                              const active = entry.uom === opt.value;
+                              return (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={active}
+                                  title={opt.description}
+                                  onClick={() =>
+                                    updateMaterialEntry(
+                                      entry.tempId,
+                                      "uom",
+                                      opt.value,
+                                    )
+                                  }
+                                  className={`flex-1 px-2 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                                    active
+                                      ? "bg-blue-600 text-white shadow-sm"
+                                      : "text-gray-700 hover:bg-white"
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Total Amount
+                          </label>
                           <input
-                            type="text"
-                            value={entry.uom}
-                            onChange={(e) =>
-                              updateMaterialEntry(
-                                entry.tempId,
-                                "uom",
-                                e.target.value,
-                              )
+                            type="number"
+                            value={
+                              entry.total_amount
+                                ? Number(entry.total_amount.toFixed(6))
+                                : 0
                             }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                            placeholder="kg, pcs"
+                            readOnly
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 font-semibold"
                           />
                         </div>
                       </div>
@@ -836,24 +1297,227 @@ export default function MaterialControl({
                     )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Size
-                    </label>
-                    <input
-                      type="text"
-                      value={editFormData.size}
-                      onChange={(e) =>
-                        setEditFormData({
-                          ...editFormData,
-                          size: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., 10mm x 2m"
-                    />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Material Density Type
+                    {editFormData.material_density_id > 0 && (
+                      <span className="ml-2 text-xs text-green-600 font-normal">
+                        ✓ Auto-filled
+                      </span>
+                    )}
+                  </label>
+                  <div className="relative">
+                    {editDensityOpen && (
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => {
+                          setEditDensityOpen(false);
+                          setEditDensitySearch("");
+                        }}
+                      />
+                    )}
+                    {/* Trigger */}
+                    <button
+                      type="button"
+                      onClick={() => setEditDensityOpen((o) => !o)}
+                      className="w-full flex items-center justify-between px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                    >
+                      {editFormData.material_density_id > 0 ? (
+                        (() => {
+                          const sel = materialDensities.find(
+                            (d) => d.id === editFormData.material_density_id,
+                          );
+                          return sel ? (
+                            <span className="flex items-center gap-2 min-w-0">
+                              <span className="font-medium text-gray-900 truncate">
+                                {sel.name}
+                              </span>
+                              <span className="text-gray-400 flex-shrink-0 text-xs">
+                                {sel.density} {sel.unit}
+                              </span>
+                            </span>
+                          ) : null;
+                        })()
+                      ) : (
+                        <span className="text-gray-400">
+                          Select density type...
+                        </span>
+                      )}
+                      <ChevronDown
+                        className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${
+                          editDensityOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                    {/* Dropdown panel */}
+                    {editDensityOpen && (
+                      <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
+                        <div className="p-2 border-b border-gray-100">
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                            <input
+                              type="text"
+                              autoFocus
+                              value={editDensitySearch}
+                              onChange={(e) =>
+                                setEditDensitySearch(e.target.value)
+                              }
+                              placeholder="Search density..."
+                              className="w-full pl-7 pr-3 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleEditDensityTypeChange(0);
+                              setEditDensityOpen(false);
+                              setEditDensitySearch("");
+                            }}
+                            className={`w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-gray-50 ${
+                              !editFormData.material_density_id
+                                ? "bg-blue-50 text-blue-700"
+                                : "text-gray-700"
+                            }`}
+                          >
+                            <span className="font-medium">None</span>
+                            <span className="text-xs text-gray-400">
+                              Manual entry
+                            </span>
+                          </button>
+                          {materialDensities
+                            .filter((d) =>
+                              d.name
+                                .toLowerCase()
+                                .includes(editDensitySearch.toLowerCase()),
+                            )
+                            .map((d) => (
+                              <button
+                                key={d.id}
+                                type="button"
+                                onClick={() => {
+                                  handleEditDensityTypeChange(d.id);
+                                  setEditDensityOpen(false);
+                                  setEditDensitySearch("");
+                                }}
+                                className={`w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-gray-50 ${
+                                  editFormData.material_density_id === d.id
+                                    ? "bg-blue-50 text-blue-700"
+                                    : "text-gray-700"
+                                }`}
+                              >
+                                <span className="font-medium">{d.name}</span>
+                                <span className="text-xs text-gray-400">
+                                  {d.density} {d.unit}
+                                </span>
+                              </button>
+                            ))}
+                          {materialDensities.filter((d) =>
+                            d.name
+                              .toLowerCase()
+                              .includes(editDensitySearch.toLowerCase()),
+                          ).length === 0 && (
+                            <p className="text-center text-sm text-gray-400 py-3">
+                              No matches
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">
+                    Dimensions in <span className="font-medium">mm</span>{" "}
+                    (auto-converted to meters; leave blank if not applicable)
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Length (mm)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={editFormData.length || ""}
+                        onChange={(e) =>
+                          handleEditCalcChange(
+                            "length",
+                            parseFloat(e.target.value) || 0,
+                          )
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="0"
+                        min="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Width (mm)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={editFormData.width || ""}
+                        onChange={(e) =>
+                          handleEditCalcChange(
+                            "width",
+                            parseFloat(e.target.value) || 0,
+                          )
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="0"
+                        min="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Thickness (mm)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={editFormData.thickness || ""}
+                        onChange={(e) =>
+                          handleEditCalcChange(
+                            "thickness",
+                            parseFloat(e.target.value) || 0,
+                          )
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="0"
+                        min="0"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Density (g/cm³)
+                    {editFormData.material_density_id > 0 && (
+                      <span className="ml-1 text-xs text-amber-600 font-normal">
+                        override
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={editFormData.density || ""}
+                    onChange={(e) =>
+                      handleEditCalcChange(
+                        "density",
+                        parseFloat(e.target.value) || 0,
+                      )
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Amount <span className="text-red-600">*</span>
@@ -863,10 +1527,10 @@ export default function MaterialControl({
                       step="0.01"
                       value={editFormData.amount}
                       onChange={(e) =>
-                        setEditFormData({
-                          ...editFormData,
-                          amount: parseFloat(e.target.value) || 0,
-                        })
+                        handleEditCalcChange(
+                          "amount",
+                          parseFloat(e.target.value) || 0,
+                        )
                       }
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="0"
@@ -879,18 +1543,51 @@ export default function MaterialControl({
                       Unit of Measurement{" "}
                       <span className="text-red-600">*</span>
                     </label>
+                    <div
+                      role="radiogroup"
+                      aria-label="Unit of measurement"
+                      className="inline-flex w-full rounded-lg border border-gray-300 bg-gray-50 p-1 gap-1"
+                    >
+                      {UOM_OPTIONS.map((opt) => {
+                        const active = editFormData.uom === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={active}
+                            title={opt.description}
+                            onClick={() =>
+                              setEditFormData({
+                                ...editFormData,
+                                uom: opt.value,
+                              })
+                            }
+                            className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                              active
+                                ? "bg-blue-600 text-white shadow-sm"
+                                : "text-gray-700 hover:bg-white"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Total Amount
+                    </label>
                     <input
-                      type="text"
-                      value={editFormData.uom}
-                      onChange={(e) =>
-                        setEditFormData({
-                          ...editFormData,
-                          uom: e.target.value,
-                        })
+                      type="number"
+                      value={
+                        editFormData.total_amount
+                          ? Number(editFormData.total_amount.toFixed(6))
+                          : 0
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., kg, pcs, m"
-                      required
+                      readOnly
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 font-semibold"
                     />
                   </div>
                 </div>
@@ -954,11 +1651,23 @@ export default function MaterialControl({
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Specification
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Size
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Length
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Width
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Thickness
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Density
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Amount
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Total Amount
                   </th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                     UOM
@@ -992,14 +1701,51 @@ export default function MaterialControl({
                         {material.material_list?.specification || "-"}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 text-right">
                       <div className="text-sm text-gray-600">
-                        {material.size || "-"}
+                        {material.length != null ? material.length : "-"}
                       </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="text-sm text-gray-600">
+                        {material.width != null ? material.width : "-"}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="text-sm text-gray-600">
+                        {material.thickness != null ? material.thickness : "-"}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      {material.material_density ? (
+                        <div>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                            {material.material_density.name}
+                          </span>
+                          <div className="text-sm text-gray-600 mt-1">
+                            {material.density != null
+                              ? `${material.density} ${material.material_density.unit}`
+                              : "-"}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-600">
+                          {material.density != null ? material.density : "-"}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="text-sm font-semibold text-gray-900">
                         {material.amount.toLocaleString()}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="text-sm font-semibold text-blue-700">
+                        {material.total_amount != null
+                          ? Number(
+                              material.total_amount.toFixed(4),
+                            ).toLocaleString()
+                          : "-"}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
