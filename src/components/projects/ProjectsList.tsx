@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import { computeDateRange, formatDateRange } from "../../utils/deadlineUtils";
 import {
   RefreshCw,
   Plus,
@@ -11,6 +12,7 @@ import {
   FolderKanban,
   ChevronRight,
   ClipboardCheck,
+  CalendarRange,
 } from "lucide-react";
 
 interface ProjectRow {
@@ -19,7 +21,16 @@ interface ProjectRow {
   created_at: string;
   vessel: { id: number; name: string; type: string; company: string } | null;
   readiness_form: { id: number; status: string } | null;
-  work_order: { id: number }[] | null;
+  work_order:
+    | {
+        id: number;
+        is_additional_wo: boolean | null;
+        work_details: {
+          planned_start_date: string | null;
+          target_close_date: string | null;
+        }[];
+      }[]
+    | null;
 }
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
@@ -64,7 +75,11 @@ export default function ProjectsList() {
           created_at,
           vessel:vessel_id ( id, name, type, company ),
           readiness_form:readiness_form_id ( id, status ),
-          work_order ( id )
+          work_order (
+            id,
+            is_additional_wo,
+            work_details ( planned_start_date, target_close_date )
+          )
         `,
         )
         .is("deleted_at", null)
@@ -192,6 +207,10 @@ export default function ProjectsList() {
                 const statusKey = project.readiness_form?.status || "NONE";
                 const badge = STATUS_BADGE[statusKey] || STATUS_BADGE.NONE;
                 const woCount = project.work_order?.length || 0;
+                const originalWorkDetails = (project.work_order || [])
+                  .filter((wo) => !wo.is_additional_wo)
+                  .flatMap((wo) => wo.work_details);
+                const projectRange = computeDateRange(originalWorkDetails);
 
                 return (
                   <div
@@ -215,7 +234,12 @@ export default function ProjectsList() {
                       <ChevronRight className="w-5 h-5 text-blue-500 group-hover:text-blue-700 transition-colors flex-shrink-0" />
                     </div>
 
-                    <div className="flex items-center justify-between mt-4">
+                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-3">
+                      <CalendarRange className="w-3.5 h-3.5" />{" "}
+                      {formatDateRange(projectRange)}
+                    </p>
+
+                    <div className="flex items-center justify-between mt-3">
                       <span
                         className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${badge.className}`}
                       >

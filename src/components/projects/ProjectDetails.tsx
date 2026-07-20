@@ -3,6 +3,11 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import {
+  computeDateRange,
+  formatDateRange,
+  exceedsDeadline,
+} from "../../utils/deadlineUtils";
+import {
   ArrowLeft,
   FolderKanban,
   Ship,
@@ -11,6 +16,8 @@ import {
   FileText,
   CheckCircle2,
   X,
+  CalendarRange,
+  AlertTriangle,
 } from "lucide-react";
 
 interface ProjectDetail {
@@ -25,7 +32,11 @@ interface WorkOrderRow {
   shipyard_wo_number: string;
   shipyard_wo_date: string;
   is_additional_wo: boolean | null;
-  work_details: { work_progress: { progress_percentage: number; report_date: string }[] }[];
+  work_details: {
+    planned_start_date: string | null;
+    target_close_date: string | null;
+    work_progress: { progress_percentage: number; report_date: string }[];
+  }[];
 }
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
@@ -95,6 +106,8 @@ export default function ProjectDetails() {
           shipyard_wo_date,
           is_additional_wo,
           work_details (
+            planned_start_date,
+            target_close_date,
             work_progress ( progress_percentage, report_date )
           )
         `,
@@ -158,6 +171,18 @@ export default function ProjectDetails() {
     );
   }
 
+  // Project deadline comes only from ORIGINAL work orders' work details —
+  // additional work orders get their own deadline but never move this one.
+  const originalWorkOrders = workOrders.filter((wo) => !wo.is_additional_wo);
+  const projectRange = computeDateRange(
+    originalWorkOrders.flatMap((wo) => wo.work_details),
+  );
+  const additionalWorkOrdersBeyondDeadline = workOrders.filter((wo) => {
+    if (!wo.is_additional_wo) return false;
+    const woRange = computeDateRange(wo.work_details);
+    return exceedsDeadline(woRange, projectRange);
+  });
+
   const statusKey = project.readiness_form?.status || null;
   const badge = statusKey ? STATUS_BADGE[statusKey] : null;
 
@@ -204,6 +229,45 @@ export default function ProjectDetails() {
           </button>
         </div>
       )}
+
+      {/* Project timeline — from original work orders only */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <CalendarRange className="w-5 h-5 text-blue-600" /> Project Timeline
+        </h2>
+        <p className="text-sm text-gray-600 mt-1">
+          {formatDateRange(projectRange)}
+        </p>
+        <p className="text-xs text-gray-500 mt-1">
+          Based on the planned start and target close dates of this
+          project's original work order's work details. Additional work
+          orders don't move this timeline.
+        </p>
+
+        {additionalWorkOrdersBeyondDeadline.length > 0 && (
+          <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+            <div>
+              <p className="text-amber-800 text-sm font-medium">
+                {additionalWorkOrdersBeyondDeadline.length} additional work
+                order
+                {additionalWorkOrdersBeyondDeadline.length > 1 ? "s" : ""}{" "}
+                {additionalWorkOrdersBeyondDeadline.length > 1
+                  ? "extend"
+                  : "extends"}{" "}
+                beyond the project's target finish date
+              </p>
+              <p className="text-amber-700 text-sm mt-1">
+                {additionalWorkOrdersBeyondDeadline
+                  .map((wo) => wo.shipyard_wo_number)
+                  .join(", ")}{" "}
+                — the project's own deadline is unaffected, but these work
+                orders individually run later.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Readiness Form section */}
       <div className="bg-white rounded-lg shadow p-6">
@@ -256,6 +320,9 @@ export default function ProjectDetails() {
                     Type
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Deadline
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Progress
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -264,38 +331,53 @@ export default function ProjectDetails() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {workOrders.map((wo) => (
-                  <tr key={wo.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                      {wo.shipyard_wo_number}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {new Date(wo.shipyard_wo_date).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      {wo.is_additional_wo ? (
-                        <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-700">
-                          Additional
-                        </span>
-                      ) : (
-                        <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700">
-                          Original
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {overallProgress(wo)}%
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <button
-                        onClick={() => navigate(`/edit-work-order/${wo.id}`)}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        Edit
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {workOrders.map((wo) => {
+                  const woRange = computeDateRange(wo.work_details);
+                  const beyondDeadline =
+                    !!wo.is_additional_wo && exceedsDeadline(woRange, projectRange);
+
+                  return (
+                    <tr key={wo.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                        {wo.shipyard_wo_number}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {new Date(wo.shipyard_wo_date).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        {wo.is_additional_wo ? (
+                          <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                            Additional
+                          </span>
+                        ) : (
+                          <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700">
+                            Original
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        <div>{formatDateRange(woRange)}</div>
+                        {beyondDeadline && (
+                          <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
+                            <AlertTriangle className="w-3 h-3" /> Beyond
+                            project deadline
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {overallProgress(wo)}%
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <button
+                          onClick={() => navigate(`/edit-work-order/${wo.id}`)}
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
