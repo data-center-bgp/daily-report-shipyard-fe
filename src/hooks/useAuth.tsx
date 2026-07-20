@@ -107,6 +107,7 @@ const FEATURE_ACCESS = {
   ],
   exportData: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "MANAGER"],
   activityLogs: ["MASTER", "MANAGER"],
+  additionalWoApprovals: ["MASTER", "OPERATION", "MANAGER"],
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

@@ -3,7 +3,15 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase, type Vessel, type Kapro } from "../../lib/supabase";
 import { ActivityLogService } from "../../services/activityLogService";
 import { useAuth } from "../../hooks/useAuth";
-import { ArrowLeft, FileText, Plus, FolderKanban, AlertTriangle } from "lucide-react";
+import {
+  ArrowLeft,
+  FileText,
+  Plus,
+  FolderKanban,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+} from "lucide-react";
 
 interface ProjectOption {
   id: number;
@@ -38,6 +46,21 @@ export default function AddWorkOrder() {
   const [hasOriginalInProject, setHasOriginalInProject] = useState<
     boolean | null
   >(null);
+
+  // Additional-WO approval requests for the selected project
+  const [additionalWoRequests, setAdditionalWoRequests] = useState<
+    {
+      id: number;
+      status: "PENDING" | "APPROVED" | "REJECTED";
+      reason: string;
+      decision_notes: string | null;
+      work_order_id: number | null;
+    }[]
+  >([]);
+  const [loadingAdditionalWoRequests, setLoadingAdditionalWoRequests] =
+    useState(false);
+  const [requestReason, setRequestReason] = useState("");
+  const [submittingRequest, setSubmittingRequest] = useState(false);
 
   // Inline "new project" creation
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
@@ -271,6 +294,136 @@ export default function AddWorkOrder() {
     }
   }, [hasOriginalInProject, formData.is_additional_wo]);
 
+  const fetchAdditionalWoRequests = async (projectId: number) => {
+    setLoadingAdditionalWoRequests(true);
+    try {
+      const { data, error } = await supabase
+        .from("additional_wo_requests")
+        .select("id, status, reason, decision_notes, work_order_id")
+        .eq("project_id", projectId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setAdditionalWoRequests((data as any) || []);
+    } catch (err) {
+      console.error("Error fetching additional WO requests:", err);
+      setAdditionalWoRequests([]);
+    } finally {
+      setLoadingAdditionalWoRequests(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedProject) {
+      setAdditionalWoRequests([]);
+      return;
+    }
+    fetchAdditionalWoRequests(selectedProject.id);
+  }, [selectedProject]);
+
+  const unconsumedApprovedRequest = additionalWoRequests.find(
+    (r) => r.status === "APPROVED" && !r.work_order_id,
+  );
+  const latestPendingRequest = additionalWoRequests.find(
+    (r) => r.status === "PENDING",
+  );
+  // additionalWoRequests is ordered newest-first, so the first REJECTED
+  // entry found is the most recent one.
+  const latestRejectedRequest = additionalWoRequests.find(
+    (r) => r.status === "REJECTED",
+  );
+
+  const handleSubmitAdditionalWoRequest = async () => {
+    if (!selectedProject || !requestReason.trim() || !currentUser) return;
+
+    setSubmittingRequest(true);
+    setError(null);
+    try {
+      const userId = await resolveUserId();
+
+      const { data: newRequest, error: insertError } = await supabase
+        .from("additional_wo_requests")
+        .insert({
+          project_id: selectedProject.id,
+          vessel_id: selectedProject.vessel_id,
+          requested_by: userId,
+          reason: requestReason.trim(),
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      await ActivityLogService.logActivity({
+        action: "create",
+        tableName: "additional_wo_requests",
+        recordId: newRequest.id,
+        newData: newRequest,
+        description: `Requested additional work order approval for project ${selectedProject.project_name}`,
+      });
+
+      setRequestReason("");
+      await fetchAdditionalWoRequests(selectedProject.id);
+    } catch (err) {
+      console.error("Error submitting additional WO request:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to submit request",
+      );
+    } finally {
+      setSubmittingRequest(false);
+    }
+  };
+
+  // Shared with handleSubmit and handleSubmitAdditionalWoRequest — looks up
+  // (or lazily creates) the current user's profile row.
+  const resolveUserId = async (): Promise<number> => {
+    const { data: userProfile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("auth_user_id", currentUser.id)
+      .maybeSingle();
+
+    if (profileError) {
+      throw new Error(`Failed to query user profile: ${profileError.message}`);
+    }
+
+    if (userProfile) return userProfile.id;
+
+    const { data: newProfile, error: createError } = await supabase
+      .from("user_profile")
+      .insert({
+        auth_user_id: currentUser.id,
+        email: currentUser.email,
+        name:
+          currentUser.user_metadata?.full_name ||
+          currentUser.email?.split("@")[0] ||
+          "User",
+      })
+      .select("id")
+      .single();
+
+    if (createError) {
+      if (createError.code === "23505") {
+        const { data: existingProfile, error: fetchError } = await supabase
+          .from("user_profile")
+          .select("id")
+          .eq("auth_user_id", currentUser.id)
+          .single();
+        if (fetchError || !existingProfile) {
+          throw new Error("Failed to fetch existing user profile");
+        }
+        return existingProfile.id;
+      }
+      throw new Error(`Failed to create user profile: ${createError.message}`);
+    }
+
+    if (!newProfile?.id) {
+      throw new Error("Failed to create user profile - no ID returned");
+    }
+    return newProfile.id;
+  };
+
   const handleCreateProject = async () => {
     if (!newProjectVesselId || !newProjectName.trim() || !currentUser) {
       setError("Vessel and project name are required to create a new project");
@@ -281,26 +434,7 @@ export default function AddWorkOrder() {
     setError(null);
 
     try {
-      const { data: userProfile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("auth_user_id", currentUser.id)
-        .maybeSingle();
-
-      let userId = userProfile?.id;
-      if (!userId) {
-        const { data: newProfile, error: createError } = await supabase
-          .from("user_profile")
-          .insert({
-            auth_user_id: currentUser.id,
-            email: currentUser.email,
-            name: currentUser.email?.split("@")[0] || "User",
-          })
-          .select("id")
-          .single();
-        if (createError) throw createError;
-        userId = newProfile.id;
-      }
+      const userId = await resolveUserId();
 
       const { data: newProject, error: projectError } = await supabase
         .from("projects")
@@ -392,6 +526,8 @@ export default function AddWorkOrder() {
     setLoading(true);
     setError(null);
 
+    let approvedRequestIdToConsume: number | null = null;
+
     try {
       // Gate: the ORIGINAL work order for a project requires an approved
       // readiness form. Re-check fresh from the DB rather than trusting
@@ -432,70 +568,32 @@ export default function AddWorkOrder() {
           setLoading(false);
           return;
         }
-      }
 
-      const { data: userProfile, error: profileError } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("auth_user_id", currentUser.id)
-        .maybeSingle();
-
-      if (profileError) {
-        console.error("Error querying user profile:", profileError);
-        throw new Error(
-          `Failed to query user profile: ${profileError.message}`,
-        );
-      }
-
-      let userId;
-
-      if (!userProfile) {
-        const { data: newProfile, error: createError } = await supabase
-          .from("user_profile")
-          .insert({
-            auth_user_id: currentUser.id,
-            email: currentUser.email,
-            name:
-              currentUser.user_metadata?.full_name ||
-              currentUser.email?.split("@")[0] ||
-              "User",
-          })
+        // Gate: an ADDITIONAL work order also requires an Operation Head
+        // approval on file. Re-check fresh from the DB.
+        const { data: freshRequests, error: requestError } = await supabase
+          .from("additional_wo_requests")
           .select("id")
-          .single();
+          .eq("project_id", selectedProject.id)
+          .eq("status", "APPROVED")
+          .is("work_order_id", null)
+          .is("deleted_at", null)
+          .limit(1);
 
-        if (createError) {
-          console.error("Error creating user profile:", createError);
+        if (requestError) throw requestError;
 
-          if (createError.code === "23505") {
-            const { data: existingProfile, error: fetchError } = await supabase
-              .from("user_profile")
-              .select("id")
-              .eq("auth_user_id", currentUser.id)
-              .single();
-
-            if (fetchError || !existingProfile) {
-              throw new Error("Failed to fetch existing user profile");
-            }
-
-            userId = existingProfile.id;
-          } else {
-            throw new Error(
-              `Failed to create user profile: ${createError.message}`,
-            );
-          }
-        } else {
-          if (!newProfile || !newProfile.id) {
-            throw new Error("Failed to create user profile - no ID returned");
-          }
-          userId = newProfile.id;
+        if (!freshRequests || freshRequests.length === 0) {
+          setError(
+            "This additional work order needs an approved request from the Operation Head first. Submit a request below and wait for approval.",
+          );
+          setLoading(false);
+          return;
         }
-      } else {
-        userId = userProfile.id;
+
+        approvedRequestIdToConsume = freshRequests[0].id;
       }
 
-      if (!userId || typeof userId !== "number") {
-        throw new Error(`Invalid user ID: ${userId}`);
-      }
+      const userId = await resolveUserId();
 
       const submitData = {
         vessel_id: selectedProject.vessel_id,
@@ -536,6 +634,20 @@ export default function AddWorkOrder() {
         newData: data,
         description: `Created work order ${data.shipyard_wo_number}`,
       });
+
+      // Consume the approval so it can't back a second additional WO
+      if (approvedRequestIdToConsume) {
+        const { error: consumeError } = await supabase
+          .from("additional_wo_requests")
+          .update({
+            work_order_id: data.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", approvedRequestIdToConsume);
+        if (consumeError) {
+          console.error("Error consuming additional WO request:", consumeError);
+        }
+      }
 
       navigate(`/projects/${selectedProject.id}`, {
         state: { message: "Work order created successfully!" },
@@ -814,6 +926,73 @@ export default function AddWorkOrder() {
               </p>
             )}
 
+            {/* Operation Head approval for additional work orders */}
+            {selectedProject &&
+              hasOriginalInProject === true &&
+              formData.is_additional_wo &&
+              !loadingAdditionalWoRequests && (
+                <div>
+                  {unconsumedApprovedRequest ? (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex gap-3">
+                      <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                      <p className="text-green-800 text-sm">
+                        Approved by the Operation Head — you can create this
+                        additional work order.
+                      </p>
+                    </div>
+                  ) : latestPendingRequest ? (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
+                      <Clock className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                      <div>
+                        <p className="text-amber-800 text-sm font-medium">
+                          Waiting for Operation Head approval
+                        </p>
+                        <p className="text-amber-700 text-sm mt-1">
+                          Your request: "{latestPendingRequest.reason}"
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="border border-gray-300 rounded-lg p-4 space-y-3">
+                      <p className="text-sm font-medium text-gray-900">
+                        Request Operation Head approval
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        An additional work order needs an approved request
+                        before it can be created.
+                      </p>
+                      {latestRejectedRequest && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                          <p className="text-red-800 text-xs font-medium">
+                            A previous request was rejected
+                          </p>
+                          {latestRejectedRequest.decision_notes && (
+                            <p className="text-red-700 text-xs mt-1">
+                              "{latestRejectedRequest.decision_notes}"
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      <textarea
+                        value={requestReason}
+                        onChange={(e) => setRequestReason(e.target.value)}
+                        rows={2}
+                        placeholder="Why is this additional work order needed?"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSubmitAdditionalWoRequest}
+                        disabled={submittingRequest || !requestReason.trim()}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {submittingRequest ? "Submitting..." : "Submit Request"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
             {showReadinessWarning && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
                 <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
@@ -1002,7 +1181,12 @@ export default function AddWorkOrder() {
               </button>
               <button
                 type="submit"
-                disabled={loading || vessels.length === 0 || !currentUser}
+                disabled={
+                  loading ||
+                  vessels.length === 0 ||
+                  !currentUser ||
+                  (formData.is_additional_wo && !unconsumedApprovedRequest)
+                }
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {loading ? (

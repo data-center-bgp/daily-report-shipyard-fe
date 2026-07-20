@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
+  ClipboardList,
 } from "lucide-react";
 
 interface LayoutProps {
@@ -106,6 +107,13 @@ export default function Layout({ children, onLogout }: LayoutProps) {
         location.pathname.includes("/add-progress") ||
         location.pathname.includes("/edit-progress"),
       show: canAccess("progress"),
+    },
+    {
+      name: "Additional WO Approvals",
+      href: "/additional-wo-approvals",
+      icon: ClipboardList,
+      current: location.pathname === "/additional-wo-approvals",
+      show: canAccess("additionalWoApprovals"),
     },
     {
       name: "Work Verification",

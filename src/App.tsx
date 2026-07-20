@@ -11,6 +11,7 @@ import { Login } from "./components/auth";
 import { Dashboard } from "./components/dashboard";
 import { ProjectsList, AddProject, ProjectDetails } from "./components/projects";
 import { ReadinessForm } from "./components/readiness";
+import { AdditionalWoApprovals } from "./components/additionalWoApprovals";
 import {
   WorkOrders,
   AddWorkOrder,
@@ -79,6 +80,10 @@ function AppRoutes() {
         <Route
           path="/projects/:projectId/readiness"
           element={<ReadinessForm />}
+        />
+        <Route
+          path="/additional-wo-approvals"
+          element={<AdditionalWoApprovals />}
         />
 
         {/* Work Orders */}
