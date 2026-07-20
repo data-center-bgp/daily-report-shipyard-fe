@@ -232,9 +232,13 @@ export default function AddWorkProgress({
 
       if (woError) throw woError;
 
-      // Get unique vessel IDs
+      // Get unique vessel IDs (some work orders may have no vessel assigned)
       const vesselIds = [
-        ...new Set(workOrderData?.map((wo) => wo.vessel_id) || []),
+        ...new Set(
+          (workOrderData || [])
+            .map((wo) => wo.vessel_id)
+            .filter((id): id is number => id !== null && id !== undefined),
+        ),
       ];
 
       if (vesselIds.length === 0) {
@@ -758,9 +762,9 @@ export default function AddWorkProgress({
     }
 
     return (
-      wd.description.toLowerCase().includes(searchLower) ||
+      (wd.description || "").toLowerCase().includes(searchLower) ||
       locationMatch ||
-      wd.pic.toLowerCase().includes(searchLower)
+      (wd.pic || "").toLowerCase().includes(searchLower)
     );
   });
 
