@@ -9,6 +9,8 @@ import { AuthProvider, useAuth } from "./hooks/useAuth";
 import Layout from "./components/common/Layout";
 import { Login } from "./components/auth";
 import { Dashboard } from "./components/dashboard";
+import { ProjectsList, AddProject, ProjectDetails } from "./components/projects";
+import { ReadinessForm } from "./components/readiness";
 import {
   WorkOrders,
   AddWorkOrder,
@@ -69,6 +71,15 @@ function AppRoutes() {
         {/* Dashboard */}
         <Route path="/" element={<Dashboard />} />
         <Route path="/dashboard" element={<Dashboard />} />
+
+        {/* Projects */}
+        <Route path="/projects" element={<ProjectsList />} />
+        <Route path="/projects/add" element={<AddProject />} />
+        <Route path="/projects/:projectId" element={<ProjectDetails />} />
+        <Route
+          path="/projects/:projectId/readiness"
+          element={<ReadinessForm />}
+        />
 
         {/* Work Orders */}
         <Route path="/work-orders" element={<WorkOrders />} />

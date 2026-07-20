@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import {
   LayoutDashboard,
+  FolderKanban,
   FileText,
   Wrench,
   TrendingUp,
@@ -64,6 +65,13 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       icon: LayoutDashboard,
       current: location.pathname === "/",
       show: true,
+    },
+    {
+      name: "Projects",
+      href: "/projects",
+      icon: FolderKanban,
+      current: location.pathname.startsWith("/projects"),
+      show: canAccess("workOrders"),
     },
     {
       name: "Work Orders",

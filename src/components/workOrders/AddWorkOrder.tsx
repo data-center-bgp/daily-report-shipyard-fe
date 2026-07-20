@@ -3,7 +3,15 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase, type Vessel, type Kapro } from "../../lib/supabase";
 import { ActivityLogService } from "../../services/activityLogService";
 import { useAuth } from "../../hooks/useAuth";
-import { ArrowLeft, FileText, Plus } from "lucide-react";
+import { ArrowLeft, FileText, Plus, FolderKanban, AlertTriangle } from "lucide-react";
+
+interface ProjectOption {
+  id: number;
+  project_name: string;
+  vessel_id: number;
+  vessel: { id: number; name: string; type: string; company: string } | null;
+  readiness_form: { status: string } | null;
+}
 
 export default function AddWorkOrder() {
   const navigate = useNavigate();
@@ -11,19 +19,41 @@ export default function AddWorkOrder() {
   const { isReadOnly } = useAuth();
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [kapros, setKapros] = useState<Kapro[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [loadingVessels, setLoadingVessels] = useState(true);
   const [loadingKapros, setLoadingKapros] = useState(true);
+  const [loadingProjects, setLoadingProjects] = useState(true);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [currentUser, setCurrentUser] = useState<any>(null);
 
-  // Search state for vessel dropdown
-  const [vesselSearchTerm, setVesselSearchTerm] = useState("");
-  const [showVesselDropdown, setShowVesselDropdown] = useState(false);
-  const vesselDropdownRef = useRef<HTMLDivElement>(null);
+  // Project picker
+  const [projectSearchTerm, setProjectSearchTerm] = useState("");
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const projectDropdownRef = useRef<HTMLDivElement>(null);
+  const [selectedProject, setSelectedProject] = useState<ProjectOption | null>(
+    null,
+  );
+  // Whether the selected project already has an original (non-additional)
+  // work order — an additional WO can't exist without one. null = still checking.
+  const [hasOriginalInProject, setHasOriginalInProject] = useState<
+    boolean | null
+  >(null);
+
+  // Inline "new project" creation
+  const [showNewProjectForm, setShowNewProjectForm] = useState(false);
+  const [newProjectVesselId, setNewProjectVesselId] = useState("");
+  const [newProjectName, setNewProjectName] = useState("");
+  // Tracks whether the user has typed their own project name, so vessel
+  // changes stop overwriting it once they have.
+  const [newProjectNameManuallyEdited, setNewProjectNameManuallyEdited] =
+    useState(false);
+  const [newProjectVesselSearch, setNewProjectVesselSearch] = useState("");
+  const [showNewProjectVesselDropdown, setShowNewProjectVesselDropdown] =
+    useState(false);
+  const [creatingProject, setCreatingProject] = useState(false);
 
   const [formData, setFormData] = useState({
     // Required fields
-    vessel_id: "",
     shipyard_wo_number: "",
     shipyard_wo_date: "",
 
@@ -39,32 +69,55 @@ export default function AddWorkOrder() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Check if there's a preselected vessel from the vessel page
+  const fetchProjects = async () => {
+    try {
+      setLoadingProjects(true);
+      const { data, error } = await supabase
+        .from("projects")
+        .select(
+          `
+          id, project_name, vessel_id,
+          vessel:vessel_id ( id, name, type, company ),
+          readiness_form:readiness_form_id ( status )
+        `,
+        )
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setProjects((data as any) || []);
+    } catch (err) {
+      console.error("Error fetching projects:", err);
+      setError("Failed to load projects. Please refresh the page.");
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  // Preselect project from navigation state (e.g. coming from Project Details)
   useEffect(() => {
-    if (location.state?.preselectedVesselId) {
-      const preselectedVessel = vessels.find(
-        (v) => v.id === location.state.preselectedVesselId,
+    if (location.state?.preselectedProjectId && projects.length > 0) {
+      const preselected = projects.find(
+        (p) => p.id === location.state.preselectedProjectId,
       );
-      if (preselectedVessel) {
-        setFormData((prev) => ({
-          ...prev,
-          vessel_id: location.state.preselectedVesselId.toString(),
-        }));
-        setVesselSearchTerm(
-          `${preselectedVessel.name} - ${preselectedVessel.type} (${preselectedVessel.company})`,
+      if (preselected) {
+        setSelectedProject(preselected);
+        setProjectSearchTerm(
+          `${preselected.project_name} — ${preselected.vessel?.name || ""}`,
         );
       }
     }
-  }, [location.state, vessels]);
+  }, [location.state, projects]);
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
-        vesselDropdownRef.current &&
-        !vesselDropdownRef.current.contains(event.target as Node)
+        projectDropdownRef.current &&
+        !projectDropdownRef.current.contains(event.target as Node)
       ) {
-        setShowVesselDropdown(false);
+        setShowProjectDropdown(false);
+        setShowNewProjectVesselDropdown(false);
       }
     };
 
@@ -100,7 +153,7 @@ export default function AddWorkOrder() {
     getCurrentUser();
   }, []);
 
-  // Fetch vessels on component mount
+  // Fetch vessels, kapros, projects on mount
   useEffect(() => {
     const fetchVessels = async () => {
       try {
@@ -112,7 +165,6 @@ export default function AddWorkOrder() {
           .order("name");
 
         if (error) throw error;
-
         setVessels(data || []);
       } catch (err) {
         console.error("Error fetching vessels:", err);
@@ -122,11 +174,6 @@ export default function AddWorkOrder() {
       }
     };
 
-    fetchVessels();
-  }, []);
-
-  // Fetch kapros on component mount
-  useEffect(() => {
     const fetchKapros = async () => {
       try {
         setLoadingKapros(true);
@@ -137,7 +184,6 @@ export default function AddWorkOrder() {
           .order("kapro_name");
 
         if (error) throw error;
-
         setKapros(data || []);
       } catch (err) {
         console.error("Error fetching kapros:", err);
@@ -147,12 +193,22 @@ export default function AddWorkOrder() {
       }
     };
 
+    fetchVessels();
     fetchKapros();
+    fetchProjects();
   }, []);
 
-  // Filter vessels based on search term
-  const filteredVessels = vessels.filter((vessel) => {
-    const searchLower = vesselSearchTerm.toLowerCase();
+  const filteredProjects = projects.filter((project) => {
+    const searchLower = projectSearchTerm.toLowerCase();
+    return (
+      project.project_name?.toLowerCase().includes(searchLower) ||
+      project.vessel?.name?.toLowerCase().includes(searchLower) ||
+      project.vessel?.company?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  const filteredNewProjectVessels = vessels.filter((vessel) => {
+    const searchLower = newProjectVesselSearch.toLowerCase();
     return (
       vessel.name?.toLowerCase().includes(searchLower) ||
       vessel.type?.toLowerCase().includes(searchLower) ||
@@ -160,19 +216,127 @@ export default function AddWorkOrder() {
     );
   });
 
-  const handleVesselSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setVesselSearchTerm(e.target.value);
-    setShowVesselDropdown(true);
-    // Clear selection when typing
-    if (formData.vessel_id) {
-      setFormData((prev) => ({ ...prev, vessel_id: "" }));
+  const handleProjectSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setProjectSearchTerm(e.target.value);
+    setShowProjectDropdown(true);
+    if (selectedProject) {
+      setSelectedProject(null);
     }
   };
 
-  const handleVesselSelect = (vessel: Vessel) => {
-    setFormData((prev) => ({ ...prev, vessel_id: vessel.id.toString() }));
-    setVesselSearchTerm(`${vessel.name} - ${vessel.type} (${vessel.company})`);
-    setShowVesselDropdown(false);
+  const handleProjectSelect = (project: ProjectOption) => {
+    setSelectedProject(project);
+    setProjectSearchTerm(`${project.project_name} — ${project.vessel?.name || ""}`);
+    setShowProjectDropdown(false);
+  };
+
+  // Check whether the selected project already has an original WO, so the
+  // "Additional Work Order" checkbox can be disabled when there's nothing
+  // for it to be additional to yet.
+  useEffect(() => {
+    if (!selectedProject) {
+      setHasOriginalInProject(null);
+      return;
+    }
+
+    let cancelled = false;
+    setHasOriginalInProject(null);
+
+    supabase
+      .from("work_order")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", selectedProject.id)
+      .eq("is_additional_wo", false)
+      .is("deleted_at", null)
+      .then(({ count, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error("Error checking for original work order:", error);
+          setHasOriginalInProject(false);
+          return;
+        }
+        setHasOriginalInProject((count || 0) > 0);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProject]);
+
+  // If the checkbox was checked before the project had an original WO
+  // confirmed, uncheck it once we learn there isn't one.
+  useEffect(() => {
+    if (hasOriginalInProject === false && formData.is_additional_wo) {
+      setFormData((prev) => ({ ...prev, is_additional_wo: false }));
+    }
+  }, [hasOriginalInProject, formData.is_additional_wo]);
+
+  const handleCreateProject = async () => {
+    if (!newProjectVesselId || !newProjectName.trim() || !currentUser) {
+      setError("Vessel and project name are required to create a new project");
+      return;
+    }
+
+    setCreatingProject(true);
+    setError(null);
+
+    try {
+      const { data: userProfile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("auth_user_id", currentUser.id)
+        .maybeSingle();
+
+      let userId = userProfile?.id;
+      if (!userId) {
+        const { data: newProfile, error: createError } = await supabase
+          .from("user_profile")
+          .insert({
+            auth_user_id: currentUser.id,
+            email: currentUser.email,
+            name: currentUser.email?.split("@")[0] || "User",
+          })
+          .select("id")
+          .single();
+        if (createError) throw createError;
+        userId = newProfile.id;
+      }
+
+      const { data: newProject, error: projectError } = await supabase
+        .from("projects")
+        .insert({
+          project_name: newProjectName.trim(),
+          vessel_id: parseInt(newProjectVesselId),
+          user_id: userId,
+        })
+        .select("id, project_name, vessel_id, vessel:vessel_id ( id, name, type, company )")
+        .single();
+
+      if (projectError) throw projectError;
+
+      const created: ProjectOption = { ...(newProject as any), readiness_form: null };
+      setProjects((prev) => [created, ...prev]);
+      setSelectedProject(created);
+      setProjectSearchTerm(`${created.project_name} — ${created.vessel?.name || ""}`);
+      setShowNewProjectForm(false);
+      setNewProjectName("");
+      setNewProjectNameManuallyEdited(false);
+      setNewProjectVesselId("");
+      setNewProjectVesselSearch("");
+
+      await ActivityLogService.logActivity({
+        action: "create",
+        tableName: "projects",
+        recordId: created.id,
+        newData: created,
+        description: `Created project ${created.project_name}`,
+      });
+    } catch (err) {
+      console.error("Error creating project:", err);
+      setError(err instanceof Error ? err.message : "Failed to create project");
+    } finally {
+      setCreatingProject(false);
+    }
   };
 
   const handleInputChange = (
@@ -189,18 +353,18 @@ export default function AddWorkOrder() {
     } else {
       setFormData((prev) => ({
         ...prev,
-        [name]:
-          name === "vessel_id" || name === "kapro_id"
-            ? parseInt(value) || ""
-            : value,
+        [name]: name === "kapro_id" ? parseInt(value) || "" : value,
       }));
     }
   };
 
   const validateForm = () => {
-    // Only these fields are required
-    const required = ["vessel_id", "shipyard_wo_number", "shipyard_wo_date"];
+    if (!selectedProject) {
+      setError("Please select or create a project for this work order");
+      return false;
+    }
 
+    const required = ["shipyard_wo_number", "shipyard_wo_date"];
     for (const field of required) {
       const value = formData[field as keyof typeof formData];
       if (!value) {
@@ -209,7 +373,6 @@ export default function AddWorkOrder() {
       }
     }
 
-    // Check if user is available
     if (!currentUser) {
       setError("User information not available. Please refresh and try again.");
       return false;
@@ -222,7 +385,7 @@ export default function AddWorkOrder() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!validateForm()) {
+    if (!validateForm() || !selectedProject) {
       return;
     }
 
@@ -230,6 +393,47 @@ export default function AddWorkOrder() {
     setError(null);
 
     try {
+      // Gate: the ORIGINAL work order for a project requires an approved
+      // readiness form. Re-check fresh from the DB rather than trusting
+      // whatever was loaded into the picker, in case it changed since.
+      if (!formData.is_additional_wo) {
+        const { data: freshProject, error: freshError } = await supabase
+          .from("projects")
+          .select("readiness_form:readiness_form_id ( status )")
+          .eq("id", selectedProject.id)
+          .single();
+
+        if (freshError) throw freshError;
+
+        const status = (freshProject as any)?.readiness_form?.status;
+        if (status !== "APPROVED") {
+          setError(
+            "This project's Readiness Form must be fully approved before creating its original work order. Additional work orders don't need this — check \"Additional Work Order\" if that's what this is, or finish the Readiness Form first.",
+          );
+          setLoading(false);
+          return;
+        }
+      } else {
+        // Gate: an ADDITIONAL work order can't exist without an original
+        // one already in the project. Re-check fresh from the DB.
+        const { count: originalCount, error: originalError } = await supabase
+          .from("work_order")
+          .select("id", { count: "exact", head: true })
+          .eq("project_id", selectedProject.id)
+          .eq("is_additional_wo", false)
+          .is("deleted_at", null);
+
+        if (originalError) throw originalError;
+
+        if (!originalCount) {
+          setError(
+            "This project doesn't have an original work order yet, so it can't have an additional one. Create the original work order first, or uncheck \"Additional Work Order\".",
+          );
+          setLoading(false);
+          return;
+        }
+      }
+
       const { data: userProfile, error: profileError } = await supabase
         .from("profiles")
         .select("id")
@@ -294,7 +498,8 @@ export default function AddWorkOrder() {
       }
 
       const submitData = {
-        vessel_id: parseInt(formData.vessel_id.toString()),
+        vessel_id: selectedProject.vessel_id,
+        project_id: selectedProject.id,
         shipyard_wo_number: formData.shipyard_wo_number.trim(),
         shipyard_wo_date: formData.shipyard_wo_date,
         customer_wo_number: formData.customer_wo_number.trim() || null,
@@ -332,7 +537,7 @@ export default function AddWorkOrder() {
         description: `Created work order ${data.shipyard_wo_number}`,
       });
 
-      navigate("/work-orders", {
+      navigate(`/projects/${selectedProject.id}`, {
         state: { message: "Work order created successfully!" },
       });
     } catch (err) {
@@ -347,7 +552,7 @@ export default function AddWorkOrder() {
     navigate("/work-orders");
   };
 
-  if (loadingVessels || loadingKapros || !currentUser) {
+  if (loadingVessels || loadingKapros || loadingProjects || !currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -357,12 +562,20 @@ export default function AddWorkOrder() {
               ? "Loading vessels..."
               : loadingKapros
                 ? "Loading kapros..."
-                : "Loading user information..."}
+                : loadingProjects
+                  ? "Loading projects..."
+                  : "Loading user information..."}
           </p>
         </div>
       </div>
     );
   }
+
+  const selectedProjectReadinessStatus = selectedProject?.readiness_form?.status;
+  const showReadinessWarning =
+    selectedProject &&
+    !formData.is_additional_wo &&
+    selectedProjectReadinessStatus !== "APPROVED";
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -403,9 +616,9 @@ export default function AddWorkOrder() {
                     Simplified Work Order
                   </p>
                   <p className="text-blue-700 text-sm">
-                    This simplified form captures only the essential work order
-                    information. Additional details can be tracked through
-                    progress reports.
+                    Every work order belongs to a project. Pick an existing
+                    project or create a new one — its vessel carries over
+                    automatically.
                   </p>
                 </div>
               </div>
@@ -423,53 +636,149 @@ export default function AddWorkOrder() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
-            {/* Vessel Selection with Search */}
-            <div className="relative" ref={vesselDropdownRef}>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Vessel <span className="text-red-500">*</span>
+            {/* Project Selection with Search */}
+            <div className="relative" ref={projectDropdownRef}>
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center justify-between">
+                <span>
+                  Project <span className="text-red-500">*</span>
+                </span>
+                {!showNewProjectForm && (
+                  <button
+                    type="button"
+                    onClick={() => setShowNewProjectForm(true)}
+                    className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> New Project
+                  </button>
+                )}
               </label>
-              <input
-                type="text"
-                value={vesselSearchTerm}
-                onChange={handleVesselSearch}
-                onFocus={() => setShowVesselDropdown(true)}
-                placeholder="Search vessel by name, type, or company..."
-                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required={!formData.vessel_id}
-              />
-              {!formData.vessel_id && vesselSearchTerm && (
-                <p className="text-xs text-amber-600 mt-1">
-                  Please select a vessel from the dropdown
-                </p>
-              )}
 
-              {/* Dropdown */}
-              {showVesselDropdown && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {filteredVessels.length > 0 ? (
-                    filteredVessels.map((vessel) => (
-                      <div
-                        key={vessel.id}
-                        onClick={() => handleVesselSelect(vessel)}
-                        className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                          formData.vessel_id === vessel.id.toString()
-                            ? "bg-blue-100"
-                            : ""
-                        }`}
-                      >
-                        <div className="font-medium text-gray-900">
-                          {vessel.name}
+              {!showNewProjectForm ? (
+                <>
+                  <input
+                    type="text"
+                    value={projectSearchTerm}
+                    onChange={handleProjectSearch}
+                    onFocus={() => setShowProjectDropdown(true)}
+                    placeholder="Search project by name, vessel, or company..."
+                    className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required={!selectedProject}
+                  />
+                  {!selectedProject && projectSearchTerm && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      Please select a project from the dropdown
+                    </p>
+                  )}
+
+                  {showProjectDropdown && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {filteredProjects.length > 0 ? (
+                        filteredProjects.map((project) => (
+                          <div
+                            key={project.id}
+                            onClick={() => handleProjectSelect(project)}
+                            className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                              selectedProject?.id === project.id
+                                ? "bg-blue-100"
+                                : ""
+                            }`}
+                          >
+                            <div className="font-medium text-gray-900 flex items-center gap-1">
+                              <FolderKanban className="w-3.5 h-3.5 text-blue-600" />
+                              {project.project_name}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {project.vessel?.name} • {project.vessel?.type} (
+                              {project.vessel?.company})
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-gray-500 text-sm">
+                          No projects found
                         </div>
-                        <div className="text-sm text-gray-600">
-                          {vessel.type} • {vessel.company}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="px-3 py-2 text-gray-500 text-sm">
-                      No vessels found
+                      )}
                     </div>
                   )}
+                </>
+              ) : (
+                <div className="border border-gray-300 rounded-lg p-4 space-y-3 bg-gray-50">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Vessel
+                    </label>
+                    <input
+                      type="text"
+                      value={newProjectVesselSearch}
+                      onChange={(e) => {
+                        setNewProjectVesselSearch(e.target.value);
+                        setShowNewProjectVesselDropdown(true);
+                        setNewProjectVesselId("");
+                      }}
+                      onFocus={() => setShowNewProjectVesselDropdown(true)}
+                      placeholder="Search vessel..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                    {showNewProjectVesselDropdown && (
+                      <div className="mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                        {filteredNewProjectVessels.map((vessel) => (
+                          <div
+                            key={vessel.id}
+                            onClick={() => {
+                              setNewProjectVesselId(vessel.id.toString());
+                              setNewProjectVesselSearch(
+                                `${vessel.name} - ${vessel.type} (${vessel.company})`,
+                              );
+                              setShowNewProjectVesselDropdown(false);
+                              if (!newProjectNameManuallyEdited) {
+                                const today = new Date();
+                                setNewProjectName(
+                                  `PROJECT ${vessel.name.toUpperCase()} ${today.getDate()} ${today
+                                    .toLocaleString("en-US", { month: "long" })
+                                    .toUpperCase()} ${today.getFullYear()}`,
+                                );
+                              }
+                            }}
+                            className="px-3 py-2 cursor-pointer hover:bg-blue-50 text-sm"
+                          >
+                            {vessel.name} - {vessel.type} ({vessel.company})
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Project Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newProjectName}
+                      onChange={(e) => {
+                        setNewProjectNameManuallyEdited(true);
+                        setNewProjectName(e.target.value);
+                      }}
+                      placeholder="e.g., PROJECT MT PATRICIA 20 JULI 2026"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCreateProject}
+                      disabled={creatingProject || !newProjectVesselId || !newProjectName.trim()}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {creatingProject ? "Creating..." : "Create & Use This Project"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewProjectForm(false)}
+                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-100"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -479,6 +788,56 @@ export default function AddWorkOrder() {
                 </p>
               )}
             </div>
+
+            {/* Additional WO Checkbox (moved up: it affects the readiness gate) */}
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                name="is_additional_wo"
+                id="is_additional_wo"
+                checked={formData.is_additional_wo}
+                onChange={handleInputChange}
+                disabled={!selectedProject || hasOriginalInProject !== true}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50"
+              />
+              <label
+                htmlFor="is_additional_wo"
+                className="ml-2 block text-sm text-gray-700"
+              >
+                Check this if this is an ADDITIONAL Work Order
+              </label>
+            </div>
+            {selectedProject && hasOriginalInProject === false && (
+              <p className="text-xs text-gray-500 -mt-4">
+                This project has no original work order yet, so it can't have
+                an additional one. Create the original work order first.
+              </p>
+            )}
+
+            {showReadinessWarning && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                <div>
+                  <p className="text-amber-800 text-sm font-medium">
+                    This project's Readiness Form isn't approved yet
+                  </p>
+                  <p className="text-amber-700 text-sm mt-1">
+                    An original work order can't be created until it is. If
+                    this is an additional work order instead, check the box
+                    above.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(`/projects/${selectedProject!.id}/readiness`)
+                    }
+                    className="text-amber-800 underline text-sm mt-2"
+                  >
+                    Go to Readiness Form
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Required Fields */}
             <div className="space-y-6">
@@ -603,24 +962,6 @@ export default function AddWorkOrder() {
                   onChange={handleInputChange}
                   className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
-              </div>
-
-              {/* Additional WO Checkbox */}
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  name="is_additional_wo"
-                  id="is_additional_wo"
-                  checked={formData.is_additional_wo}
-                  onChange={handleInputChange}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label
-                  htmlFor="is_additional_wo"
-                  className="ml-2 block text-sm text-gray-700"
-                >
-                  Check this if this is an ADDITIONAL Work Order
-                </label>
               </div>
 
               {/* Kapro Selection */}
