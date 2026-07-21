@@ -4,6 +4,8 @@ import { supabase, type Vessel } from "../../lib/supabase";
 import { ActivityLogService } from "../../services/activityLogService";
 import { useAuth } from "../../hooks/useAuth";
 import { ArrowLeft, FolderKanban, Plus } from "lucide-react";
+import { WORK_TYPE_OPTIONS } from "../../constants/workTypes";
+import { suggestProjectName } from "../../utils/projectNaming";
 
 export default function AddProject() {
   const navigate = useNavigate();
@@ -21,9 +23,10 @@ export default function AddProject() {
   const [formData, setFormData] = useState({
     project_name: "",
     vessel_id: "",
+    docking_type: "",
   });
-  // Tracks whether the user has typed their own project name, so vessel
-  // changes stop overwriting it once they have.
+  // Tracks whether the user has typed their own project name, so vessel/
+  // docking-type changes stop overwriting it once they have.
   const [nameManuallyEdited, setNameManuallyEdited] = useState(false);
 
   const [loading, setLoading] = useState(false);
@@ -111,17 +114,25 @@ export default function AddProject() {
     setShowVesselDropdown(false);
   };
 
-  const suggestProjectName = (vessel: Vessel) => {
+  // Re-suggest the project name whenever vessel or docking type changes,
+  // until the user types their own name.
+  useEffect(() => {
     if (nameManuallyEdited) return;
-    const today = new Date();
-    const day = today.getDate();
-    const month = today.toLocaleString("en-US", { month: "long" }).toUpperCase();
-    const year = today.getFullYear();
-    setFormData((prev) => ({
-      ...prev,
-      project_name: `PROJECT ${vessel.name.toUpperCase()} ${day} ${month} ${year}`,
-    }));
-  };
+    if (!formData.vessel_id || !formData.docking_type) return;
+
+    const vessel = vessels.find((v) => v.id.toString() === formData.vessel_id);
+    if (!vessel) return;
+
+    let cancelled = false;
+    suggestProjectName(vessel.id, vessel.name, vessel.company, formData.docking_type).then(
+      (name) => {
+        if (!cancelled) setFormData((prev) => ({ ...prev, project_name: name }));
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [formData.vessel_id, formData.docking_type, nameManuallyEdited, vessels]);
 
   const validateForm = () => {
     if (!formData.project_name.trim()) {
@@ -130,6 +141,10 @@ export default function AddProject() {
     }
     if (!formData.vessel_id) {
       setError("Vessel is required");
+      return false;
+    }
+    if (!formData.docking_type) {
+      setError("Jenis Docking is required");
       return false;
     }
     if (!currentUser) {
@@ -200,6 +215,7 @@ export default function AddProject() {
       const submitData = {
         project_name: formData.project_name.trim(),
         vessel_id: parseInt(formData.vessel_id),
+        docking_type: formData.docking_type,
         user_id: userId,
       };
 
@@ -312,10 +328,7 @@ export default function AddProject() {
                     filteredVessels.map((vessel) => (
                       <div
                         key={vessel.id}
-                        onClick={() => {
-                          handleVesselSelect(vessel);
-                          suggestProjectName(vessel);
-                        }}
+                        onClick={() => handleVesselSelect(vessel)}
                         className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
                           formData.vessel_id === vessel.id.toString()
                             ? "bg-blue-100"
@@ -341,6 +354,27 @@ export default function AddProject() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
+                Jenis Docking <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formData.docking_type}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, docking_type: e.target.value }))
+                }
+                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              >
+                <option value="">Select Jenis Docking</option>
+                {WORK_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Project Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -353,12 +387,12 @@ export default function AddProject() {
                     project_name: e.target.value,
                   }));
                 }}
-                placeholder="e.g., PROJECT MT PATRICIA 20 JULI 2026"
+                placeholder="e.g., BAROKAH GEMILANG PERKASA-MT M PATRICIA-Repair-2026-01"
                 className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
               />
               <p className="text-xs text-gray-500 mt-1">
-                Auto-suggested from the vessel and today's date — edit freely.
+                Auto-suggested from the vessel and jenis docking — edit freely.
               </p>
             </div>
 

@@ -1050,3 +1050,393 @@ export function parseCombinedXLSX(buffer: ArrayBuffer): {
 
   return { woRows, wdRows };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WORK PROGRESS IMPORT
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Unlike Work Orders/Work Details, work_progress is an open history table —
+// every manual entry is its own dated row. Bulk import instead keeps at most
+// ONE row per work item (marked is_imported = true) and updates it in place
+// on every re-upload, so re-importing an evolving tracking sheet doesn't
+// pile up duplicate rows. Manual entries (is_imported = false) are never
+// read or written by this import path.
+
+export const WORK_PROGRESS_TEMPLATE_HEADERS = [
+  "vessel_name",
+  "work_order_number",
+  "description",
+  "progress_percentage",
+  "report_date",
+  "notes",
+];
+
+const WP_HEADER_LABELS: Record<string, string> = {
+  vessel_name: "Vessel Name *",
+  work_order_number: "Work Order Number *",
+  description: "Description *",
+  progress_percentage: "Progress % *",
+  report_date: "Report Date * (YYYY-MM-DD)",
+  notes: "Notes",
+};
+
+const WP_TEMPLATE_SAMPLE: string[][] = [
+  [
+    "KM. Mawar Laut",
+    "SY-2024-001",
+    "Hull cleaning and anti-fouling painting",
+    "75",
+    "2024-06-20",
+    "Progress per weekly site report",
+  ],
+  [
+    "KM. Mawar Laut",
+    "SY-2024-001",
+    "Main engine overhaul and bearing replacement",
+    "40",
+    "2024-06-20",
+    "",
+  ],
+];
+
+export function generateProgressTemplateXLSX(): Uint8Array {
+  const wb = XLSX.utils.book_new();
+  const labelRow = WORK_PROGRESS_TEMPLATE_HEADERS.map(
+    (h) => WP_HEADER_LABELS[h] ?? h,
+  );
+  const ws = XLSX.utils.aoa_to_sheet([labelRow, ...WP_TEMPLATE_SAMPLE]);
+  ws["!cols"] = [
+    { wch: 22 },
+    { wch: 18 },
+    { wch: 42 },
+    { wch: 12 },
+    { wch: 24 },
+    { wch: 32 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, "Work Progress");
+
+  const instructions = [
+    ["IMPORT TEMPLATE — WORK PROGRESS"],
+    [""],
+    ["HOW THIS IS DIFFERENT FROM WORK ORDER / WORK DETAILS IMPORT"],
+    [
+      "Each work item (matched by vessel + work order number + description) keeps only ONE imported progress row.",
+    ],
+    [
+      "Re-uploading this file later updates that same row instead of adding a new one.",
+    ],
+    [
+      "If a row's report_date is OLDER than what's already stored for that work item, it is skipped — the newer value is kept.",
+    ],
+    [
+      "Manually-entered progress (via the Add Progress screen) is separate history and is never changed by this import.",
+    ],
+    [""],
+    ["COLUMN REFERENCE"],
+    ["vessel_name *", "Must match an existing vessel"],
+    ["work_order_number *", "Must match an existing Shipyard WO Number for that vessel"],
+    ["description *", "Must match an existing Work Details description for that work order"],
+    ["progress_percentage *", "0–100"],
+    ["report_date *", "YYYY-MM-DD"],
+    ["notes", "Optional free text"],
+  ];
+  const wsInfo = XLSX.utils.aoa_to_sheet(instructions);
+  wsInfo["!cols"] = [{ wch: 45 }, { wch: 55 }];
+  XLSX.utils.book_append_sheet(wb, wsInfo, "Instructions");
+
+  return XLSX.write(wb, { type: "array", bookType: "xlsx" }) as Uint8Array;
+}
+
+export function generateProgressTemplateCSV(): string {
+  const lines: string[] = [WORK_PROGRESS_TEMPLATE_HEADERS.join(",")];
+  for (const row of WP_TEMPLATE_SAMPLE) {
+    lines.push(row.map((v) => (v.includes(",") ? `"${v}"` : v)).join(","));
+  }
+  return lines.join("\n");
+}
+
+export interface ParsedProgressRow {
+  rowNumber: number;
+  vessel_name: string;
+  work_order_number: string;
+  description: string;
+  progress_percentage: string;
+  report_date: string;
+  notes: string;
+}
+
+export type ProgressRowAction = "insert" | "update" | "skip_older";
+
+export interface ValidatedProgressRow extends ParsedProgressRow {
+  errors: string[];
+  work_details_id?: number;
+  action?: ProgressRowAction;
+  existing_progress_id?: number;
+  existing_progress_percentage?: number;
+  existing_report_date?: string;
+}
+
+function normaliseHeader(h: string): string {
+  return String(h)
+    .replace(/\*|\(.*?\)/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+}
+
+export function parseProgressCSV(csvText: string): ParsedProgressRow[] {
+  const lines = csvText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (lines.length < 2) return [];
+
+  const headers = parseCSVLine(lines[0]).map((h) =>
+    h.toLowerCase().replace(/\s+/g, "_"),
+  );
+  const rows: ParsedProgressRow[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const values = parseCSVLine(lines[i]);
+    const obj: Record<string, string> = {};
+    headers.forEach((h, idx) => {
+      obj[h] = values[idx] ?? "";
+    });
+    rows.push({
+      rowNumber: i + 1,
+      vessel_name: obj["vessel_name"] ?? "",
+      work_order_number: obj["work_order_number"] ?? "",
+      description: obj["description"] ?? "",
+      progress_percentage: obj["progress_percentage"] ?? "",
+      report_date: obj["report_date"] ?? "",
+      notes: obj["notes"] ?? "",
+    });
+  }
+  return rows;
+}
+
+export function parseProgressXLSX(buffer: ArrayBuffer): ParsedProgressRow[] {
+  const wb = XLSX.read(buffer, { type: "array", cellText: true, cellDates: false });
+  const sheetName = wb.SheetNames[0];
+  if (!sheetName) return [];
+  const ws = wb.Sheets[sheetName];
+  const raw = XLSX.utils.sheet_to_json<string[]>(ws, {
+    header: 1,
+    defval: "",
+    raw: false,
+  });
+  if (raw.length < 2) return [];
+
+  const headers = (raw[0] as string[]).map(normaliseHeader);
+  const rows: ParsedProgressRow[] = [];
+  for (let i = 1; i < raw.length; i++) {
+    const values = raw[i] as string[];
+    if (values.every((v) => String(v).trim() === "")) continue;
+    const obj: Record<string, string> = {};
+    headers.forEach((h, idx) => {
+      obj[h] = String(values[idx] ?? "").trim();
+    });
+    rows.push({
+      rowNumber: i + 1,
+      vessel_name: obj["vessel_name"] ?? "",
+      work_order_number: obj["work_order_number"] ?? "",
+      description: obj["description"] ?? "",
+      progress_percentage: obj["progress_percentage"] ?? "",
+      report_date: obj["report_date"] ?? "",
+      notes: obj["notes"] ?? "",
+    });
+  }
+  return rows;
+}
+
+export async function validateProgressRows(
+  rows: ParsedProgressRow[],
+): Promise<ValidatedProgressRow[]> {
+  const [vesselsRes, workOrdersRes, workDetailsRes] = await Promise.all([
+    supabase.from("vessel").select("id, name").is("deleted_at", null),
+    supabase
+      .from("work_order")
+      .select("id, vessel_id, shipyard_wo_number")
+      .is("deleted_at", null),
+    supabase
+      .from("work_details")
+      .select("id, work_order_id, description")
+      .is("deleted_at", null),
+  ]);
+
+  const vessels = new Map<string, number>();
+  for (const v of vesselsRes.data ?? []) {
+    vessels.set((v.name as string).toLowerCase().trim(), v.id as number);
+  }
+
+  const workOrders = new Map<string, number>();
+  for (const wo of workOrdersRes.data ?? []) {
+    const key = `${wo.vessel_id}:${(wo.shipyard_wo_number as string).toLowerCase().trim()}`;
+    workOrders.set(key, wo.id as number);
+  }
+
+  const workDetails = new Map<string, number>();
+  for (const wd of workDetailsRes.data ?? []) {
+    const key = `${wd.work_order_id}:${(wd.description as string).toLowerCase().trim()}`;
+    workDetails.set(key, wd.id as number);
+  }
+
+  // The single is_imported row per work_details_id, if one already exists.
+  const existingImported = new Map<
+    number,
+    { id: number; progress_percentage: number; report_date: string }
+  >();
+  const wdIds = [...workDetails.values()];
+  if (wdIds.length > 0) {
+    const { data } = await supabase
+      .from("work_progress")
+      .select("id, work_details_id, progress_percentage, report_date")
+      .eq("is_imported", true)
+      .is("deleted_at", null)
+      .in("work_details_id", wdIds);
+    for (const row of data ?? []) {
+      existingImported.set(row.work_details_id as number, {
+        id: row.id as number,
+        progress_percentage: row.progress_percentage as number,
+        report_date: row.report_date as string,
+      });
+    }
+  }
+
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+
+  return rows.map((row) => {
+    const errors: string[] = [];
+    let vessel_id: number | undefined;
+    let work_order_id: number | undefined;
+    let work_details_id: number | undefined;
+
+    if (!row.vessel_name.trim()) {
+      errors.push("Vessel name is required");
+    } else {
+      vessel_id = vessels.get(row.vessel_name.toLowerCase().trim());
+      if (!vessel_id) errors.push(`Vessel not found: "${row.vessel_name}"`);
+    }
+
+    if (!row.work_order_number.trim()) {
+      errors.push("Work order number is required");
+    } else if (vessel_id) {
+      work_order_id = workOrders.get(
+        `${vessel_id}:${row.work_order_number.toLowerCase().trim()}`,
+      );
+      if (!work_order_id)
+        errors.push(
+          `Work order not found: "${row.work_order_number}" for vessel "${row.vessel_name}"`,
+        );
+    }
+
+    if (!row.description.trim()) {
+      errors.push("Description is required");
+    } else if (work_order_id) {
+      work_details_id = workDetails.get(
+        `${work_order_id}:${row.description.toLowerCase().trim()}`,
+      );
+      if (!work_details_id)
+        errors.push(
+          `Work detail not found: "${row.description}" for work order "${row.work_order_number}"`,
+        );
+    }
+
+    const pct = parseFloat(row.progress_percentage);
+    if (!row.progress_percentage.trim() || isNaN(pct) || pct < 0 || pct > 100) {
+      errors.push("Progress % must be a number between 0 and 100");
+    }
+
+    if (!row.report_date.trim()) {
+      errors.push("Report date is required");
+    } else if (!dateRegex.test(row.report_date)) {
+      errors.push("Report date must be YYYY-MM-DD format");
+    }
+
+    let action: ProgressRowAction | undefined;
+    let existing_progress_id: number | undefined;
+    let existing_progress_percentage: number | undefined;
+    let existing_report_date: string | undefined;
+
+    if (errors.length === 0 && work_details_id !== undefined) {
+      const existing = existingImported.get(work_details_id);
+      if (!existing) {
+        action = "insert";
+      } else {
+        existing_progress_id = existing.id;
+        existing_progress_percentage = existing.progress_percentage;
+        existing_report_date = existing.report_date;
+        if (row.report_date < existing.report_date) {
+          action = "skip_older";
+          errors.push(
+            `Skipped — existing recorded progress (${existing.report_date}, ${existing.progress_percentage}%) is newer than this row's date (${row.report_date})`,
+          );
+        } else {
+          action = "update";
+        }
+      }
+    }
+
+    return {
+      ...row,
+      errors,
+      work_details_id,
+      action,
+      existing_progress_id,
+      existing_progress_percentage,
+      existing_report_date,
+    };
+  });
+}
+
+export async function importWorkProgress(
+  validatedRows: ValidatedProgressRow[],
+  userId: number,
+): Promise<ImportResult> {
+  const validRows = validatedRows.filter((r) => r.errors.length === 0);
+  const failedRows: ImportResult["failedRows"] = [];
+  if (validRows.length === 0) return { successCount: 0, failedRows };
+
+  const toInsert = validRows.filter((r) => r.action === "insert");
+  const toUpdate = validRows.filter((r) => r.action === "update");
+
+  let successCount = 0;
+
+  if (toInsert.length > 0) {
+    const insertData = toInsert.map((row) => ({
+      work_details_id: row.work_details_id!,
+      progress_percentage: parseFloat(row.progress_percentage),
+      report_date: row.report_date,
+      notes: row.notes.trim() || null,
+      user_id: userId,
+      is_imported: true,
+    }));
+    const { error } = await supabase.from("work_progress").insert(insertData);
+    if (error) {
+      for (const row of toInsert)
+        failedRows.push({ rowNumber: row.rowNumber, error: error.message });
+    } else {
+      successCount += toInsert.length;
+    }
+  }
+
+  // Each update targets a different existing row with different new values —
+  // no single unique key to upsert() on, so these run individually.
+  for (const row of toUpdate) {
+    const { error } = await supabase
+      .from("work_progress")
+      .update({
+        progress_percentage: parseFloat(row.progress_percentage),
+        report_date: row.report_date,
+        notes: row.notes.trim() || null,
+        user_id: userId,
+      })
+      .eq("id", row.existing_progress_id!);
+    if (error) {
+      failedRows.push({ rowNumber: row.rowNumber, error: error.message });
+    } else {
+      successCount += 1;
+    }
+  }
+
+  return { successCount, failedRows };
+}

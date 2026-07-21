@@ -30,13 +30,21 @@ import {
   importWorkOrders,
   // Combined
   parseCombinedXLSX,
+  // Work Progress
+  generateProgressTemplateCSV,
+  generateProgressTemplateXLSX,
+  parseProgressCSV,
+  parseProgressXLSX,
+  validateProgressRows,
+  importWorkProgress,
   type ValidatedImportRow,
   type ValidatedWORow,
+  type ValidatedProgressRow,
   type ImportResult,
 } from "../../utils/importHandler";
 import { downloadFile } from "../../utils/exportHandler";
 
-type Tab = "work-orders" | "work-details";
+type Tab = "work-orders" | "work-details" | "work-progress";
 type ImportStep = "upload" | "preview" | "result";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -253,6 +261,124 @@ function WDPreviewTable({ rows }: { rows: ValidatedImportRow[] }) {
   );
 }
 
+// ─── Sub-component: Preview Table for Work Progress ───────────────────────────
+
+function ActionBadge({ row }: { row: ValidatedProgressRow }) {
+  if (row.errors.length > 0 && row.action !== "skip_older") return null;
+  if (row.action === "insert") {
+    return (
+      <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
+        New
+      </span>
+    );
+  }
+  if (row.action === "update") {
+    return (
+      <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
+        {row.existing_progress_percentage}% → {row.progress_percentage}%
+      </span>
+    );
+  }
+  if (row.action === "skip_older") {
+    return (
+      <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+        Skipped (older)
+      </span>
+    );
+  }
+  return null;
+}
+
+function WPPreviewTable({ rows }: { rows: ValidatedProgressRow[] }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200 text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              {[
+                "Row",
+                "Status",
+                "Vessel",
+                "WO Number",
+                "Description",
+                "Progress %",
+                "Report Date",
+                "Notes",
+                "Action",
+              ].map((h) => (
+                <th
+                  key={h}
+                  className="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider text-xs whitespace-nowrap"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-100">
+            {rows.map((row) => {
+              const hasErrors = row.errors.length > 0;
+              return (
+                <>
+                  <tr
+                    key={`wp-row-${row.rowNumber}`}
+                    className={hasErrors ? "bg-red-50" : "bg-green-50"}
+                  >
+                    <td className="px-3 py-2 text-gray-500">{row.rowNumber}</td>
+                    <td className="px-3 py-2">
+                      {hasErrors ? (
+                        <XCircle className="w-4 h-4 text-red-500" />
+                      ) : (
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-gray-800">
+                      {row.vessel_name || <em className="text-gray-400">—</em>}
+                    </td>
+                    <td className="px-3 py-2 text-gray-800">
+                      {row.work_order_number || (
+                        <em className="text-gray-400">—</em>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-gray-800 max-w-xs truncate">
+                      {row.description || <em className="text-gray-400">—</em>}
+                    </td>
+                    <td className="px-3 py-2 text-gray-800">
+                      {row.progress_percentage}
+                    </td>
+                    <td className="px-3 py-2 text-gray-800">
+                      {row.report_date}
+                    </td>
+                    <td className="px-3 py-2 text-gray-800 max-w-xs truncate">
+                      {row.notes || <em className="text-gray-400">—</em>}
+                    </td>
+                    <td className="px-3 py-2">
+                      <ActionBadge row={row} />
+                    </td>
+                  </tr>
+                  {hasErrors && (
+                    <tr key={`wp-err-${row.rowNumber}`} className="bg-red-50">
+                      <td />
+                      <td colSpan={8} className="px-3 pb-2">
+                        <ul className="text-xs text-red-600 list-disc list-inside space-y-0.5">
+                          {row.errors.map((err, i) => (
+                            <li key={i}>{err}</li>
+                          ))}
+                        </ul>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Summary Banner ───────────────────────────────────────────────────────────
 
 function SummaryBanner({
@@ -443,6 +569,16 @@ export default function ImportData() {
   const [wdResult, setWdResult] = useState<ImportResult | null>(null);
   const [wdParseError, setWdParseError] = useState<string | null>(null);
 
+  // ─── Work Progress state ───────────────────────────────────────────────────
+  const wpFileRef = useRef<HTMLInputElement>(null);
+  const [wpStep, setWpStep] = useState<ImportStep>("upload");
+  const [wpFileName, setWpFileName] = useState("");
+  const [wpRows, setWpRows] = useState<ValidatedProgressRow[]>([]);
+  const [wpValidating, setWpValidating] = useState(false);
+  const [wpImporting, setWpImporting] = useState(false);
+  const [wpResult, setWpResult] = useState<ImportResult | null>(null);
+  const [wpParseError, setWpParseError] = useState<string | null>(null);
+
   // Role check
   const canImport = profile?.role === "PPIC" || profile?.role === "MASTER";
 
@@ -480,6 +616,16 @@ export default function ImportData() {
     downloadFile(
       generateTemplateCSV(),
       "work_details_template.csv",
+      "text/csv",
+    );
+
+  const handleDownloadWPXLSX = () =>
+    downloadXLSX(generateProgressTemplateXLSX(), "work_progress_template.xlsx");
+
+  const handleDownloadWPCSV = () =>
+    downloadFile(
+      generateProgressTemplateCSV(),
+      "work_progress_template.csv",
       "text/csv",
     );
 
@@ -702,12 +848,109 @@ export default function ImportData() {
     setWdParseError(null);
   };
 
+  // ─── Work Progress upload ──────────────────────────────────────────────────
+
+  const handleWPFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const isCSV = file.name.endsWith(".csv");
+    const isXLSX = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
+    if (!isCSV && !isXLSX) {
+      setWpParseError(
+        "Please upload a CSV (.csv) or Excel (.xlsx / .xls) file",
+      );
+      return;
+    }
+    setWpParseError(null);
+    setWpFileName(file.name);
+    setWpValidating(true);
+    try {
+      let parsed;
+      if (isXLSX) {
+        const buffer = await file.arrayBuffer();
+        parsed = parseProgressXLSX(buffer);
+      } else {
+        const text = await file.text();
+        parsed = parseProgressCSV(text);
+      }
+      if (parsed.length === 0) {
+        setWpParseError(
+          "No data rows found. Make sure the file has a header row and at least one data row.",
+        );
+        setWpValidating(false);
+        return;
+      }
+      const validated = await validateProgressRows(parsed);
+      setWpRows(validated);
+      setWpStep("preview");
+    } catch (err) {
+      setWpParseError(
+        err instanceof Error ? err.message : "Failed to parse file",
+      );
+    } finally {
+      setWpValidating(false);
+      if (wpFileRef.current) wpFileRef.current.value = "";
+    }
+  };
+
+  const handleWPImport = async () => {
+    setWpImporting(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      const { data: userProfile, error: profileError } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("auth_user_id", user.id)
+        .single();
+      if (profileError) throw profileError;
+      const result = await importWorkProgress(wpRows, userProfile.id);
+      if (result.successCount > 0) {
+        await ActivityLogService.logActivity({
+          action: "create",
+          tableName: "work_progress",
+          recordId: 0,
+          newData: { imported_count: result.successCount },
+          description: `Imported ${result.successCount} work progress update(s) via file`,
+        });
+      }
+      setWpResult(result);
+      setWpStep("result");
+    } catch (err) {
+      setWpResult({
+        successCount: 0,
+        failedRows: [
+          {
+            rowNumber: 0,
+            error: err instanceof Error ? err.message : "Unknown error",
+          },
+        ],
+      });
+      setWpStep("result");
+    } finally {
+      setWpImporting(false);
+    }
+  };
+
+  const resetWP = () => {
+    setWpStep("upload");
+    setWpRows([]);
+    setWpFileName("");
+    setWpResult(null);
+    setWpParseError(null);
+  };
+
   // ─── Computed ──────────────────────────────────────────────────────────────
 
   const woValid = woRows.filter((r) => r.errors.length === 0).length;
   const woInvalid = woRows.filter((r) => r.errors.length > 0).length;
   const wdValid = wdRows.filter((r) => r.errors.length === 0).length;
   const wdInvalid = wdRows.filter((r) => r.errors.length > 0).length;
+  const wpValid = wpRows.filter((r) => r.errors.length === 0).length;
+  const wpInvalid = wpRows.filter((r) => r.errors.length > 0).length;
+  const wpSkippedOlder = wpRows.filter((r) => r.action === "skip_older").length;
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -792,6 +1035,27 @@ export default function ImportData() {
               }`}
             >
               {wdRows.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab("work-progress")}
+          className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "work-progress"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          Work Progress
+          {wpStep === "preview" && (
+            <span
+              className={`ml-2 px-1.5 py-0.5 rounded-full text-xs font-semibold ${
+                wpInvalid > 0
+                  ? "bg-yellow-100 text-yellow-700"
+                  : "bg-green-100 text-green-700"
+              }`}
+            >
+              {wpRows.length}
             </span>
           )}
         </button>
@@ -1091,6 +1355,165 @@ export default function ImportData() {
               onReset={resetWD}
               onNavigate={() => navigate("/work-details")}
               navigateLabel="Go to Work Details"
+            />
+          )}
+        </div>
+      )}
+
+      {/* ── WORK PROGRESS TAB ───────────────────────────────────────────────── */}
+      {activeTab === "work-progress" && (
+        <div className="space-y-6">
+          {wpStep === "upload" && (
+            <>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                <div className="flex items-start gap-4">
+                  <FileText className="w-8 h-8 text-blue-600 flex-shrink-0 mt-1" />
+                  <div className="flex-1">
+                    <h2 className="text-lg font-semibold text-blue-900">
+                      Step 1 — Download the Template
+                    </h2>
+                    <p className="text-blue-700 text-sm mt-1">
+                      Vessel, work order number, and description must match an
+                      existing work item exactly (case-insensitive). Each work
+                      item keeps only one imported progress row — re-uploading
+                      later updates that same row instead of adding a new one.
+                      A row is skipped if its report date is older than what's
+                      already stored.
+                    </p>
+                    <div className="mt-3 text-sm text-blue-800">
+                      <p className="font-medium mb-1">Required columns:</p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-1">
+                        {[
+                          "vessel_name",
+                          "work_order_number",
+                          "description",
+                          "progress_percentage",
+                          "report_date (YYYY-MM-DD)",
+                        ].map((c) => (
+                          <code
+                            key={c}
+                            className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs font-mono"
+                          >
+                            {c}
+                          </code>
+                        ))}
+                      </div>
+                      <p className="font-medium mt-2 mb-1">Optional columns:</p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-1">
+                        {["notes"].map((c) => (
+                          <code
+                            key={c}
+                            className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs font-mono"
+                          >
+                            {c}
+                          </code>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button
+                        onClick={handleDownloadWPXLSX}
+                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm"
+                      >
+                        <Download className="w-4 h-4" /> Download Excel (.xlsx)
+                      </button>
+                      <button
+                        onClick={handleDownloadWPCSV}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm"
+                      >
+                        <Download className="w-4 h-4" /> Download CSV
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                  Step 2 — Upload your file
+                </h2>
+                <UploadZone
+                  id="wp-upload"
+                  inputRef={wpFileRef}
+                  validating={wpValidating}
+                  parseError={wpParseError}
+                  onChange={handleWPFileChange}
+                />
+              </div>
+            </>
+          )}
+
+          {wpStep === "preview" && (
+            <>
+              <SummaryBanner
+                total={wpRows.length}
+                valid={wpValid}
+                invalid={wpInvalid}
+              />
+
+              {wpSkippedOlder > 0 && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-gray-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-gray-700 text-sm">
+                    {wpSkippedOlder} row{wpSkippedOlder !== 1 ? "s" : ""} will
+                    be <strong>skipped</strong> because the progress already
+                    recorded for that work item is newer than this file's date.
+                  </p>
+                </div>
+              )}
+
+              {wpInvalid > wpSkippedOlder && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-yellow-800 text-sm">
+                    Rows with errors will be <strong>skipped</strong>. Fix
+                    errors in your file and re-upload to import all rows.
+                  </p>
+                </div>
+              )}
+
+              <div className="bg-white border border-gray-200 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-gray-700">
+                  <FileText className="w-5 h-5 text-gray-400" />
+                  <span className="font-medium text-sm">{wpFileName}</span>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={resetWP}
+                    className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+                  >
+                    Re-upload
+                  </button>
+                  <button
+                    onClick={handleWPImport}
+                    disabled={wpImporting || wpValid === 0}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {wpImporting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" /> Importing…
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4" /> Import {wpValid} Progress
+                        Update{wpValid !== 1 ? "s" : ""}
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <WPPreviewTable rows={wpRows} />
+            </>
+          )}
+
+          {wpStep === "result" && wpResult && (
+            <ResultCard
+              result={wpResult}
+              label="progress update"
+              onReset={resetWP}
+              onNavigate={() => navigate("/work-progress")}
+              navigateLabel="Go to Work Progress"
             />
           )}
         </div>

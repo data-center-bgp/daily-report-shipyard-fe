@@ -12,6 +12,8 @@ import {
   CheckCircle2,
   Clock,
 } from "lucide-react";
+import { WORK_TYPE_OPTIONS } from "../../constants/workTypes";
+import { suggestProjectName } from "../../utils/projectNaming";
 
 interface ProjectOption {
   id: number;
@@ -424,9 +426,34 @@ export default function AddWorkOrder() {
     return newProfile.id;
   };
 
+  // Re-suggest the quick-create project name whenever the vessel or the work
+  // order's own Work Type changes (the project's docking type is taken from
+  // the work order being created), until the user types their own name.
+  useEffect(() => {
+    if (newProjectNameManuallyEdited) return;
+    if (!newProjectVesselId || !formData.work_type) return;
+
+    const vessel = vessels.find((v) => v.id.toString() === newProjectVesselId);
+    if (!vessel) return;
+
+    let cancelled = false;
+    suggestProjectName(vessel.id, vessel.name, vessel.company, formData.work_type).then(
+      (name) => {
+        if (!cancelled) setNewProjectName(name);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [newProjectVesselId, formData.work_type, newProjectNameManuallyEdited, vessels]);
+
   const handleCreateProject = async () => {
     if (!newProjectVesselId || !newProjectName.trim() || !currentUser) {
       setError("Vessel and project name are required to create a new project");
+      return;
+    }
+    if (!formData.work_type) {
+      setError("Select a Work Type above first — the new project's Jenis Docking is taken from it");
       return;
     }
 
@@ -441,6 +468,7 @@ export default function AddWorkOrder() {
         .insert({
           project_name: newProjectName.trim(),
           vessel_id: parseInt(newProjectVesselId),
+          docking_type: formData.work_type,
           user_id: userId,
         })
         .select("id, project_name, vessel_id, vessel:vessel_id ( id, name, type, company )")
@@ -842,14 +870,6 @@ export default function AddWorkOrder() {
                                 `${vessel.name} - ${vessel.type} (${vessel.company})`,
                               );
                               setShowNewProjectVesselDropdown(false);
-                              if (!newProjectNameManuallyEdited) {
-                                const today = new Date();
-                                setNewProjectName(
-                                  `PROJECT ${vessel.name.toUpperCase()} ${today.getDate()} ${today
-                                    .toLocaleString("en-US", { month: "long" })
-                                    .toUpperCase()} ${today.getFullYear()}`,
-                                );
-                              }
                             }}
                             className="px-3 py-2 cursor-pointer hover:bg-blue-50 text-sm"
                           >
@@ -870,15 +890,26 @@ export default function AddWorkOrder() {
                         setNewProjectNameManuallyEdited(true);
                         setNewProjectName(e.target.value);
                       }}
-                      placeholder="e.g., PROJECT MT PATRICIA 20 JULI 2026"
+                      placeholder="e.g., BAROKAH GEMILANG PERKASA-MT M PATRICIA-Repair-2026-01"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                     />
+                    {!formData.work_type && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        Select a Work Type above first — the new project's
+                        Jenis Docking is taken from it.
+                      </p>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={handleCreateProject}
-                      disabled={creatingProject || !newProjectVesselId || !newProjectName.trim()}
+                      disabled={
+                        creatingProject ||
+                        !newProjectVesselId ||
+                        !newProjectName.trim() ||
+                        !formData.work_type
+                      }
                       className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
                     >
                       {creatingProject ? "Creating..." : "Create & Use This Project"}
@@ -1076,17 +1107,11 @@ export default function AddWorkOrder() {
                   className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">Select Work Type</option>
-                  <option value="Docking">Docking</option>
-                  <option value="Docking - IS (Intermediate Survey)">
-                    Docking - IS (Intermediate Survey)
-                  </option>
-                  <option value="Docking - AS (Annual Survey)">
-                    Docking - AS (Annual Survey)
-                  </option>
-                  <option value="Docking - SS (Special Survey)">
-                    Docking - SS (Special Survey)
-                  </option>
-                  <option value="Repair">Repair</option>
+                  {WORK_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
                   Select the type of work to be performed

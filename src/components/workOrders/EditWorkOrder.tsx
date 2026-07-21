@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Circle,
 } from "lucide-react";
+import { WORK_TYPE_OPTIONS } from "../../constants/workTypes";
 
 interface WorkOrderWithVessel extends WorkOrder {
   vessel?: Vessel;
@@ -711,17 +712,11 @@ export default function EditWorkOrder() {
                   className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
                 >
                   <option value="">Select Work Type</option>
-                  <option value="Docking">Docking</option>
-                  <option value="Docking - IS (Intermediate Survey)">
-                    Docking - IS (Intermediate Survey)
-                  </option>
-                  <option value="Docking - AS (Annual Survey)">
-                    Docking - AS (Annual Survey)
-                  </option>
-                  <option value="Docking - SS (Special Survey)">
-                    Docking - SS (Special Survey)
-                  </option>
-                  <option value="Repair">Repair</option>
+                  {WORK_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
                 </select>
               </div>
 
