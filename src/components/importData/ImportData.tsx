@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { Fragment, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Upload,
@@ -37,6 +37,7 @@ import {
   parseProgressXLSX,
   validateProgressRows,
   importWorkProgress,
+  invalidateMasterDataCache,
   type ValidatedImportRow,
   type ValidatedWORow,
   type ValidatedProgressRow,
@@ -95,7 +96,7 @@ function WOPreviewTable({ rows }: { rows: ValidatedWORow[] }) {
             {rows.map((row) => {
               const hasErrors = row.errors.length > 0;
               return (
-                <>
+                <Fragment key={row.rowNumber}>
                   <tr
                     key={`wo-row-${row.rowNumber}`}
                     className={hasErrors ? "bg-red-50" : "bg-green-50"}
@@ -151,7 +152,7 @@ function WOPreviewTable({ rows }: { rows: ValidatedWORow[] }) {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>
@@ -183,6 +184,7 @@ function WDPreviewTable({ rows }: { rows: ValidatedImportRow[] }) {
                 "Start Date",
                 "Close Date",
                 "Period",
+                "Initial Progress",
               ].map((h) => (
                 <th
                   key={h}
@@ -197,7 +199,7 @@ function WDPreviewTable({ rows }: { rows: ValidatedImportRow[] }) {
             {rows.map((row) => {
               const hasErrors = row.errors.length > 0;
               return (
-                <>
+                <Fragment key={row.rowNumber}>
                   <tr
                     key={`wd-row-${row.rowNumber}`}
                     className={hasErrors ? "bg-red-50" : "bg-green-50"}
@@ -238,11 +240,20 @@ function WDPreviewTable({ rows }: { rows: ValidatedImportRow[] }) {
                     <td className="px-3 py-2 text-gray-800">
                       {row.period_close_target}
                     </td>
+                    <td className="px-3 py-2 text-gray-800">
+                      {row.hasInitialProgress ? (
+                        <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
+                          {row.progress_percentage}% @ {row.progress_report_date}
+                        </span>
+                      ) : (
+                        <em className="text-gray-400">—</em>
+                      )}
+                    </td>
                   </tr>
                   {hasErrors && (
                     <tr key={`wd-err-${row.rowNumber}`} className="bg-red-50">
                       <td />
-                      <td colSpan={11} className="px-3 pb-2">
+                      <td colSpan={12} className="px-3 pb-2">
                         <ul className="text-xs text-red-600 list-disc list-inside space-y-0.5">
                           {row.errors.map((err, i) => (
                             <li key={i}>{err}</li>
@@ -251,7 +262,7 @@ function WDPreviewTable({ rows }: { rows: ValidatedImportRow[] }) {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>
@@ -320,7 +331,7 @@ function WPPreviewTable({ rows }: { rows: ValidatedProgressRow[] }) {
             {rows.map((row) => {
               const hasErrors = row.errors.length > 0;
               return (
-                <>
+                <Fragment key={row.rowNumber}>
                   <tr
                     key={`wp-row-${row.rowNumber}`}
                     className={hasErrors ? "bg-red-50" : "bg-green-50"}
@@ -369,7 +380,7 @@ function WPPreviewTable({ rows }: { rows: ValidatedProgressRow[] }) {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>
@@ -596,9 +607,9 @@ export default function ImportData() {
 
   // ─── Template downloads ────────────────────────────────────────────────────
 
-  const handleDownloadCombinedXLSX = () =>
+  const handleDownloadCombinedXLSX = async () =>
     downloadXLSX(
-      generateCombinedTemplateXLSX(),
+      await generateCombinedTemplateXLSX(),
       "work_orders_and_details_template.xlsx",
     );
 
@@ -609,8 +620,8 @@ export default function ImportData() {
       "text/csv",
     );
 
-  const handleDownloadWDXLSX = () =>
-    downloadXLSX(generateTemplateXLSX(), "work_details_template.xlsx");
+  const handleDownloadWDXLSX = async () =>
+    downloadXLSX(await generateTemplateXLSX(), "work_details_template.xlsx");
 
   const handleDownloadWDCSV = () =>
     downloadFile(
@@ -619,8 +630,11 @@ export default function ImportData() {
       "text/csv",
     );
 
-  const handleDownloadWPXLSX = () =>
-    downloadXLSX(generateProgressTemplateXLSX(), "work_progress_template.xlsx");
+  const handleDownloadWPXLSX = async () =>
+    downloadXLSX(
+      await generateProgressTemplateXLSX(),
+      "work_progress_template.xlsx",
+    );
 
   const handleDownloadWPCSV = () =>
     downloadFile(
@@ -720,6 +734,7 @@ export default function ImportData() {
       if (profileError) throw profileError;
       const result = await importWorkOrders(woRows, userProfile.id);
       if (result.successCount > 0) {
+        invalidateMasterDataCache();
         await ActivityLogService.logActivity({
           action: "create",
           tableName: "work_order",
@@ -814,6 +829,7 @@ export default function ImportData() {
       if (profileError) throw profileError;
       const result = await importWorkDetails(wdRows, userProfile.id);
       if (result.successCount > 0) {
+        invalidateMasterDataCache();
         await ActivityLogService.logActivity({
           action: "create",
           tableName: "work_details",
@@ -908,6 +924,7 @@ export default function ImportData() {
       if (profileError) throw profileError;
       const result = await importWorkProgress(wpRows, userProfile.id);
       if (result.successCount > 0) {
+        invalidateMasterDataCache();
         await ActivityLogService.logActivity({
           action: "create",
           tableName: "work_progress",
@@ -1252,6 +1269,24 @@ export default function ImportData() {
                           "planned_start_date (YYYY-MM-DD)",
                           "target_close_date (YYYY-MM-DD)",
                           "period_close_target",
+                        ].map((c) => (
+                          <code
+                            key={c}
+                            className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs font-mono"
+                          >
+                            {c}
+                          </code>
+                        ))}
+                      </div>
+                      <p className="font-medium mt-2 mb-1">
+                        Optional columns (sets this new item's starting progress —
+                        for updates later, use the Work Progress tab instead):
+                      </p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-1">
+                        {[
+                          "progress_percentage",
+                          "progress_report_date (YYYY-MM-DD)",
+                          "progress_notes",
                         ].map((c) => (
                           <code
                             key={c}

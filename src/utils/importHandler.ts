@@ -1,5 +1,256 @@
 import { supabase } from "../lib/supabase";
 import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import { WORK_TYPE_OPTIONS } from "../constants/workTypes";
+
+// ─── Sample real work orders (for Work Details / Progress template samples) ──
+//
+// Description text in these samples stays clearly a placeholder even when the
+// vessel/WO number are real — Work Details always inserts a new row (safe),
+// but Work Progress matches and OVERWRITES by vessel+WO+description, so a
+// sample row must never form a complete real triple that could silently
+// clobber a real item's progress if left unedited.
+
+async function getSampleWorkOrders(
+  limit: number,
+): Promise<{ vesselName: string; woNumber: string }[]> {
+  const { data } = await supabase
+    .from("work_order")
+    .select("shipyard_wo_number, vessel:vessel_id(name)")
+    .is("deleted_at", null)
+    .order("id", { ascending: false })
+    .limit(limit);
+
+  return (data ?? [])
+    .map((r) => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vesselName: ((r.vessel as any)?.name as string) ?? "",
+      woNumber: (r.shipyard_wo_number as string) ?? "",
+    }))
+    .filter((r) => r.vesselName && r.woNumber);
+}
+
+// ─── ExcelJS template helpers ─────────────────────────────────────────────────
+//
+// Reference sheets + dropdown validations referencing them. The `xlsx`
+// package (used for reading uploaded files elsewhere in this module) can't
+// write data validations — that's an ExcelJS-only capability, so template
+// *generation* uses ExcelJS while *parsing* stays on `xlsx`, unchanged.
+
+function addExcelRefSheet(
+  wb: ExcelJS.Workbook,
+  sheetName: string,
+  header: string,
+  values: string[],
+): ExcelJS.Worksheet {
+  const ws = wb.addWorksheet(sheetName);
+  ws.getCell("A1").value = header;
+  ws.getCell("A1").font = { bold: true };
+  values.forEach((v, i) => {
+    ws.getCell(`A${i + 2}`).value = v;
+  });
+  ws.getColumn(1).width = 40;
+  return ws;
+}
+
+/** Excel list-validation formula pointing at a whole reference sheet column. */
+function refFormula(sheetName: string, count: number): string {
+  const lastRow = Math.max(count + 1, 2);
+  return `'${sheetName}'!$A$2:$A$${lastRow}`;
+}
+
+const YES_NO_FORMULA = '"yes,no"';
+
+/** Apply the same list validation to every cell in a column across a row range. */
+function applyListValidation(
+  ws: ExcelJS.Worksheet,
+  col: string,
+  startRow: number,
+  endRow: number,
+  formula: string,
+) {
+  for (let r = startRow; r <= endRow; r++) {
+    ws.getCell(`${col}${r}`).dataValidation = {
+      type: "list",
+      formulae: [formula],
+      allowBlank: true,
+      showErrorMessage: true,
+      errorStyle: "warning",
+      error: "Value should come from the reference list, but you can still enter free text.",
+    };
+  }
+}
+
+function buildInstructionsSheet(
+  wb: ExcelJS.Workbook,
+  title: string,
+  lines: Array<[string] | [string, string]>,
+) {
+  const ws = wb.addWorksheet("Instructions");
+  ws.getCell("A1").value = title;
+  ws.getCell("A1").font = { bold: true, size: 13 };
+  let row = 3;
+  for (const line of lines) {
+    ws.getCell(`A${row}`).value = line[0];
+    if (line[1] !== undefined) ws.getCell(`B${row}`).value = line[1];
+    row++;
+  }
+  ws.getColumn(1).width = 55;
+  ws.getColumn(2).width = 50;
+}
+
+function addDataSheet(
+  wb: ExcelJS.Workbook,
+  sheetName: string,
+  headers: string[],
+  colWidths: number[],
+  sampleRows: (string | number)[][],
+): ExcelJS.Worksheet {
+  const ws = wb.addWorksheet(sheetName);
+  headers.forEach((h, i) => {
+    const cell = ws.getCell(1, i + 1);
+    cell.value = h;
+    cell.font = { bold: true };
+  });
+  sampleRows.forEach((row, r) => {
+    row.forEach((v, c) => {
+      ws.getCell(r + 2, c + 1).value = v;
+    });
+  });
+  colWidths.forEach((w, i) => {
+    ws.getColumn(i + 1).width = w;
+  });
+  return ws;
+}
+
+// ─── Master data cache ────────────────────────────────────────────────────────
+//
+// Every validator used to re-fetch vessels/kapros/locations/work_scopes/
+// work_orders/work_details from scratch on every upload, and template
+// downloads re-fetched the same reference lists again. None of that changes
+// between uploads in the same import session, so it's fetched once here and
+// reused by validateWORows, validateRows, validateProgressRows, and the
+// template reference sheets. Invalidated right after any successful import
+// (see invalidateMasterDataCache), so a re-upload right after creating new
+// Work Orders sees them immediately instead of a stale pre-import snapshot.
+
+interface MasterData {
+  vesselsByNorm: Map<string, number>;
+  vesselNames: string[];
+  kaprosByNorm: Map<string, number>;
+  kaproNames: string[];
+  locationsByNorm: Map<string, number>;
+  locationNames: string[];
+  workScopesByNorm: Map<string, number>;
+  workScopeNames: string[];
+  // "vesselId:wo_number_lower" -> id
+  workOrdersByKey: Map<string, number>;
+  // "workOrderId:description_lower" -> id
+  workDetailsByKey: Map<string, number>;
+}
+
+let masterDataCache: MasterData | null = null;
+let masterDataPromise: Promise<MasterData> | null = null;
+
+async function getMasterData(): Promise<MasterData> {
+  if (masterDataCache) return masterDataCache;
+  if (masterDataPromise) return masterDataPromise;
+
+  masterDataPromise = (async () => {
+    const [vesselsRes, kaprosRes, locationsRes, workScopesRes, workOrdersRes, workDetailsRes] =
+      await Promise.all([
+        supabase.from("vessel").select("id, name").is("deleted_at", null),
+        supabase.from("kapro").select("id, kapro_name").is("deleted_at", null),
+        supabase.from("location").select("id, location").is("deleted_at", null),
+        supabase.from("work_scope").select("id, work_scope").is("deleted_at", null),
+        supabase
+          .from("work_order")
+          .select("id, vessel_id, shipyard_wo_number")
+          .is("deleted_at", null),
+        supabase
+          .from("work_details")
+          .select("id, work_order_id, description")
+          .is("deleted_at", null),
+      ]);
+
+    const vesselsByNorm = new Map<string, number>();
+    const vesselNames: string[] = [];
+    for (const v of vesselsRes.data ?? []) {
+      const name = (v.name as string) ?? "";
+      if (!name.trim()) continue;
+      vesselsByNorm.set(name.toLowerCase().trim(), v.id as number);
+      vesselNames.push(name.trim());
+    }
+
+    const kaprosByNorm = new Map<string, number>();
+    const kaproNames: string[] = [];
+    for (const k of kaprosRes.data ?? []) {
+      const name = (k.kapro_name as string) ?? "";
+      if (!name.trim()) continue;
+      kaprosByNorm.set(name.toLowerCase().trim(), k.id as number);
+      kaproNames.push(name.trim());
+    }
+
+    const locationsByNorm = new Map<string, number>();
+    const locationNames: string[] = [];
+    for (const l of locationsRes.data ?? []) {
+      const name = (l.location as string) ?? "";
+      if (!name.trim()) continue;
+      locationsByNorm.set(name.toLowerCase().trim(), l.id as number);
+      locationNames.push(name.trim());
+    }
+
+    const workScopesByNorm = new Map<string, number>();
+    const workScopeNames: string[] = [];
+    for (const w of workScopesRes.data ?? []) {
+      const name = (w.work_scope as string) ?? "";
+      if (!name.trim()) continue;
+      workScopesByNorm.set(name.toLowerCase().trim(), w.id as number);
+      workScopeNames.push(name.trim());
+    }
+
+    const workOrdersByKey = new Map<string, number>();
+    for (const wo of workOrdersRes.data ?? []) {
+      const key = `${wo.vessel_id}:${((wo.shipyard_wo_number as string) ?? "").toLowerCase().trim()}`;
+      workOrdersByKey.set(key, wo.id as number);
+    }
+
+    const workDetailsByKey = new Map<string, number>();
+    for (const wd of workDetailsRes.data ?? []) {
+      const key = `${wd.work_order_id}:${((wd.description as string) ?? "").toLowerCase().trim()}`;
+      workDetailsByKey.set(key, wd.id as number);
+    }
+
+    const sortNames = (names: string[]) => [...names].sort((a, b) => a.localeCompare(b));
+
+    const result: MasterData = {
+      vesselsByNorm,
+      vesselNames: sortNames(vesselNames),
+      kaprosByNorm,
+      kaproNames: sortNames(kaproNames),
+      locationsByNorm,
+      locationNames: sortNames(locationNames),
+      workScopesByNorm,
+      workScopeNames: sortNames(workScopeNames),
+      workOrdersByKey,
+      workDetailsByKey,
+    };
+    masterDataCache = result;
+    return result;
+  })();
+
+  try {
+    return await masterDataPromise;
+  } finally {
+    masterDataPromise = null;
+  }
+}
+
+/** Call after any successful import so the next validation sees fresh data. */
+export function invalidateMasterDataCache() {
+  masterDataCache = null;
+  masterDataPromise = null;
+}
 
 // ─── Template Data ────────────────────────────────────────────────────────────
 
@@ -15,6 +266,9 @@ export const WORK_DETAILS_TEMPLATE_HEADERS = [
   "planned_start_date",
   "target_close_date",
   "period_close_target",
+  "progress_percentage",
+  "progress_report_date",
+  "progress_notes",
 ];
 
 // Friendly display labels shown as the first row in XLSX (row 1 = labels, row 2+ = data)
@@ -26,10 +280,13 @@ const HEADER_LABELS: Record<string, string> = {
   work_scope: "Work Scope *",
   quantity: "Quantity *",
   uom: "UOM *",
-  is_additional_wo_details: "Additional WO? (yes/no)",
+  is_additional_wo_details: "Is Additional WO Details (yes/no)",
   planned_start_date: "Planned Start Date * (YYYY-MM-DD)",
   target_close_date: "Target Close Date * (YYYY-MM-DD)",
   period_close_target: "Period Close Target *",
+  progress_percentage: "Progress Percentage (optional)",
+  progress_report_date: "Progress Report Date (optional, YYYY-MM-DD)",
+  progress_notes: "Progress Notes (optional)",
 };
 
 export const WORK_DETAILS_TEMPLATE_SAMPLE: string[][] = [
@@ -45,6 +302,9 @@ export const WORK_DETAILS_TEMPLATE_SAMPLE: string[][] = [
     "2024-06-01",
     "2024-07-15",
     "Jul 2024",
+    "25",
+    "2024-06-05",
+    "Started per site report",
   ],
   [
     "KM. Mawar Laut",
@@ -58,6 +318,9 @@ export const WORK_DETAILS_TEMPLATE_SAMPLE: string[][] = [
     "2024-06-05",
     "2024-07-30",
     "Jul 2024",
+    "",
+    "",
+    "",
   ],
   [
     "KM. Mawar Laut",
@@ -71,6 +334,9 @@ export const WORK_DETAILS_TEMPLATE_SAMPLE: string[][] = [
     "2024-06-10",
     "2024-07-10",
     "Jul 2024",
+    "",
+    "",
+    "",
   ],
   [
     "KM. Mawar Laut",
@@ -84,6 +350,9 @@ export const WORK_DETAILS_TEMPLATE_SAMPLE: string[][] = [
     "2024-06-15",
     "2024-08-01",
     "Aug 2024",
+    "",
+    "",
+    "",
   ],
   [
     "KM. Sinar Bahari",
@@ -97,6 +366,9 @@ export const WORK_DETAILS_TEMPLATE_SAMPLE: string[][] = [
     "2024-07-01",
     "2024-07-20",
     "Jul 2024",
+    "",
+    "",
+    "",
   ],
   [
     "KM. Sinar Bahari",
@@ -110,6 +382,9 @@ export const WORK_DETAILS_TEMPLATE_SAMPLE: string[][] = [
     "2024-07-05",
     "2024-07-25",
     "Jul 2024",
+    "",
+    "",
+    "",
   ],
 ];
 
@@ -125,60 +400,65 @@ export function generateTemplateCSV(): string {
 
 // ─── XLSX Template ────────────────────────────────────────────────────────────
 
-export function generateTemplateXLSX(): Uint8Array {
-  const wb = XLSX.utils.book_new();
+export async function generateTemplateXLSX(): Promise<Uint8Array> {
+  const md = await getMasterData();
+  const wos = await getSampleWorkOrders(2);
+  const v1 = wos[0]?.vesselName ?? md.vesselNames[0] ?? "Example Vessel";
+  const wo1 = wos[0]?.woNumber ?? "SY-2024-001";
+  const v2 = wos[1]?.vesselName ?? v1;
+  const wo2 = wos[1]?.woNumber ?? wo1;
+  const loc = md.locationNames;
+  const scope = md.workScopeNames;
 
-  // Build rows: header labels row + data rows
-  const labelRow = WORK_DETAILS_TEMPLATE_HEADERS.map(
-    (h) => HEADER_LABELS[h] ?? h,
-  );
-  const dataRows = WORK_DETAILS_TEMPLATE_SAMPLE.map((row) =>
-    WORK_DETAILS_TEMPLATE_HEADERS.map((_, i) => row[i] ?? ""),
-  );
-
-  const wsData = [labelRow, ...dataRows];
-  const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-  // Column widths
-  ws["!cols"] = [
-    { wch: 22 }, // vessel_name
-    { wch: 18 }, // work_order_number
-    { wch: 42 }, // description
-    { wch: 18 }, // location
-    { wch: 18 }, // work_scope
-    { wch: 10 }, // quantity
-    { wch: 8 }, // uom
-    { wch: 22 }, // is_additional_wo_details
-    { wch: 28 }, // planned_start_date
-    { wch: 28 }, // target_close_date
-    { wch: 22 }, // period_close_target
+  const sampleRows: (string | number)[][] = [
+    [
+      v1, wo1, "Example — replace with the real work description",
+      loc[0] ?? "Main Deck", scope[0] ?? "Hull Works", 1, "LS", "no",
+      "2024-06-01", "2024-07-15", "Jul 2024",
+      25, "2024-06-05", "Example — optional starting progress",
+    ],
+    [
+      v1, wo1, "Example — another item under the same work order",
+      loc[1] ?? loc[0] ?? "Engine Room", scope[1] ?? scope[0] ?? "Machinery", 12.5, "M2", "no",
+      "2024-06-15", "2024-08-01", "Aug 2024",
+      "", "", "",
+    ],
+    [
+      v2, wo2, "Example — an additional (not originally planned) item",
+      loc[2] ?? loc[0] ?? "Forecastle Deck", scope[2] ?? scope[0] ?? "Deck Outfitting", 1, "Set", "yes",
+      "2024-07-05", "2024-07-25", "Jul 2024",
+      "", "", "",
+    ],
   ];
 
-  XLSX.utils.book_append_sheet(wb, ws, "Work Details");
+  const wb = new ExcelJS.Workbook();
+  const headers = WORK_DETAILS_TEMPLATE_HEADERS.map((h) => HEADER_LABELS[h] ?? h);
+  const ws = addDataSheet(
+    wb,
+    "Work Details",
+    headers,
+    [22, 18, 42, 18, 18, 10, 8, 22, 28, 28, 22, 20, 28, 30],
+    sampleRows,
+  );
 
-  // Instructions sheet
-  const instructions = [
-    ["IMPORT TEMPLATE — WORK DETAILS"],
-    [""],
+  applyListValidation(ws, "A", 2, 300, refFormula("Ref - Vessels", md.vesselNames.length));
+  applyListValidation(ws, "D", 2, 300, refFormula("Ref - Locations", md.locationNames.length));
+  applyListValidation(ws, "E", 2, 300, refFormula("Ref - Work Scopes", md.workScopeNames.length));
+  applyListValidation(ws, "H", 2, 300, YES_NO_FORMULA);
+
+  buildInstructionsSheet(wb, "IMPORT TEMPLATE — WORK DETAILS", [
     ["INSTRUCTIONS"],
-    [
-      "1. Fill in the 'Work Details' sheet starting from row 2 (do not change row 1 headers).",
-    ],
+    ["1. Fill in the 'Work Details' sheet starting from row 2 (do not change row 1 headers)."],
     ["2. Fields marked with * are required."],
-    [
-      "3. vessel_name must exactly match a vessel in the system (case-insensitive).",
-    ],
-    [
-      "4. work_order_number must match an existing WO for that vessel (Shipyard WO Number).",
-    ],
-    ["5. location must match an existing Location record (case-insensitive)."],
-    [
-      "6. work_scope must match an existing Work Scope record (case-insensitive).",
-    ],
-    ["7. quantity must be a positive number."],
-    ["8. Dates must be in YYYY-MM-DD format (e.g. 2024-06-15)."],
-    ["9. is_additional_wo_details: enter 'yes' or 'no'."],
-    ["10. period_close_target: free text (e.g. 'Jul 2024')."],
+    ["3. vessel_name, location, and work_scope have dropdowns — click the cell to pick a valid value."],
+    ["4. work_order_number must match an existing WO for that vessel (Shipyard WO Number)."],
+    ["5. quantity must be a positive number."],
+    ["6. Dates must be in YYYY-MM-DD format (e.g. 2024-06-15)."],
+    ["7. is_additional_wo_details: pick 'yes' or 'no' from the dropdown."],
+    ["8. period_close_target: free text (e.g. 'Jul 2024')."],
+    ["9. progress_percentage / progress_report_date are OPTIONAL and only set the INITIAL progress for this new work item — leave both blank if not needed."],
+    ["10. If you fill in progress_percentage, progress_report_date is also required (and vice versa)."],
+    ["11. To UPDATE progress later (on this or any other work item), use the separate Work Progress tab — this column only applies once, when the work item is first created."],
     [""],
     ["COLUMN REFERENCE"],
     ["vessel_name", "Name of the vessel — must match exactly"],
@@ -192,13 +472,17 @@ export function generateTemplateXLSX(): Uint8Array {
     ["planned_start_date", "Format: YYYY-MM-DD"],
     ["target_close_date", "Format: YYYY-MM-DD (must be ≥ planned_start_date)"],
     ["period_close_target", "Target period label (e.g. Jul 2024, Q3 2024)"],
-  ];
+    ["progress_percentage", "Optional — 0 to 100, sets this new item's starting progress"],
+    ["progress_report_date", "Optional — YYYY-MM-DD, required together with progress_percentage"],
+    ["progress_notes", "Optional free text for the initial progress entry"],
+  ]);
 
-  const wsInfo = XLSX.utils.aoa_to_sheet(instructions);
-  wsInfo["!cols"] = [{ wch: 50 }, { wch: 45 }];
-  XLSX.utils.book_append_sheet(wb, wsInfo, "Instructions");
+  addExcelRefSheet(wb, "Ref - Vessels", "Vessel Name", md.vesselNames);
+  addExcelRefSheet(wb, "Ref - Locations", "Location", md.locationNames);
+  addExcelRefSheet(wb, "Ref - Work Scopes", "Work Scope", md.workScopeNames);
 
-  return XLSX.write(wb, { type: "array", bookType: "xlsx" }) as Uint8Array;
+  const buf = await wb.xlsx.writeBuffer();
+  return new Uint8Array(buf as ArrayBuffer);
 }
 
 // ─── Work Order Template ──────────────────────────────────────────────────────
@@ -221,7 +505,7 @@ const WO_HEADER_LABELS: Record<string, string> = {
   shipyard_wo_date: "Shipyard WO Date * (YYYY-MM-DD)",
   customer_wo_number: "Customer WO Number",
   customer_wo_date: "Customer WO Date (YYYY-MM-DD)",
-  is_additional_wo: "Additional WO? (yes/no)",
+  is_additional_wo: "Is Additional WO (yes/no)",
   kapro_name: "Kapro Name",
   work_location: "Work Location",
   work_type: "Work Type",
@@ -264,68 +548,76 @@ const WO_TEMPLATE_SAMPLE: string[][] = [
 ];
 
 /** Generate an XLSX template that covers Work Orders AND Work Details in two sheets. */
-export function generateCombinedTemplateXLSX(): Uint8Array {
-  const wb = XLSX.utils.book_new();
+export async function generateCombinedTemplateXLSX(): Promise<Uint8Array> {
+  const md = await getMasterData();
+  const wos = await getSampleWorkOrders(2);
+  const v1 = wos[0]?.vesselName ?? md.vesselNames[0] ?? "Example Vessel";
+  const v2 = md.vesselNames[1] ?? v1;
+  const kapro1 = md.kaproNames[0] ?? "";
+  const loc = md.locationNames;
+  const scope = md.workScopeNames;
+
+  const wb = new ExcelJS.Workbook();
 
   // ── Sheet 1: Work Orders ──
-  const woLabelRow = WORK_ORDER_TEMPLATE_HEADERS.map(
-    (h) => WO_HEADER_LABELS[h] ?? h,
-  );
-  const woWs = XLSX.utils.aoa_to_sheet([woLabelRow, ...WO_TEMPLATE_SAMPLE]);
-  woWs["!cols"] = [
-    { wch: 22 },
-    { wch: 20 },
-    { wch: 26 },
-    { wch: 22 },
-    { wch: 24 },
-    { wch: 20 },
-    { wch: 18 },
-    { wch: 16 },
-    { wch: 16 },
+  const woSampleRows: (string | number)[][] = [
+    [v1, "SY-2024-001", "2024-05-10", "CUST-WO-001", "2024-05-05", "no", kapro1, "Samarinda", "Repair"],
+    [v1, "SY-2024-002", "2024-06-01", "", "", "yes", "", "Samarinda", "Repair"],
+    [v2, "SY-2024-003", "2024-06-15", "CUST-WO-003", "2024-06-10", "no", kapro1, "Balikpapan", "Maintenance"],
   ];
-  XLSX.utils.book_append_sheet(wb, woWs, "Work Orders");
+  const woHeaders = WORK_ORDER_TEMPLATE_HEADERS.map((h) => WO_HEADER_LABELS[h] ?? h);
+  const woWs = addDataSheet(
+    wb,
+    "Work Orders",
+    woHeaders,
+    [22, 20, 26, 22, 24, 20, 18, 16, 16],
+    woSampleRows,
+  );
+  applyListValidation(woWs, "A", 2, 300, refFormula("Ref - Vessels", md.vesselNames.length));
+  applyListValidation(woWs, "F", 2, 300, YES_NO_FORMULA);
+  applyListValidation(woWs, "G", 2, 300, refFormula("Ref - Kapro", md.kaproNames.length));
+  applyListValidation(woWs, "I", 2, 300, refFormula("Ref - Work Types", WORK_TYPE_OPTIONS.length));
 
   // ── Sheet 2: Work Details ──
-  const wdLabelRow = WORK_DETAILS_TEMPLATE_HEADERS.map(
-    (h) => HEADER_LABELS[h] ?? h,
-  );
-  const wdWs = XLSX.utils.aoa_to_sheet([
-    wdLabelRow,
-    ...WORK_DETAILS_TEMPLATE_SAMPLE,
-  ]);
-  wdWs["!cols"] = [
-    { wch: 22 },
-    { wch: 18 },
-    { wch: 42 },
-    { wch: 18 },
-    { wch: 18 },
-    { wch: 10 },
-    { wch: 8 },
-    { wch: 22 },
-    { wch: 28 },
-    { wch: 28 },
-    { wch: 22 },
+  const wdSampleRows: (string | number)[][] = [
+    [
+      v1, "SY-2024-001", "Example — replace with the real work description",
+      loc[0] ?? "Main Deck", scope[0] ?? "Hull Works", 1, "LS", "no",
+      "2024-06-01", "2024-07-15", "Jul 2024", 25, "2024-06-05", "Example — optional starting progress",
+    ],
+    [
+      v1, "SY-2024-001", "Example — another item under the same work order",
+      loc[1] ?? loc[0] ?? "Engine Room", scope[1] ?? scope[0] ?? "Machinery", 12.5, "M2", "no",
+      "2024-06-15", "2024-08-01", "Aug 2024", "", "", "",
+    ],
+    [
+      v2, "SY-2024-003", "Example — an additional (not originally planned) item",
+      loc[2] ?? loc[0] ?? "Forecastle Deck", scope[2] ?? scope[0] ?? "Deck Outfitting", 1, "Set", "yes",
+      "2024-07-05", "2024-07-25", "Jul 2024", "", "", "",
+    ],
   ];
-  XLSX.utils.book_append_sheet(wb, wdWs, "Work Details");
+  const wdHeaders = WORK_DETAILS_TEMPLATE_HEADERS.map((h) => HEADER_LABELS[h] ?? h);
+  const wdWs = addDataSheet(
+    wb,
+    "Work Details",
+    wdHeaders,
+    [22, 18, 42, 18, 18, 10, 8, 22, 28, 28, 22, 20, 28, 30],
+    wdSampleRows,
+  );
+  applyListValidation(wdWs, "A", 2, 300, refFormula("Ref - Vessels", md.vesselNames.length));
+  applyListValidation(wdWs, "D", 2, 300, refFormula("Ref - Locations", md.locationNames.length));
+  applyListValidation(wdWs, "E", 2, 300, refFormula("Ref - Work Scopes", md.workScopeNames.length));
+  applyListValidation(wdWs, "H", 2, 300, YES_NO_FORMULA);
 
   // ── Sheet 3: Instructions ──
-  const instructions = [
-    ["IMPORT TEMPLATE — WORK ORDERS & WORK DETAILS"],
-    [""],
+  buildInstructionsSheet(wb, "IMPORT TEMPLATE — WORK ORDERS & WORK DETAILS", [
     ["HOW TO USE"],
     ["1. Fill in the 'Work Orders' sheet first (starting from row 2)."],
     ["2. Fill in the 'Work Details' sheet next (starting from row 2)."],
-    [
-      "3. vessel_name must match an existing vessel exactly (case-insensitive).",
-    ],
-    [
-      "4. work_order_number in 'Work Details' must match a shipyard_wo_number in 'Work Orders' sheet OR an existing WO in the system.",
-    ],
-    [
-      "5. kapro_name, location, and work_scope must match existing records (case-insensitive). Leave kapro_name blank if not applicable.",
-    ],
-    ["6. Dates: YYYY-MM-DD format (e.g. 2024-06-15)."],
-    ["7. is_additional_wo / is_additional_wo_details: enter 'yes' or 'no'."],
+    ["3. vessel_name, kapro_name, work_type, location, and work_scope have dropdowns — click the cell to pick a valid value."],
+    ["4. work_order_number in 'Work Details' must match a shipyard_wo_number in 'Work Orders' sheet OR an existing WO in the system."],
+    ["5. Dates: YYYY-MM-DD format (e.g. 2024-06-15)."],
+    ["6. is_additional_wo / is_additional_wo_details: pick 'yes' or 'no' from the dropdown."],
     [""],
     ["WORK ORDER COLUMNS"],
     ["vessel_name *", "Must match an existing vessel"],
@@ -335,11 +627,8 @@ export function generateCombinedTemplateXLSX(): Uint8Array {
     ["customer_wo_date", "Optional — YYYY-MM-DD"],
     ["is_additional_wo", "yes or no"],
     ["kapro_name", "Optional — must match existing Kapro record"],
-    [
-      "work_location",
-      "Optional — city of the work (e.g. Samarinda, Balikpapan)",
-    ],
-    ["work_type", "Optional free text (e.g. Repair, Maintenance)"],
+    ["work_location", "Optional — city of the work (e.g. Samarinda, Balikpapan)"],
+    ["work_type", "Optional — pick from the dropdown"],
     [""],
     ["WORK DETAILS COLUMNS"],
     ["vessel_name *", "Must match an existing vessel"],
@@ -353,12 +642,19 @@ export function generateCombinedTemplateXLSX(): Uint8Array {
     ["planned_start_date *", "YYYY-MM-DD"],
     ["target_close_date *", "YYYY-MM-DD (must be ≥ planned_start_date)"],
     ["period_close_target *", "e.g. Jul 2024"],
-  ];
-  const wsInfo = XLSX.utils.aoa_to_sheet(instructions);
-  wsInfo["!cols"] = [{ wch: 52 }, { wch: 45 }];
-  XLSX.utils.book_append_sheet(wb, wsInfo, "Instructions");
+    ["progress_percentage", "Optional — 0 to 100, sets a new item's starting progress"],
+    ["progress_report_date", "Optional — YYYY-MM-DD, required together with progress_percentage"],
+    ["progress_notes", "Optional free text for the initial progress entry"],
+  ]);
 
-  return XLSX.write(wb, { type: "array", bookType: "xlsx" }) as Uint8Array;
+  addExcelRefSheet(wb, "Ref - Vessels", "Vessel Name", md.vesselNames);
+  addExcelRefSheet(wb, "Ref - Kapro", "Kapro Name", md.kaproNames);
+  addExcelRefSheet(wb, "Ref - Locations", "Location", md.locationNames);
+  addExcelRefSheet(wb, "Ref - Work Scopes", "Work Scope", md.workScopeNames);
+  addExcelRefSheet(wb, "Ref - Work Types", "Work Type", WORK_TYPE_OPTIONS);
+
+  const buf = await wb.xlsx.writeBuffer();
+  return new Uint8Array(buf as ArrayBuffer);
 }
 
 /** Generate a CSV template for Work Orders only. */
@@ -385,6 +681,9 @@ export interface ParsedImportRow {
   planned_start_date: string;
   target_close_date: string;
   period_close_target: string;
+  progress_percentage: string;
+  progress_report_date: string;
+  progress_notes: string;
 }
 
 export interface ValidatedImportRow extends ParsedImportRow {
@@ -393,6 +692,7 @@ export interface ValidatedImportRow extends ParsedImportRow {
   work_order_id?: number;
   location_id?: number;
   work_scope_id?: number;
+  hasInitialProgress?: boolean;
 }
 
 function parseCSVLine(line: string): string[] {
@@ -454,6 +754,9 @@ export function parseCSV(csvText: string): ParsedImportRow[] {
       planned_start_date: rowObj["planned_start_date"] ?? "",
       target_close_date: rowObj["target_close_date"] ?? "",
       period_close_target: rowObj["period_close_target"] ?? "",
+      progress_percentage: rowObj["progress_percentage"] ?? "",
+      progress_report_date: rowObj["progress_report_date"] ?? "",
+      progress_notes: rowObj["progress_notes"] ?? "",
     });
   }
 
@@ -487,14 +790,6 @@ export function parseXLSX(buffer: ArrayBuffer): ParsedImportRow[] {
 
   if (raw.length < 2) return [];
 
-  // Normalise header: strip asterisks, parenthesised hints, extra spaces → snake_case
-  const normaliseHeader = (h: string) =>
-    String(h)
-      .replace(/\*|\(.*?\)/g, "")
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, "_");
-
   const headers = (raw[0] as string[]).map(normaliseHeader);
 
   const rows: ParsedImportRow[] = [];
@@ -521,6 +816,9 @@ export function parseXLSX(buffer: ArrayBuffer): ParsedImportRow[] {
       planned_start_date: rowObj["planned_start_date"] ?? "",
       target_close_date: rowObj["target_close_date"] ?? "",
       period_close_target: rowObj["period_close_target"] ?? "",
+      progress_percentage: rowObj["progress_percentage"] ?? "",
+      progress_report_date: rowObj["progress_report_date"] ?? "",
+      progress_notes: rowObj["progress_notes"] ?? "",
     });
   }
 
@@ -537,46 +835,13 @@ interface LookupMaps {
 }
 
 async function buildLookupMaps(): Promise<LookupMaps> {
-  const [vesselsRes, workOrdersRes, locationsRes, workScopesRes] =
-    await Promise.all([
-      supabase.from("vessel").select("id, name").is("deleted_at", null),
-      supabase
-        .from("work_order")
-        .select("id, vessel_id, shipyard_wo_number")
-        .is("deleted_at", null),
-      supabase.from("location").select("id, location").is("deleted_at", null),
-      supabase
-        .from("work_scope")
-        .select("id, work_scope")
-        .is("deleted_at", null),
-    ]);
-
-  const vessels = new Map<string, number>();
-  for (const v of vesselsRes.data ?? []) {
-    vessels.set((v.name as string).toLowerCase().trim(), v.id as number);
-  }
-
-  // Build vessel id lookup first for work orders key
-  const workOrders = new Map<string, number>();
-  for (const wo of workOrdersRes.data ?? []) {
-    const key = `${wo.vessel_id}:${(wo.shipyard_wo_number as string).toLowerCase().trim()}`;
-    workOrders.set(key, wo.id as number);
-  }
-
-  const locations = new Map<string, number>();
-  for (const l of locationsRes.data ?? []) {
-    locations.set((l.location as string).toLowerCase().trim(), l.id as number);
-  }
-
-  const workScopes = new Map<string, number>();
-  for (const ws of workScopesRes.data ?? []) {
-    workScopes.set(
-      (ws.work_scope as string).toLowerCase().trim(),
-      ws.id as number,
-    );
-  }
-
-  return { vessels, workOrders, locations, workScopes };
+  const md = await getMasterData();
+  return {
+    vessels: md.vesselsByNorm,
+    workOrders: md.workOrdersByKey,
+    locations: md.locationsByNorm,
+    workScopes: md.workScopesByNorm,
+  };
 }
 
 export async function validateRows(
@@ -661,6 +926,28 @@ export async function validateRows(
       }
     }
 
+    // Optional initial progress — both fields blank is fine (no progress set
+    // for this new work item); if either is filled, both must be valid.
+    const hasPct = row.progress_percentage.trim() !== "";
+    const hasDate = row.progress_report_date.trim() !== "";
+    let hasInitialProgress = false;
+    if (hasPct || hasDate) {
+      if (!hasPct) {
+        errors.push("progress_report_date is set but progress_percentage is missing");
+      } else {
+        const pct = parseFloat(row.progress_percentage);
+        if (isNaN(pct) || pct < 0 || pct > 100) {
+          errors.push("progress_percentage must be a number between 0 and 100");
+        }
+      }
+      if (!hasDate) {
+        errors.push("progress_percentage is set but progress_report_date is missing");
+      } else if (!dateRegex.test(row.progress_report_date)) {
+        errors.push("progress_report_date must be YYYY-MM-DD format");
+      }
+      hasInitialProgress = hasPct && hasDate;
+    }
+
     return {
       ...row,
       errors,
@@ -668,6 +955,7 @@ export async function validateRows(
       work_order_id,
       location_id,
       work_scope_id,
+      hasInitialProgress,
     };
   });
 }
@@ -715,7 +1003,10 @@ export async function importWorkDetails(
     ptw_number: null,
   }));
 
-  const { error } = await supabase.from("work_details").insert(insertData);
+  const { data: inserted, error } = await supabase
+    .from("work_details")
+    .insert(insertData)
+    .select("id");
 
   if (error) {
     // If bulk insert fails, report all rows as failed
@@ -723,6 +1014,34 @@ export async function importWorkDetails(
       failedRows.push({ rowNumber: row.rowNumber, error: error.message });
     }
     return { successCount: 0, failedRows };
+  }
+
+  // Each newly created work item can optionally carry an initial progress
+  // entry (progress_percentage + progress_report_date). These are brand-new
+  // work_details rows, so there's no existing is_imported row to reconcile
+  // against — always a plain insert.
+  const progressRows = validRows
+    .map((row, i) => ({ row, workDetailsId: inserted?.[i]?.id as number | undefined }))
+    .filter(({ row, workDetailsId }) => row.hasInitialProgress && workDetailsId);
+
+  if (progressRows.length > 0) {
+    const progressInsertData = progressRows.map(({ row, workDetailsId }) => ({
+      work_details_id: workDetailsId!,
+      progress_percentage: parseFloat(row.progress_percentage),
+      report_date: row.progress_report_date,
+      notes: row.progress_notes.trim() || null,
+      user_id: userId,
+      is_imported: true,
+    }));
+    const { error: progressError } = await supabase
+      .from("work_progress")
+      .insert(progressInsertData);
+    if (progressError) {
+      failedRows.push({
+        rowNumber: 0,
+        error: `Work details were imported successfully, but ${progressRows.length} initial progress entr${progressRows.length === 1 ? "y" : "ies"} failed: ${progressError.message}`,
+      });
+    }
   }
 
   return { successCount: validRows.length, failedRows };
@@ -826,13 +1145,7 @@ export function parseWorkOrderXLSX(buffer: ArrayBuffer): ParsedWORow[] {
   });
   if (raw.length < 2) return [];
 
-  const norm = (h: string) =>
-    String(h)
-      .replace(/\*|\(.*?\)/g, "")
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, "_");
-  const headers = (raw[0] as string[]).map(norm);
+  const headers = (raw[0] as string[]).map(normaliseHeader);
 
   const rows: ParsedWORow[] = [];
   for (let i = 1; i < raw.length; i++) {
@@ -863,19 +1176,9 @@ export function parseWorkOrderXLSX(buffer: ArrayBuffer): ParsedWORow[] {
 export async function validateWORows(
   rows: ParsedWORow[],
 ): Promise<ValidatedWORow[]> {
-  const [vesselsRes, kaprosRes] = await Promise.all([
-    supabase.from("vessel").select("id, name").is("deleted_at", null),
-    supabase.from("kapro").select("id, kapro_name").is("deleted_at", null),
-  ]);
-
-  const vessels = new Map<string, number>();
-  for (const v of vesselsRes.data ?? []) {
-    vessels.set((v.name as string).toLowerCase().trim(), v.id as number);
-  }
-  const kapros = new Map<string, number>();
-  for (const k of kaprosRes.data ?? []) {
-    kapros.set((k.kapro_name as string).toLowerCase().trim(), k.id as number);
-  }
+  const md = await getMasterData();
+  const vessels = md.vesselsByNorm;
+  const kapros = md.kaprosByNorm;
 
   // Check for duplicate shipyard_wo_number within this import batch per vessel
   const batchKeys = new Set<string>();
@@ -981,13 +1284,6 @@ export function parseCombinedXLSX(buffer: ArrayBuffer): {
     cellDates: false,
   });
 
-  const norm = (h: string) =>
-    String(h)
-      .replace(/\*|\(.*?\)/g, "")
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, "_");
-
   const parseSheet = <T>(
     sheetName: string,
     buildRow: (obj: Record<string, string>, rowNumber: number) => T,
@@ -1000,7 +1296,7 @@ export function parseCombinedXLSX(buffer: ArrayBuffer): {
       raw: false,
     });
     if (raw.length < 2) return [];
-    const headers = (raw[0] as string[]).map(norm);
+    const headers = (raw[0] as string[]).map(normaliseHeader);
     const rows: T[] = [];
     for (let i = 1; i < raw.length; i++) {
       const values = raw[i] as string[];
@@ -1045,6 +1341,9 @@ export function parseCombinedXLSX(buffer: ArrayBuffer): {
       planned_start_date: obj["planned_start_date"] ?? "",
       target_close_date: obj["target_close_date"] ?? "",
       period_close_target: obj["period_close_target"] ?? "",
+      progress_percentage: obj["progress_percentage"] ?? "",
+      progress_report_date: obj["progress_report_date"] ?? "",
+      progress_notes: obj["progress_notes"] ?? "",
     }),
   );
 
@@ -1075,12 +1374,60 @@ const WP_HEADER_LABELS: Record<string, string> = {
   vessel_name: "Vessel Name *",
   work_order_number: "Work Order Number *",
   description: "Description *",
-  progress_percentage: "Progress % *",
+  progress_percentage: "Progress Percentage (%) *",
   report_date: "Report Date * (YYYY-MM-DD)",
   notes: "Notes",
 };
 
-const WP_TEMPLATE_SAMPLE: string[][] = [
+export async function generateProgressTemplateXLSX(): Promise<Uint8Array> {
+  const md = await getMasterData();
+  const wos = await getSampleWorkOrders(1);
+  const v1 = wos[0]?.vesselName ?? md.vesselNames[0] ?? "Example Vessel";
+  const wo1 = wos[0]?.woNumber ?? "SY-2024-001";
+
+  // description stays a placeholder even though vessel/WO are real — this
+  // import UPDATES a matched item's progress in place, so a sample row must
+  // never form a complete real triple that could silently overwrite a real
+  // item's progress if left unedited.
+  const sampleRows: (string | number)[][] = [
+    [v1, wo1, "Example — replace with a real work item's exact description", 75, "2024-06-20", "Progress per weekly site report"],
+    [v1, wo1, "Example — another real work item's exact description", 40, "2024-06-20", ""],
+  ];
+
+  const wb = new ExcelJS.Workbook();
+  const headers = WORK_PROGRESS_TEMPLATE_HEADERS.map((h) => WP_HEADER_LABELS[h] ?? h);
+  const ws = addDataSheet(wb, "Work Progress", headers, [22, 18, 42, 12, 24, 32], sampleRows);
+  applyListValidation(ws, "A", 2, 300, refFormula("Ref - Vessels", md.vesselNames.length));
+
+  buildInstructionsSheet(wb, "IMPORT TEMPLATE — WORK PROGRESS", [
+    ["HOW THIS IS DIFFERENT FROM WORK ORDER / WORK DETAILS IMPORT"],
+    ["Each work item (matched by vessel + work order number + description) keeps only ONE imported progress row."],
+    ["Re-uploading this file later updates that same row instead of adding a new one."],
+    ["If a row's report_date is OLDER than what's already stored for that work item, it is skipped — the newer value is kept."],
+    ["Manually-entered progress (via the Add Progress screen) is separate history and is never changed by this import."],
+    [""],
+    ["COLUMN REFERENCE"],
+    ["vessel_name *", "Has a dropdown — must match an existing vessel"],
+    ["work_order_number *", "Must match an existing Shipyard WO Number for that vessel"],
+    ["description *", "Must match an existing Work Details description for that work order"],
+    ["progress_percentage *", "0–100"],
+    ["report_date *", "YYYY-MM-DD"],
+    ["notes", "Optional free text"],
+  ]);
+
+  // Work order numbers and work-detail descriptions are existing-data
+  // lookups, not small fixed dropdowns — only the vessel list gets one, to
+  // keep the sheet a manageable size.
+  addExcelRefSheet(wb, "Ref - Vessels", "Vessel Name", md.vesselNames);
+
+  const buf = await wb.xlsx.writeBuffer();
+  return new Uint8Array(buf as ArrayBuffer);
+}
+
+// CSV has no dropdowns/reference sheets to speak of, so this sample stays a
+// plain illustrative placeholder (unlike the XLSX generator above, which
+// pulls real names).
+const WP_CSV_TEMPLATE_SAMPLE: string[][] = [
   [
     "KM. Mawar Laut",
     "SY-2024-001",
@@ -1099,57 +1446,9 @@ const WP_TEMPLATE_SAMPLE: string[][] = [
   ],
 ];
 
-export function generateProgressTemplateXLSX(): Uint8Array {
-  const wb = XLSX.utils.book_new();
-  const labelRow = WORK_PROGRESS_TEMPLATE_HEADERS.map(
-    (h) => WP_HEADER_LABELS[h] ?? h,
-  );
-  const ws = XLSX.utils.aoa_to_sheet([labelRow, ...WP_TEMPLATE_SAMPLE]);
-  ws["!cols"] = [
-    { wch: 22 },
-    { wch: 18 },
-    { wch: 42 },
-    { wch: 12 },
-    { wch: 24 },
-    { wch: 32 },
-  ];
-  XLSX.utils.book_append_sheet(wb, ws, "Work Progress");
-
-  const instructions = [
-    ["IMPORT TEMPLATE — WORK PROGRESS"],
-    [""],
-    ["HOW THIS IS DIFFERENT FROM WORK ORDER / WORK DETAILS IMPORT"],
-    [
-      "Each work item (matched by vessel + work order number + description) keeps only ONE imported progress row.",
-    ],
-    [
-      "Re-uploading this file later updates that same row instead of adding a new one.",
-    ],
-    [
-      "If a row's report_date is OLDER than what's already stored for that work item, it is skipped — the newer value is kept.",
-    ],
-    [
-      "Manually-entered progress (via the Add Progress screen) is separate history and is never changed by this import.",
-    ],
-    [""],
-    ["COLUMN REFERENCE"],
-    ["vessel_name *", "Must match an existing vessel"],
-    ["work_order_number *", "Must match an existing Shipyard WO Number for that vessel"],
-    ["description *", "Must match an existing Work Details description for that work order"],
-    ["progress_percentage *", "0–100"],
-    ["report_date *", "YYYY-MM-DD"],
-    ["notes", "Optional free text"],
-  ];
-  const wsInfo = XLSX.utils.aoa_to_sheet(instructions);
-  wsInfo["!cols"] = [{ wch: 45 }, { wch: 55 }];
-  XLSX.utils.book_append_sheet(wb, wsInfo, "Instructions");
-
-  return XLSX.write(wb, { type: "array", bookType: "xlsx" }) as Uint8Array;
-}
-
 export function generateProgressTemplateCSV(): string {
   const lines: string[] = [WORK_PROGRESS_TEMPLATE_HEADERS.join(",")];
-  for (const row of WP_TEMPLATE_SAMPLE) {
+  for (const row of WP_CSV_TEMPLATE_SAMPLE) {
     lines.push(row.map((v) => (v.includes(",") ? `"${v}"` : v)).join(","));
   }
   return lines.join("\n");
@@ -1176,9 +1475,16 @@ export interface ValidatedProgressRow extends ParsedProgressRow {
   existing_report_date?: string;
 }
 
+/**
+ * Normalise an XLSX header cell into snake_case for matching against the
+ * template's raw column keys: strips parenthesised hints (e.g. "(optional)"),
+ * then any other stray punctuation (e.g. "*", "?", "%"), before lowercasing
+ * and joining words with underscores.
+ */
 function normaliseHeader(h: string): string {
   return String(h)
-    .replace(/\*|\(.*?\)/g, "")
+    .replace(/\(.*?\)/g, " ")
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "_");
@@ -1251,36 +1557,14 @@ export function parseProgressXLSX(buffer: ArrayBuffer): ParsedProgressRow[] {
 export async function validateProgressRows(
   rows: ParsedProgressRow[],
 ): Promise<ValidatedProgressRow[]> {
-  const [vesselsRes, workOrdersRes, workDetailsRes] = await Promise.all([
-    supabase.from("vessel").select("id, name").is("deleted_at", null),
-    supabase
-      .from("work_order")
-      .select("id, vessel_id, shipyard_wo_number")
-      .is("deleted_at", null),
-    supabase
-      .from("work_details")
-      .select("id, work_order_id, description")
-      .is("deleted_at", null),
-  ]);
-
-  const vessels = new Map<string, number>();
-  for (const v of vesselsRes.data ?? []) {
-    vessels.set((v.name as string).toLowerCase().trim(), v.id as number);
-  }
-
-  const workOrders = new Map<string, number>();
-  for (const wo of workOrdersRes.data ?? []) {
-    const key = `${wo.vessel_id}:${(wo.shipyard_wo_number as string).toLowerCase().trim()}`;
-    workOrders.set(key, wo.id as number);
-  }
-
-  const workDetails = new Map<string, number>();
-  for (const wd of workDetailsRes.data ?? []) {
-    const key = `${wd.work_order_id}:${(wd.description as string).toLowerCase().trim()}`;
-    workDetails.set(key, wd.id as number);
-  }
+  const md = await getMasterData();
+  const vessels = md.vesselsByNorm;
+  const workOrders = md.workOrdersByKey;
+  const workDetails = md.workDetailsByKey;
 
   // The single is_imported row per work_details_id, if one already exists.
+  // Always queried fresh (never cached) — this is exactly what "keep only
+  // the latest" depends on being accurate.
   const existingImported = new Map<
     number,
     { id: number; progress_percentage: number; report_date: string }
@@ -1421,16 +1705,23 @@ export async function importWorkProgress(
 
   // Each update targets a different existing row with different new values —
   // no single unique key to upsert() on, so these run individually.
-  for (const row of toUpdate) {
-    const { error } = await supabase
-      .from("work_progress")
-      .update({
-        progress_percentage: parseFloat(row.progress_percentage),
-        report_date: row.report_date,
-        notes: row.notes.trim() || null,
-        user_id: userId,
-      })
-      .eq("id", row.existing_progress_id!);
+  // Each update targets a different row by its own unique id, so these are
+  // independent and safe to run concurrently instead of one at a time.
+  const updateResults = await Promise.all(
+    toUpdate.map((row) =>
+      supabase
+        .from("work_progress")
+        .update({
+          progress_percentage: parseFloat(row.progress_percentage),
+          report_date: row.report_date,
+          notes: row.notes.trim() || null,
+          user_id: userId,
+        })
+        .eq("id", row.existing_progress_id!)
+        .then(({ error }) => ({ row, error })),
+    ),
+  );
+  for (const { row, error } of updateResults) {
     if (error) {
       failedRows.push({ rowNumber: row.rowNumber, error: error.message });
     } else {
