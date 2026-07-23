@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { ActivityLogService } from "../../services/activityLogService";
@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Loader,
   FileText,
+  X,
 } from "lucide-react";
 
 interface ResponseState {
@@ -51,6 +52,19 @@ function computeStatus(
   return "DRAFT";
 }
 
+function getStatusMessage(status: ReadinessFormStatus): string {
+  switch (status) {
+    case "APPROVED":
+      return "Saved — fully approved and signed. This project can now proceed with work orders.";
+    case "PENDING_APPROVAL":
+      return "Saved — submitted for approval. Waiting on signatures from the approval roles below.";
+    case "REJECTED":
+      return "Saved — marked as rejected.";
+    default:
+      return "Saved as draft. Fill in the remaining checklist items to submit for approval.";
+  }
+}
+
 export default function ReadinessForm() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -82,6 +96,15 @@ export default function ReadinessForm() {
   const [savedStatus, setSavedStatus] = useState<ReadinessFormStatus | null>(
     null,
   );
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const successBannerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showSuccessMessage) return;
+    successBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const timer = setTimeout(() => setShowSuccessMessage(false), 6000);
+    return () => clearTimeout(timer);
+  }, [showSuccessMessage]);
 
   const isEditMode = formId !== null;
 
@@ -345,6 +368,7 @@ export default function ReadinessForm() {
         });
 
         setSavedStatus(status);
+        setShowSuccessMessage(true);
       } else {
         const { data: newForm, error: insertError } = await supabase
           .from("vessel_readiness_forms")
@@ -395,6 +419,7 @@ export default function ReadinessForm() {
 
         setFormId(newForm.id);
         setSavedStatus(status);
+        setShowSuccessMessage(true);
       }
     } catch (err) {
       console.error("Error saving readiness form:", err);
@@ -464,6 +489,26 @@ export default function ReadinessForm() {
           </span>
         )}
       </div>
+
+      {showSuccessMessage && savedStatus && (
+        <div
+          ref={successBannerRef}
+          className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center justify-between"
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-green-600" />
+            <p className="text-green-700 font-medium">
+              {getStatusMessage(savedStatus)}
+            </p>
+          </div>
+          <button
+            onClick={() => setShowSuccessMessage(false)}
+            className="text-green-600 hover:text-green-800"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-2">
