@@ -20,6 +20,7 @@ import {
   Circle,
 } from "lucide-react";
 import { WORK_TYPE_OPTIONS } from "../../constants/workTypes";
+import { WORK_LOCATION_OPTIONS } from "../../constants/workLocations";
 
 interface WorkOrderWithVessel extends WorkOrder {
   vessel?: Vessel;
@@ -55,6 +56,10 @@ export default function EditWorkOrder() {
     work_location: "",
     work_type: "",
   });
+
+  // Whether the Work Location field is showing the free-text fallback
+  // instead of the preset dropdown.
+  const [customLocationMode, setCustomLocationMode] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -129,6 +134,10 @@ export default function EditWorkOrder() {
           work_location: data.work_location || "",
           work_type: data.work_type || "",
         });
+        setCustomLocationMode(
+          !!data.work_location &&
+            !WORK_LOCATION_OPTIONS.includes(data.work_location),
+        );
 
         // Set vessel search term
         if (data.vessel) {
@@ -729,15 +738,62 @@ export default function EditWorkOrder() {
                     (Optional)
                   </span>
                 </label>
-                <input
-                  type="text"
-                  name="work_location"
-                  value={formData.work_location}
-                  onChange={handleInputChange}
-                  disabled={isReadOnly}
-                  className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
-                  placeholder="e.g., Dock 1, Workshop Area A"
-                />
+                {customLocationMode ? (
+                  <>
+                    <input
+                      type="text"
+                      name="work_location"
+                      value={formData.work_location}
+                      onChange={handleInputChange}
+                      disabled={isReadOnly}
+                      className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
+                      placeholder="e.g., Balikpapan, Jakarta"
+                    />
+                    {!isReadOnly && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomLocationMode(false);
+                          setFormData((prev) => ({
+                            ...prev,
+                            work_location: "",
+                          }));
+                        }}
+                        className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+                      >
+                        Choose from list instead
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <select
+                    value={formData.work_location}
+                    onChange={(e) => {
+                      if (e.target.value === "OTHER") {
+                        setCustomLocationMode(true);
+                        setFormData((prev) => ({
+                          ...prev,
+                          work_location: "",
+                        }));
+                      } else {
+                        setFormData((prev) => ({
+                          ...prev,
+                          work_location: e.target.value,
+                        }));
+                      }
+                    }}
+                    disabled={isReadOnly}
+                    className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
+                  >
+                    <option value="">Select Work Location</option>
+                    {WORK_LOCATION_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                    <option value="OTHER">Other (type manually)</option>
+                  </select>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

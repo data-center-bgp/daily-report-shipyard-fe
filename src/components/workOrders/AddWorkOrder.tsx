@@ -13,7 +13,9 @@ import {
   Clock,
 } from "lucide-react";
 import { WORK_TYPE_OPTIONS } from "../../constants/workTypes";
+import { WORK_LOCATION_OPTIONS } from "../../constants/workLocations";
 import { suggestProjectName } from "../../utils/projectNaming";
+import { suggestWorkOrderNumber } from "../../utils/workOrderNumbering";
 
 interface ProjectOption {
   id: number;
@@ -91,8 +93,32 @@ export default function AddWorkOrder() {
     work_type: "",
   });
 
+  // Whether the Work Location field is showing the free-text fallback
+  // instead of the preset dropdown.
+  const [customLocationMode, setCustomLocationMode] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The shipyard WO number is system-generated from the WO date and is
+  // locked on this form — PPIC can adjust it later from Edit Work Order.
+  useEffect(() => {
+    if (!formData.shipyard_wo_date) return;
+
+    let cancelled = false;
+    suggestWorkOrderNumber(formData.shipyard_wo_date)
+      .then((number) => {
+        if (!cancelled) {
+          setFormData((prev) => ({ ...prev, shipyard_wo_number: number }));
+        }
+      })
+      .catch((err) => {
+        console.error("Error suggesting WO number:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [formData.shipyard_wo_date]);
 
   const fetchProjects = async () => {
     try {
@@ -1065,11 +1091,15 @@ export default function AddWorkOrder() {
                   type="text"
                   name="shipyard_wo_number"
                   value={formData.shipyard_wo_number}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="e.g., SY-2024-001"
+                  readOnly
+                  className="w-full px-3 py-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
+                  placeholder="Pick a Shipyard WO Date to generate this number"
                   required
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Auto-generated from the Shipyard WO Date below. Need to
+                  change it? Edit the work order after creating it.
+                </p>
               </div>
 
               {/* Shipyard WO Date */}
@@ -1150,17 +1180,58 @@ export default function AddWorkOrder() {
                   Work Location{" "}
                   <span className="text-gray-500">(Optional)</span>
                 </label>
-                <input
-                  type="text"
-                  name="work_location"
-                  value={formData.work_location}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="e.g., Dock 1, Workshop Area A"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Specify the general location where work will be performed
-                </p>
+                {customLocationMode ? (
+                  <>
+                    <input
+                      type="text"
+                      name="work_location"
+                      value={formData.work_location}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="e.g., Balikpapan, Jakarta"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomLocationMode(false);
+                        setFormData((prev) => ({ ...prev, work_location: "" }));
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+                    >
+                      Choose from list instead
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <select
+                      value={formData.work_location}
+                      onChange={(e) => {
+                        if (e.target.value === "OTHER") {
+                          setCustomLocationMode(true);
+                          setFormData((prev) => ({ ...prev, work_location: "" }));
+                        } else {
+                          setFormData((prev) => ({
+                            ...prev,
+                            work_location: e.target.value,
+                          }));
+                        }
+                      }}
+                      className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Select Work Location</option>
+                      {WORK_LOCATION_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                      <option value="OTHER">Other (type manually)</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Select the general location where work will be
+                      performed
+                    </p>
+                  </>
+                )}
               </div>
 
               {/* Customer WO Number */}
