@@ -135,6 +135,10 @@ export default function VesselWorkOrders() {
               name,
               type,
               company
+            ),
+            kapro:kapro_id (
+              id,
+              kapro_name
             )
           `,
           )
@@ -814,8 +818,8 @@ export default function VesselWorkOrders() {
                           )}
                           {wo.kapro_id && (
                             <div className="text-xs text-gray-600 flex items-center gap-1">
-                              <User className="w-3 h-3" /> Kapro ID:{" "}
-                              {wo.kapro_id}
+                              <User className="w-3 h-3" /> Kapro:{" "}
+                              {wo.kapro?.kapro_name ?? wo.kapro_id}
                             </div>
                           )}
                           <div className="text-xs text-gray-400">

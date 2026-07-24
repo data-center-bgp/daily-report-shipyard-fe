@@ -20,5 +20,5 @@ export async function suggestProjectName(
     .lt("created_at", `${year + 1}-01-01`);
 
   const seq = (count ?? 0) + 1;
-  return `${vesselCompany}-${vesselName}-${dockingType}-${year}-${String(seq).padStart(2, "0")}`;
+  return `${vesselCompany.trim()}-${vesselName.trim()}-${dockingType.trim()}-${year}-${String(seq).padStart(2, "0")}`;
 }

@@ -250,7 +250,7 @@ export default function EditWorkOrder() {
   };
 
   const validateForm = () => {
-    const required = ["vessel_id", "shipyard_wo_number", "shipyard_wo_date"];
+    const required = ["vessel_id", "shipyard_wo_number", "shipyard_wo_date", "kapro_id"];
 
     for (const field of required) {
       const value = formData[field as keyof typeof formData];
@@ -669,14 +669,14 @@ export default function EditWorkOrder() {
             {/* Kapro Selection */}
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Kapro
-                <span className="text-slate-500 font-normal"> (Optional)</span>
+                Kapro <span className="text-red-500">*</span>
               </label>
               <select
                 name="kapro_id"
                 value={formData.kapro_id}
                 onChange={handleInputChange}
                 disabled={isReadOnly}
+                required
                 className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-600"
               >
                 <option value="">Select Kapro</option>

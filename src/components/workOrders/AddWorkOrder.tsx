@@ -526,7 +526,7 @@ export default function AddWorkOrder() {
       return false;
     }
 
-    const required = ["shipyard_wo_number", "shipyard_wo_date"];
+    const required = ["shipyard_wo_number", "shipyard_wo_date", "kapro_id"];
     for (const field of required) {
       const value = formData[field as keyof typeof formData];
       if (!value) {
@@ -1087,6 +1087,32 @@ export default function AddWorkOrder() {
                   required
                 />
               </div>
+
+              {/* Kapro Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Kapro <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="kapro_id"
+                  value={formData.kapro_id}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                >
+                  <option value="">Select Kapro</option>
+                  {kapros.map((kapro) => (
+                    <option key={kapro.id} value={kapro.id}>
+                      {kapro.kapro_name}
+                    </option>
+                  ))}
+                </select>
+                {kapros.length === 0 && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    No kapros available.
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Optional Fields */}
@@ -1166,31 +1192,6 @@ export default function AddWorkOrder() {
                   onChange={handleInputChange}
                   className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
-              </div>
-
-              {/* Kapro Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Kapro <span className="text-gray-500">(Optional)</span>
-                </label>
-                <select
-                  name="kapro_id"
-                  value={formData.kapro_id}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Select Kapro</option>
-                  {kapros.map((kapro) => (
-                    <option key={kapro.id} value={kapro.id}>
-                      {kapro.kapro_name}
-                    </option>
-                  ))}
-                </select>
-                {kapros.length === 0 && (
-                  <p className="text-sm text-gray-500 mt-1">
-                    No kapros available.
-                  </p>
-                )}
               </div>
             </div>
 

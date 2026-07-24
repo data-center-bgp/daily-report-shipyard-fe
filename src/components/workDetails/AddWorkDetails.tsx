@@ -287,8 +287,8 @@ export default function AddWorkDetails() {
 
   // Add new work detail row
   const handleAddWorkDetail = () => {
-    setWorkDetailsList([
-      ...workDetailsList,
+    setWorkDetailsList((prev) => [
+      ...prev,
       {
         id: crypto.randomUUID(),
         description: "",
@@ -306,11 +306,13 @@ export default function AddWorkDetails() {
 
   // Remove work detail row
   const handleRemoveWorkDetail = (id: string) => {
-    if (workDetailsList.length === 1) {
-      setError("At least one work detail is required");
-      return;
-    }
-    setWorkDetailsList(workDetailsList.filter((item) => item.id !== id));
+    setWorkDetailsList((prev) => {
+      if (prev.length === 1) {
+        setError("At least one work detail is required");
+        return prev;
+      }
+      return prev.filter((item) => item.id !== id);
+    });
   };
 
   // Update work detail
@@ -319,8 +321,8 @@ export default function AddWorkDetails() {
     field: keyof WorkDetailFormData,
     value: string | number | boolean,
   ) => {
-    setWorkDetailsList(
-      workDetailsList.map((item) =>
+    setWorkDetailsList((prev) =>
+      prev.map((item) =>
         item.id === id ? { ...item, [field]: value } : item,
       ),
     );

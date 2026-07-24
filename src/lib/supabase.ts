@@ -104,6 +104,10 @@ export interface WorkOrderWithDetails extends WorkOrder {
     type: string;
     company: string;
   };
+  kapro?: {
+    id: number;
+    kapro_name: string;
+  };
   overall_progress?: number;
   has_progress_data?: boolean;
 }

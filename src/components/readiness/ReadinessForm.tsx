@@ -448,9 +448,6 @@ export default function ReadinessForm() {
     );
   }
 
-  const vesselOwnerRoles = approvalRoles.filter((r) => r.party === "VESSEL_OWNER");
-  const shipyardRoles = approvalRoles.filter((r) => r.party === "SHIPYARD");
-
   const sections = Array.from(new Set(checklistItems.map((i) => i.section))).map(
     (section) => ({
       section,
@@ -686,41 +683,23 @@ export default function ReadinessForm() {
             Sign-off
           </h2>
           <p className="text-sm text-gray-600 mb-4">
-            All 9 sign-offs must be filled in before this form counts as
-            approved.
+            All {approvalRoles.length} sign-offs must be filled in before this
+            form counts as approved.
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3 border-b pb-2">
-                Telah Dipenuhi dan Disetujui oleh Pihak Kapal/Owner
-              </h3>
-              <div className="space-y-4">
-                {vesselOwnerRoles.map((role) => (
-                  <ApprovalRow
-                    key={role.id}
-                    role={role}
-                    value={approvals[role.id] || { signer_name: "", signed_date: "" }}
-                    onChange={(patch) => setApproval(role.id, patch)}
-                    disabled={isReadOnly}
-                  />
-                ))}
-              </div>
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3 border-b pb-2">
-                Telah Diterima dan Disetujui oleh Pihak Galangan
-              </h3>
-              <div className="space-y-4">
-                {shipyardRoles.map((role) => (
-                  <ApprovalRow
-                    key={role.id}
-                    role={role}
-                    value={approvals[role.id] || { signer_name: "", signed_date: "" }}
-                    onChange={(patch) => setApproval(role.id, patch)}
-                    disabled={isReadOnly}
-                  />
-                ))}
-              </div>
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 border-b pb-2">
+              Telah Diterima dan Disetujui oleh Pihak Galangan
+            </h3>
+            <div className="space-y-4 max-w-md">
+              {approvalRoles.map((role) => (
+                <ApprovalRow
+                  key={role.id}
+                  role={role}
+                  value={approvals[role.id] || { signer_name: "", signed_date: "" }}
+                  onChange={(patch) => setApproval(role.id, patch)}
+                  disabled={isReadOnly}
+                />
+              ))}
             </div>
           </div>
         </div>
