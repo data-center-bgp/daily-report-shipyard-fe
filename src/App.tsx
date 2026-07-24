@@ -10,7 +10,7 @@ import Layout from "./components/common/Layout";
 import { Login } from "./components/auth";
 import { Dashboard } from "./components/dashboard";
 import { ProjectsList, AddProject, ProjectDetails } from "./components/projects";
-import { ReadinessForm } from "./components/readiness";
+import { ReadinessForm, ReadinessQueue } from "./components/readiness";
 import { AdditionalWoApprovals } from "./components/additionalWoApprovals";
 import {
   WorkOrders,
@@ -81,6 +81,7 @@ function AppRoutes() {
           path="/projects/:projectId/readiness"
           element={<ReadinessForm />}
         />
+        <Route path="/readiness-queue" element={<ReadinessQueue />} />
         <Route
           path="/additional-wo-approvals"
           element={<AdditionalWoApprovals />}

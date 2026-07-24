@@ -21,6 +21,7 @@ import {
   ChevronRight,
   User,
   ClipboardList,
+  ClipboardCheck,
 } from "lucide-react";
 
 interface LayoutProps {
@@ -107,6 +108,13 @@ export default function Layout({ children, onLogout }: LayoutProps) {
         location.pathname.includes("/add-progress") ||
         location.pathname.includes("/edit-progress"),
       show: canAccess("progress"),
+    },
+    {
+      name: "Readiness Queue",
+      href: "/readiness-queue",
+      icon: ClipboardCheck,
+      current: location.pathname === "/readiness-queue",
+      show: canAccess("readinessQueue"),
     },
     {
       name: "Additional WO Approvals",
