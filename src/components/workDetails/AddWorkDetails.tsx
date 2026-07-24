@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { supabase, type WorkOrder, type Vessel } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import { ActivityLogService } from "../../services/activityLogService";
+import SearchableSelect from "../common/SearchableSelect";
 import {
   Ship,
   HardHat,
@@ -706,24 +707,17 @@ export default function AddWorkDetails() {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Location *
                       </label>
-                      <select
+                      <SearchableSelect
                         value={item.location_id}
-                        onChange={(e) =>
-                          handleWorkDetailChange(
-                            item.id,
-                            "location_id",
-                            parseInt(e.target.value),
-                          )
+                        onChange={(id) =>
+                          handleWorkDetailChange(item.id, "location_id", id)
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value={0}>Select location</option>
-                        {locations.map((loc) => (
-                          <option key={loc.id} value={loc.id}>
-                            {loc.location}
-                          </option>
-                        ))}
-                      </select>
+                        options={locations.map((loc) => ({
+                          id: loc.id,
+                          label: loc.location,
+                        }))}
+                        placeholder="Search location..."
+                      />
                     </div>
 
                     {/* Work Scope */}
@@ -731,24 +725,17 @@ export default function AddWorkDetails() {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Work Scope *
                       </label>
-                      <select
+                      <SearchableSelect
                         value={item.work_scope_id}
-                        onChange={(e) =>
-                          handleWorkDetailChange(
-                            item.id,
-                            "work_scope_id",
-                            parseInt(e.target.value),
-                          )
+                        onChange={(id) =>
+                          handleWorkDetailChange(item.id, "work_scope_id", id)
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value={0}>Select work scope</option>
-                        {workScopes.map((scope) => (
-                          <option key={scope.id} value={scope.id}>
-                            {scope.work_scope}
-                          </option>
-                        ))}
-                      </select>
+                        options={workScopes.map((scope) => ({
+                          id: scope.id,
+                          label: scope.work_scope,
+                        }))}
+                        placeholder="Search work scope..."
+                      />
                     </div>
 
                     {/* Quantity */}

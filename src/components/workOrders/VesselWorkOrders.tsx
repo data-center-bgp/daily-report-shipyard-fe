@@ -35,6 +35,7 @@ import {
   Play,
   MapPin,
   ClipboardList,
+  X,
 } from "lucide-react";
 
 interface VesselData {
@@ -85,6 +86,11 @@ export default function VesselWorkOrders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  // Per-work-order search term for filtering the work details shown inside
+  // its expanded section, keyed by work order id.
+  const [detailSearchTerms, setDetailSearchTerms] = useState<
+    Record<number, string>
+  >({});
   const [sortField, setSortField] = useState<
     "shipyard_wo_date" | "shipyard_wo_number"
   >("shipyard_wo_date");
@@ -227,7 +233,9 @@ export default function VesselWorkOrders() {
     }
   }, [vesselId, sortField, sortDirection]);
 
-  // Filter work orders based on search term
+  // Filter work orders based on search term — scoped to work order level
+  // information only. Searching within a work order's own work details is
+  // handled by the per-work-order filter inside its expanded section.
   useEffect(() => {
     let filtered = workOrders;
 
@@ -239,14 +247,11 @@ export default function VesselWorkOrders() {
         };
 
         return (
-          safeIncludes(wo.customer_wo_number) ||
           safeIncludes(wo.shipyard_wo_number) ||
-          wo.work_details.some(
-            (detail) =>
-              safeIncludes(detail.description) ||
-              safeIncludes(detail.location?.location) ||
-              safeIncludes(detail.pic),
-          )
+          safeIncludes(wo.customer_wo_number) ||
+          safeIncludes(wo.work_type) ||
+          safeIncludes(wo.work_location) ||
+          safeIncludes(wo.kapro?.kapro_name)
         );
       });
     }
@@ -635,7 +640,7 @@ export default function VesselWorkOrders() {
           <div className="relative flex-1 max-w-md">
             <input
               type="text"
-              placeholder="Search work orders, details, or PIC..."
+              placeholder="Search by WO number, work type, location, or Kapro..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -697,7 +702,30 @@ export default function VesselWorkOrders() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredWorkOrders.map((wo) => (
+                {filteredWorkOrders.map((wo) => {
+                  const isExpanded = expandedWorkOrders.has(wo.id);
+
+                  // Filter this work order's own work details list by its
+                  // own scoped search box (independent of the page-level
+                  // search above).
+                  const detailSearchTerm = (
+                    detailSearchTerms[wo.id] || ""
+                  ).toLowerCase();
+                  const visibleDetails = detailSearchTerm
+                    ? wo.work_details.filter((detail) => {
+                        const safeIncludes = (
+                          value: string | null | undefined,
+                        ) => value?.toLowerCase().includes(detailSearchTerm) || false;
+                        return (
+                          safeIncludes(detail.description) ||
+                          safeIncludes(detail.location?.location) ||
+                          safeIncludes(detail.work_scope?.work_scope) ||
+                          safeIncludes(detail.pic)
+                        );
+                      })
+                    : wo.work_details;
+
+                  return (
                   <>
                     {/* Main Work Order Row */}
                     <tr key={wo.id} className="hover:bg-gray-50">
@@ -709,7 +737,7 @@ export default function VesselWorkOrders() {
                           >
                             <span
                               className={`transform transition-transform duration-200 ${
-                                expandedWorkOrders.has(wo.id) ? "rotate-90" : ""
+                                isExpanded ? "rotate-90" : ""
                               }`}
                             >
                               <ChevronRight className="w-4 h-4" />
@@ -907,7 +935,7 @@ export default function VesselWorkOrders() {
                     </tr>
 
                     {/* Expandable Work Details Rows */}
-                    {expandedWorkOrders.has(wo.id) && (
+                    {isExpanded && (
                       <tr>
                         <td colSpan={8} className="px-0 py-0">
                           <div className="bg-gray-50 border-l-4 border-blue-400">
@@ -930,9 +958,40 @@ export default function VesselWorkOrders() {
                                 )}
                               </div>
 
-                              {wo.work_details.length > 0 ? (
+                              {wo.work_details.length > 0 && (
+                                <div className="relative mb-3 max-w-sm">
+                                  <input
+                                    type="text"
+                                    value={detailSearchTerms[wo.id] || ""}
+                                    onChange={(e) =>
+                                      setDetailSearchTerms((prev) => ({
+                                        ...prev,
+                                        [wo.id]: e.target.value,
+                                      }))
+                                    }
+                                    placeholder="Filter these work details by description, scope, location, or PIC..."
+                                    className="w-full pl-9 pr-8 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  />
+                                  <Search className="absolute left-3 top-2 w-3.5 h-3.5 text-gray-400" />
+                                  {detailSearchTerms[wo.id] && (
+                                    <button
+                                      onClick={() =>
+                                        setDetailSearchTerms((prev) => ({
+                                          ...prev,
+                                          [wo.id]: "",
+                                        }))
+                                      }
+                                      className="absolute right-2 top-1.5 text-gray-400 hover:text-gray-600"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+
+                              {visibleDetails.length > 0 ? (
                                 <div className="space-y-3">
-                                  {wo.work_details.map((detail) => (
+                                  {visibleDetails.map((detail) => (
                                     <div
                                       key={detail.id}
                                       className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow"
@@ -1133,6 +1192,25 @@ export default function VesselWorkOrders() {
                                     </div>
                                   ))}
                                 </div>
+                              ) : wo.work_details.length > 0 ? (
+                                <div className="text-center py-8 text-gray-500">
+                                  <ClipboardList className="w-16 h-16 text-gray-400 mx-auto mb-2" />
+                                  <p>
+                                    No work details match "
+                                    {detailSearchTerms[wo.id]}"
+                                  </p>
+                                  <button
+                                    onClick={() =>
+                                      setDetailSearchTerms((prev) => ({
+                                        ...prev,
+                                        [wo.id]: "",
+                                      }))
+                                    }
+                                    className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
+                                  >
+                                    Clear filter
+                                  </button>
+                                </div>
                               ) : (
                                 <div className="text-center py-8 text-gray-500">
                                   <ClipboardList className="w-16 h-16 text-gray-400 mx-auto mb-2" />
@@ -1155,7 +1233,8 @@ export default function VesselWorkOrders() {
                       </tr>
                     )}
                   </>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
