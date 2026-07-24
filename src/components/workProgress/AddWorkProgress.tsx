@@ -4,6 +4,12 @@ import { supabase } from "../../lib/supabase";
 import { uploadProgressEvidence } from "../../utils/progressEvidenceHandler";
 import { ActivityLogService } from "../../services/activityLogService";
 import {
+  sanitizeProgressPercentageInput,
+  parseProgressPercentage,
+  isValidProgressPercentage,
+  formatProgressPercentage,
+} from "../../utils/progressPercentage";
+import {
   FileText,
   Ship,
   Wrench,
@@ -14,6 +20,10 @@ import {
   Paperclip,
   CheckCircle2,
   AlertCircle,
+  X,
+  MapPin,
+  User,
+  FolderKanban,
 } from "lucide-react";
 
 interface AddWorkProgressProps {
@@ -32,12 +42,18 @@ interface KaproFormData {
   kapro_name: string;
 }
 
+interface ProjectFormData {
+  id: number;
+  project_name: string;
+}
+
 interface WorkOrderFormData {
   id: number;
   shipyard_wo_number: string;
   shipyard_wo_date: string;
   vessel?: VesselFormData;
   kapro?: KaproFormData;
+  project?: ProjectFormData;
 }
 
 interface WorkDetailsFormData {
@@ -48,6 +64,7 @@ interface WorkDetailsFormData {
     location: string;
   };
   pic: string;
+  current_progress: number;
 }
 
 interface WorkDetailsContext {
@@ -88,6 +105,13 @@ export default function AddWorkProgress({
     effectiveWorkDetailsId || 0,
   );
 
+  // Highest progress percentage already recorded for the selected work
+  // detail (across every entry point into this form, not just the one that
+  // happens to pass it via navigation state) — null while unknown/loading.
+  const [currentMaxProgress, setCurrentMaxProgress] = useState<number | null>(
+    null,
+  );
+
   const [formData, setFormData] = useState({
     progress_percentage: "",
     report_date: new Date().toISOString().split("T")[0],
@@ -99,6 +123,13 @@ export default function AddWorkProgress({
   const [loadingWorkDetails, setLoadingWorkDetails] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Optional narrowing filter on top of the Work Order search — picking a
+  // project restricts the search below to that project's work orders.
+  const [projectFilterId, setProjectFilterId] = useState<number>(0);
+  const [projectSearchTerm, setProjectSearchTerm] = useState("");
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const projectDropdownRef = useRef<HTMLDivElement>(null);
 
   const [workOrderSearchTerm, setWorkOrderSearchTerm] = useState("");
   const [showWorkOrderDropdown, setShowWorkOrderDropdown] = useState(false);
@@ -125,8 +156,63 @@ export default function AddWorkProgress({
     }
   }, [selectedWorkOrderId, effectiveWorkDetailsId]);
 
+  // Look up the current max progress for whichever work detail ends up
+  // selected, then use it to suggest a sensible next value and to guard
+  // against regressing or over-reporting past 100%.
+  useEffect(() => {
+    if (!selectedWorkDetailsId) {
+      setCurrentMaxProgress(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchMaxProgress = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("work_progress")
+          .select("progress_percentage")
+          .eq("work_details_id", selectedWorkDetailsId)
+          .order("progress_percentage", { ascending: false })
+          .limit(1);
+
+        if (error) throw error;
+        if (cancelled) return;
+
+        const maxProgress = data && data.length > 0 ? data[0].progress_percentage : 0;
+        setCurrentMaxProgress(maxProgress);
+
+        if (maxProgress > 0 && maxProgress < 100) {
+          const suggested = Math.min(maxProgress + 10, 100);
+          setFormData((prev) =>
+            prev.progress_percentage === ""
+              ? {
+                  ...prev,
+                  progress_percentage: formatProgressPercentage(suggested),
+                }
+              : prev,
+          );
+        }
+      } catch (err) {
+        console.error("Error fetching current max progress:", err);
+        if (!cancelled) setCurrentMaxProgress(0);
+      }
+    };
+
+    fetchMaxProgress();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedWorkDetailsId]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      if (
+        projectDropdownRef.current &&
+        !projectDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowProjectDropdown(false);
+      }
       if (
         workOrderDropdownRef.current &&
         !workOrderDropdownRef.current.contains(event.target as Node)
@@ -156,7 +242,8 @@ export default function AddWorkProgress({
           `
           id, shipyard_wo_number, shipyard_wo_date,
           vessel:vessel_id ( id, name, type, company ),
-          kapro:kapro_id ( id, kapro_name )
+          kapro:kapro_id ( id, kapro_name ),
+          project:project_id ( id, project_name )
         `,
         )
         .is("deleted_at", null)
@@ -180,13 +267,14 @@ export default function AddWorkProgress({
         .from("work_details")
         .select(
           `
-        id, 
-        description, 
+        id,
+        description,
         location:location_id (
           id,
           location
-        ), 
-        pic
+        ),
+        pic,
+        work_progress ( progress_percentage )
       `,
         )
         .eq("work_order_id", workOrderId)
@@ -203,6 +291,11 @@ export default function AddWorkProgress({
             ? item.location[0]
             : item.location,
           pic: item.pic,
+          current_progress: (item.work_progress || []).reduce(
+            (max: number, p: { progress_percentage: number }) =>
+              Math.max(max, p.progress_percentage),
+            0,
+          ),
         }),
       );
 
@@ -252,6 +345,26 @@ export default function AddWorkProgress({
       console.error("Error fetching work details context:", err);
       setError("Failed to load work details information");
     }
+  };
+
+  const handleProjectSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setProjectSearchTerm(e.target.value);
+    setShowProjectDropdown(true);
+    if (projectFilterId) {
+      setProjectFilterId(0);
+    }
+  };
+
+  const handleProjectSelectFromDropdown = (project: ProjectFormData) => {
+    setProjectFilterId(project.id);
+    setProjectSearchTerm(project.project_name);
+    setShowProjectDropdown(false);
+  };
+
+  const handleClearProjectSearch = () => {
+    setProjectSearchTerm("");
+    setProjectFilterId(0);
+    setShowProjectDropdown(false);
   };
 
   const handleWorkOrderSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -309,19 +422,9 @@ export default function AddWorkProgress({
     const { name, value } = e.target;
 
     if (name === "progress_percentage") {
-      const formattedValue = value.replace(/\./g, ",");
-      const numericValue = formattedValue.replace(/[^0-9,]/g, "");
-
-      const commaCount = (numericValue.match(/,/g) || []).length;
-      if (commaCount > 1) return;
-
-      const parsedValue =
-        numericValue === "" ? 0 : parseFloat(numericValue.replace(",", "."));
-      if (
-        numericValue === "" ||
-        (!isNaN(parsedValue) && parsedValue >= 0 && parsedValue <= 100)
-      ) {
-        setFormData((prev) => ({ ...prev, progress_percentage: numericValue }));
+      const sanitized = sanitizeProgressPercentageInput(value);
+      if (sanitized !== null) {
+        setFormData((prev) => ({ ...prev, progress_percentage: sanitized }));
       }
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
@@ -347,18 +450,28 @@ export default function AddWorkProgress({
       return;
     }
 
-    const progressValue = formData.progress_percentage
-      ? parseFloat(formData.progress_percentage.replace(",", ".")) || 0
-      : 0;
-
-    if (
-      formData.progress_percentage === "" ||
-      isNaN(progressValue) ||
-      progressValue < 0 ||
-      progressValue > 100
-    ) {
+    if (!isValidProgressPercentage(formData.progress_percentage)) {
       setError("Please enter a valid progress percentage between 0 and 100");
       return;
+    }
+
+    const progressValue = parseProgressPercentage(
+      formData.progress_percentage,
+    );
+
+    if (currentMaxProgress !== null) {
+      if (currentMaxProgress >= 100) {
+        setError(
+          "This work detail has already reached 100% completion — no further progress reports can be added.",
+        );
+        return;
+      }
+      if (progressValue < currentMaxProgress) {
+        setError(
+          `Progress can't be lower than the current recorded progress (${formatProgressPercentage(currentMaxProgress)}%). Edit an existing report instead if it needs correcting.`,
+        );
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -470,16 +583,16 @@ export default function AddWorkProgress({
     (wd) => wd.id === selectedWorkDetailsId,
   );
 
-  const progressValue = formData.progress_percentage
-    ? parseFloat(formData.progress_percentage.replace(",", ".")) || 0
-    : 0;
+  const progressValue = parseProgressPercentage(formData.progress_percentage);
+  const isAlreadyComplete = currentMaxProgress !== null && currentMaxProgress >= 100;
+  const isBelowCurrentProgress =
+    currentMaxProgress !== null && progressValue < currentMaxProgress;
   const isFormValid =
     selectedWorkDetailsId > 0 &&
     formData.report_date &&
-    formData.progress_percentage !== "" &&
-    !isNaN(progressValue) &&
-    progressValue >= 0 &&
-    progressValue <= 100;
+    isValidProgressPercentage(formData.progress_percentage) &&
+    !isAlreadyComplete &&
+    !isBelowCurrentProgress;
 
   const formatWorkOrderDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -489,9 +602,29 @@ export default function AddWorkProgress({
     });
   };
 
+  // Every distinct project among the fetched work orders — projects with no
+  // work order yet have nothing to select here, so they're left out.
+  const availableProjects = Array.from(
+    new Map(
+      workOrders
+        .filter((wo): wo is WorkOrderFormData & { project: ProjectFormData } =>
+          Boolean(wo.project),
+        )
+        .map((wo) => [wo.project.id, wo.project]),
+    ).values(),
+  ).sort((a, b) => a.project_name.localeCompare(b.project_name));
+
+  const filteredProjectsForSearch = availableProjects.filter((project) =>
+    project.project_name.toLowerCase().includes(projectSearchTerm.toLowerCase()),
+  );
+
   // Filter functions — search across vessel name and WO number together,
-  // since the work order carries its vessel and Kapro with it.
+  // since the work order carries its vessel and Kapro with it. An optional
+  // project filter narrows this further without gating it (Work Order search
+  // works with or without a project picked).
   const filteredWorkOrdersForSearch = workOrders.filter((wo) => {
+    if (projectFilterId && wo.project?.id !== projectFilterId) return false;
+
     const searchLower = workOrderSearchTerm.toLowerCase();
     return (
       wo.shipyard_wo_number?.toLowerCase().includes(searchLower) ||
@@ -500,6 +633,13 @@ export default function AddWorkProgress({
   });
 
   const filteredWorkDetailsForSearch = workDetailsList.filter((wd) => {
+    // Hide work details that already reached 100% — nothing left to report
+    // progress on. The currently-selected item stays visible even if
+    // complete, so a deep link into an already-finished item still shows it.
+    if (wd.current_progress >= 100 && wd.id !== selectedWorkDetailsId) {
+      return false;
+    }
+
     const searchLower = workDetailsSearchTerm.toLowerCase();
 
     // Handle location search
@@ -569,43 +709,105 @@ export default function AddWorkProgress({
                           Kapro: {selectedWorkOrder.kapro.kapro_name}
                         </div>
                       )}
+                      {selectedWorkOrder.project && (
+                        <div className="text-xs text-blue-600 mt-0.5 flex items-center gap-1">
+                          <FolderKanban className="w-3.5 h-3.5" />{" "}
+                          {selectedWorkOrder.project.project_name}
+                        </div>
+                      )}
                     </div>
                     {!effectiveWorkDetailsId && (
                       <button
                         onClick={handleClearWorkOrderSearch}
                         className="text-blue-400 hover:text-blue-600"
                       >
-                        ✕
+                        <X className="w-4 h-4" />
                       </button>
                     )}
                   </div>
                 </div>
               ) : (
-                <div className="relative" ref={workOrderDropdownRef}>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                    <FileText className="w-4 h-4" /> Step 1: Select Work Order
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={workOrderSearchTerm}
-                      onChange={handleWorkOrderSearch}
-                      onFocus={() => setShowWorkOrderDropdown(true)}
-                      placeholder="Search by vessel name or WO number..."
-                      disabled={loadingWorkOrders}
-                      className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    {workOrderSearchTerm && (
-                      <button
-                        onClick={handleClearWorkOrderSearch}
-                        className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                      >
-                        ✕
-                      </button>
-                    )}
+                <div>
+                  {/* Optional Project filter — narrows the Work Order search
+                      below without gating it; leave it blank to search every
+                      work order. */}
+                  <div className="relative mb-3" ref={projectDropdownRef}>
+                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                      <FolderKanban className="w-4 h-4" /> Filter by Project{" "}
+                      <span className="text-gray-500 font-normal">
+                        (optional)
+                      </span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={projectSearchTerm}
+                        onChange={handleProjectSearch}
+                        onFocus={() => setShowProjectDropdown(true)}
+                        placeholder="Search project..."
+                        disabled={loadingWorkOrders}
+                        className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      {projectSearchTerm && (
+                        <button
+                          onClick={handleClearProjectSearch}
+                          className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    {showProjectDropdown &&
+                      filteredProjectsForSearch.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {filteredProjectsForSearch.map((project) => (
+                            <div
+                              key={project.id}
+                              onClick={() =>
+                                handleProjectSelectFromDropdown(project)
+                              }
+                              className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                                projectFilterId === project.id
+                                  ? "bg-blue-100"
+                                  : ""
+                              }`}
+                            >
+                              <div className="font-medium text-gray-900 text-sm">
+                                {project.project_name}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                   </div>
 
-                  {/* Work Order Dropdown */}
+                  <div className="relative" ref={workOrderDropdownRef}>
+                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                      <FileText className="w-4 h-4" /> Step 1: Select Work
+                      Order
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={workOrderSearchTerm}
+                        onChange={handleWorkOrderSearch}
+                        onFocus={() => setShowWorkOrderDropdown(true)}
+                        placeholder="Search by vessel name or WO number..."
+                        disabled={loadingWorkOrders}
+                        className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      {workOrderSearchTerm && (
+                        <button
+                          onClick={handleClearWorkOrderSearch}
+                          className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Work Order Dropdown */}
                   {showWorkOrderDropdown &&
                     filteredWorkOrdersForSearch.length > 0 && (
                       <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
@@ -633,6 +835,7 @@ export default function AddWorkProgress({
                         ))}
                       </div>
                     )}
+                  </div>
                 </div>
               )}
             </div>
@@ -660,7 +863,7 @@ export default function AddWorkProgress({
                     onClick={handleClearWorkDetailsSearch}
                     className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                   >
-                    ✕
+                    <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
@@ -686,16 +889,27 @@ export default function AddWorkProgress({
                           {workDetails.description.substring(0, 50)}
                           {workDetails.description.length > 50 ? "..." : ""}
                         </div>
-                        <div className="text-xs text-gray-600">
-                          📍{" "}
+                        <div className="text-xs text-gray-600 flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />{" "}
                           {typeof workDetails.location === "string"
                             ? workDetails.location || "No location"
                             : workDetails.location?.location ||
                               "No location"}{" "}
-                          • 👤 {workDetails.pic}
+                          • <User className="w-3 h-3" /> {workDetails.pic}
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+              {showWorkDetailsDropdown &&
+                selectedWorkOrderId > 0 &&
+                !loadingWorkDetails &&
+                filteredWorkDetailsForSearch.length === 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3 text-center text-sm text-gray-500">
+                    {workDetailsList.length > 0
+                      ? "Every work detail on this work order is already at 100%"
+                      : "No work details found"}
                   </div>
                 )}
             </div>
@@ -705,34 +919,54 @@ export default function AddWorkProgress({
                 only needs to surface the selected work detail. */}
             {selectedWorkDetails && (
               <div className="mt-6 pt-4 border-t border-gray-200">
-                <h4 className="text-sm font-medium text-gray-700 mb-3">
-                  📊 Selection Summary
+                <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-1">
+                  <BarChart3 className="w-4 h-4" /> Selection Summary
                 </h4>
                 <div className="space-y-2 text-sm">
-                  {selectedWorkDetails && (
-                    <div className="flex items-start gap-2">
-                      <span className="text-gray-500 mt-0.5">
-                        🔧 Work Details:
-                      </span>
-                      <div className="font-medium text-sm leading-tight">
-                        <div>{selectedWorkDetails.description}</div>
-                        {selectedWorkDetails.location && (
-                          <div className="text-xs text-gray-500">
-                            📍{" "}
-                            {typeof selectedWorkDetails.location === "string"
-                              ? selectedWorkDetails.location
-                              : selectedWorkDetails.location.location}
-                          </div>
-                        )}
-                        {selectedWorkDetails.pic && (
-                          <div className="text-xs text-gray-500">
-                            👤 PIC: {selectedWorkDetails.pic}
-                          </div>
-                        )}
-                      </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-gray-500 mt-0.5 flex items-center gap-1">
+                      <Wrench className="w-3.5 h-3.5" /> Work Details:
+                    </span>
+                    <div className="font-medium text-sm leading-tight">
+                      <div>{selectedWorkDetails.description}</div>
+                      {selectedWorkDetails.location && (
+                        <div className="text-xs text-gray-500 flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />{" "}
+                          {typeof selectedWorkDetails.location === "string"
+                            ? selectedWorkDetails.location
+                            : selectedWorkDetails.location.location}
+                        </div>
+                      )}
+                      {selectedWorkDetails.pic && (
+                        <div className="text-xs text-gray-500 flex items-center gap-1">
+                          <User className="w-3 h-3" /> PIC:{" "}
+                          {selectedWorkDetails.pic}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {currentMaxProgress !== null && currentMaxProgress > 0 && (
+                    <div
+                      className={`flex items-center gap-1 mt-2 ${
+                        isAlreadyComplete ? "text-green-700" : "text-blue-700"
+                      }`}
+                    >
+                      <BarChart3 className="w-3.5 h-3.5" />
+                      Current progress:{" "}
+                      {formatProgressPercentage(currentMaxProgress)}%
+                      {isAlreadyComplete && " — already complete"}
                     </div>
                   )}
                 </div>
+
+                {isAlreadyComplete && (
+                  <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800 flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    This work detail has already reached 100% completion — no
+                    further progress reports can be added.
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -773,14 +1007,20 @@ export default function AddWorkProgress({
                   </p>
                   {formData.progress_percentage !== "" && (
                     <div className="mt-1">
-                      {progressValue >= 0 && progressValue <= 100 ? (
-                        <span className="text-xs text-green-600 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> Valid percentage
-                        </span>
-                      ) : (
+                      {!(progressValue >= 0 && progressValue <= 100) ? (
                         <span className="text-xs text-red-600 flex items-center gap-1">
                           <AlertCircle className="w-3 h-3" /> Must be between
                           0-100
+                        </span>
+                      ) : isBelowCurrentProgress ? (
+                        <span className="text-xs text-red-600 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" /> Can't be lower
+                          than the current progress (
+                          {formatProgressPercentage(currentMaxProgress ?? 0)}%)
+                        </span>
+                      ) : (
+                        <span className="text-xs text-green-600 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Valid percentage
                         </span>
                       )}
                     </div>
@@ -904,7 +1144,10 @@ export default function AddWorkProgress({
                     Creating...
                   </>
                 ) : (
-                  <>✅ Create Progress Report</>
+                  <>
+                    <CheckCircle2 className="w-4 h-4" /> Create Progress
+                    Report
+                  </>
                 )}
               </button>
             </div>

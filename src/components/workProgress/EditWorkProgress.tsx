@@ -5,6 +5,12 @@ import { uploadProgressEvidence } from "../../utils/progressEvidenceHandler";
 import { useAuth } from "../../hooks/useAuth";
 import { ActivityLogService } from "../../services/activityLogService";
 import {
+  sanitizeProgressPercentageInput,
+  parseProgressPercentage,
+  isValidProgressPercentage,
+  formatProgressPercentage,
+} from "../../utils/progressPercentage";
+import {
   ArrowLeft,
   FileText,
   Ship,
@@ -165,9 +171,9 @@ export default function EditWorkProgress() {
 
       setProgressData(transformedData);
       setFormData({
-        progress_percentage: transformedData.progress_percentage
-          .toString()
-          .replace(".", ","),
+        progress_percentage: formatProgressPercentage(
+          transformedData.progress_percentage,
+        ),
         report_date: transformedData.report_date,
         notes: transformedData.notes || "",
         evidence_file: null,
@@ -201,19 +207,9 @@ export default function EditWorkProgress() {
     const { name, value } = e.target;
 
     if (name === "progress_percentage") {
-      const formattedValue = value.replace(/\./g, ",");
-      const numericValue = formattedValue.replace(/[^0-9,]/g, "");
-
-      const commaCount = (numericValue.match(/,/g) || []).length;
-      if (commaCount > 1) return;
-
-      const parsedValue =
-        numericValue === "" ? 0 : parseFloat(numericValue.replace(",", "."));
-      if (
-        numericValue === "" ||
-        (!isNaN(parsedValue) && parsedValue >= 0 && parsedValue <= 100)
-      ) {
-        setFormData((prev) => ({ ...prev, progress_percentage: numericValue }));
+      const sanitized = sanitizeProgressPercentageInput(value);
+      if (sanitized !== null) {
+        setFormData((prev) => ({ ...prev, progress_percentage: sanitized }));
       }
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
@@ -250,24 +246,30 @@ export default function EditWorkProgress() {
     e.target.select();
   };
 
+  // Returns to the Work Progress table, forwarding along whatever filters
+  // it handed us when we were opened so the list doesn't reset.
+  const goBackToWorkProgress = () => {
+    const returnFilters = location.state?.returnFilters;
+    if (returnFilters) {
+      navigate("/work-progress", { state: { returnFilters } });
+    } else {
+      navigate("/work-progress");
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!progressData) return;
 
-    const progressValue = formData.progress_percentage
-      ? parseFloat(formData.progress_percentage.replace(",", ".")) || 0
-      : 0;
-
-    if (
-      formData.progress_percentage === "" ||
-      isNaN(progressValue) ||
-      progressValue < 0 ||
-      progressValue > 100
-    ) {
+    if (!isValidProgressPercentage(formData.progress_percentage)) {
       setError("Please enter a valid progress percentage between 0 and 100");
       return;
     }
+
+    const progressValue = parseProgressPercentage(
+      formData.progress_percentage,
+    );
 
     setSubmitting(true);
     setError(null);
@@ -345,15 +347,7 @@ export default function EditWorkProgress() {
         });
       }
 
-      const returnFilters = location.state?.returnFilters;
-
-      if (returnFilters) {
-        navigate("/work-progress", {
-          state: { returnFilters },
-        });
-      } else {
-        navigate("/work-progress");
-      }
+      goBackToWorkProgress();
     } catch (err) {
       console.error("Error updating work progress:", err);
       setError(
@@ -392,29 +386,16 @@ export default function EditWorkProgress() {
     );
   }
 
-  const progressValue = formData.progress_percentage
-    ? parseFloat(formData.progress_percentage.replace(",", ".")) || 0
-    : 0;
+  const progressValue = parseProgressPercentage(formData.progress_percentage);
 
   const isFormValid =
-    formData.report_date &&
-    formData.progress_percentage !== "" &&
-    !isNaN(progressValue) &&
-    progressValue >= 0 &&
-    progressValue <= 100;
+    formData.report_date && isValidProgressPercentage(formData.progress_percentage);
 
   return (
     <div className="p-8">
       <div className="mb-6">
         <button
-          onClick={() => {
-            const returnFilters = location.state?.returnFilters;
-            if (returnFilters) {
-              navigate("/work-progress", { state: { returnFilters } });
-            } else {
-              navigate("/work-progress");
-            }
-          }}
+          onClick={goBackToWorkProgress}
           className="text-blue-600 hover:text-blue-800 mb-4 flex items-center gap-2"
         >
           <ArrowLeft className="w-4 h-4" /> Back to Work Progress
@@ -669,14 +650,7 @@ export default function EditWorkProgress() {
             <div className="flex justify-between items-center">
               <button
                 type="button"
-                onClick={() => {
-                  const returnFilters = location.state?.returnFilters;
-                  if (returnFilters) {
-                    navigate("/work-progress", { state: { returnFilters } });
-                  } else {
-                    navigate("/work-progress");
-                  }
-                }}
+                onClick={goBackToWorkProgress}
                 className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 disabled={submitting}
               >

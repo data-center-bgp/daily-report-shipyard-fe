@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { openProgressEvidence } from "../../utils/progressEvidenceHandler";
 import type { WorkProgressWithDetails } from "../../types/progressTypes";
@@ -26,6 +26,7 @@ import {
   Edit,
   Camera,
   Pin,
+  FolderKanban,
 } from "lucide-react";
 
 // ==================== INTERFACES ====================
@@ -47,9 +48,15 @@ interface Kapro {
   kapro_name: string;
 }
 
+interface ProjectOption {
+  id: number;
+  project_name: string;
+}
+
 interface WorkOrderFullData {
   id: number;
   vessel_id: number;
+  project_id?: number;
   shipyard_wo_number: string;
   customer_wo_number?: string;
   work_type?: string;
@@ -65,6 +72,7 @@ export default function WorkProgressTable({
   embedded = false,
 }: WorkProgressTableProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isReadOnly } = useAuth();
   // The /work-details/:workDetailsId/progress route renders this component
   // with no props, so fall back to the URL param when one isn't passed in.
@@ -87,18 +95,30 @@ export default function WorkProgressTable({
   const [vesselFilter, setVesselFilter] = useState("");
   const [vesselSearchTerm, setVesselSearchTerm] = useState("");
   const [showVesselDropdown, setShowVesselDropdown] = useState(false);
+  const [projectFilter, setProjectFilter] = useState("");
+  const [projectSearchTerm, setProjectSearchTerm] = useState("");
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [shipyardWoFilter, setShipyardWoFilter] = useState("");
+  const [shipyardWoSearchTerm, setShipyardWoSearchTerm] = useState("");
+  const [showShipyardWoDropdown, setShowShipyardWoDropdown] = useState(false);
   const [customerWoFilter, setCustomerWoFilter] = useState("");
+  const [customerWoSearchTerm, setCustomerWoSearchTerm] = useState("");
+  const [showCustomerWoDropdown, setShowCustomerWoDropdown] = useState(false);
   const [kaproFilter, setKaproFilter] = useState("");
   const [workLocationFilter, setWorkLocationFilter] = useState("");
   const [workTypeFilter, setWorkTypeFilter] = useState("");
   const [additionalWoFilter, setAdditionalWoFilter] = useState("");
+  const [workDetailsSearchTerm, setWorkDetailsSearchTerm] = useState("");
 
   // ==================== STATE - Filter Options ====================
   const [allVessels, setAllVessels] = useState<VesselInfo[]>([]);
+  const [allProjects, setAllProjects] = useState<ProjectOption[]>([]);
   const [allWorkOrders, setAllWorkOrders] = useState<WorkOrderFullData[]>([]);
   const [allKapros, setAllKapros] = useState<Kapro[]>([]);
   const vesselDropdownRef = useRef<HTMLDivElement>(null);
+  const projectDropdownRef = useRef<HTMLDivElement>(null);
+  const shipyardWoDropdownRef = useRef<HTMLDivElement>(null);
+  const customerWoDropdownRef = useRef<HTMLDivElement>(null);
 
   // ==================== STATE - UI ====================
   const [currentPage, setCurrentPage] = useState(1);
@@ -112,122 +132,159 @@ export default function WorkProgressTable({
   const endIndex = Math.min(currentPage * itemsPerPage, totalCount);
 
   // ==================== COMPUTED VALUES ====================
-  const hasActiveFilters =
+  const hasActiveFilters = !!(
     vesselFilter ||
+    projectFilter ||
     shipyardWoFilter ||
     customerWoFilter ||
     kaproFilter ||
     workLocationFilter ||
     workTypeFilter ||
-    additionalWoFilter;
+    additionalWoFilter
+  );
+  const hasSearchTerm = !!workDetailsSearchTerm.trim();
 
-  // Filter work orders based on active filters
-  const filteredWorkOrders = useMemo(() => {
-    let filtered = allWorkOrders;
+  // Applies every active dropdown filter to a work order list, optionally
+  // skipping one filter — used so each filter's own "available options" is
+  // computed from every OTHER active filter, not from itself. Without this,
+  // picking a value collapses that same dropdown down to just the value you
+  // picked, hiding every other option until you reset back to "All".
+  type WorkOrderFilterKey =
+    | "vessel"
+    | "project"
+    | "kapro"
+    | "workType"
+    | "workLocation"
+    | "additionalWo"
+    | "shipyardWo"
+    | "customerWo";
 
-    // Filter by vessel
-    if (vesselFilter) {
-      filtered = filtered.filter(
-        (wo) => wo.vessel_id === parseInt(vesselFilter),
-      );
-    }
+  const applyWorkOrderFilters = useCallback(
+    (orders: WorkOrderFullData[], exclude?: WorkOrderFilterKey) => {
+      let filtered = orders;
 
-    // Filter by kapro
-    if (kaproFilter) {
-      if (kaproFilter === "unassigned") {
-        filtered = filtered.filter((wo) => !wo.kapro_id);
-      } else {
+      if (exclude !== "vessel" && vesselFilter) {
         filtered = filtered.filter(
-          (wo) => wo.kapro_id === parseInt(kaproFilter),
+          (wo) => wo.vessel_id === parseInt(vesselFilter),
         );
       }
-    }
+      if (exclude !== "project" && projectFilter) {
+        filtered = filtered.filter(
+          (wo) => wo.project_id === parseInt(projectFilter),
+        );
+      }
+      if (exclude !== "kapro" && kaproFilter) {
+        if (kaproFilter === "unassigned") {
+          filtered = filtered.filter((wo) => !wo.kapro_id);
+        } else {
+          filtered = filtered.filter(
+            (wo) => wo.kapro_id === parseInt(kaproFilter),
+          );
+        }
+      }
+      if (exclude !== "workType" && workTypeFilter) {
+        filtered = filtered.filter((wo) => wo.work_type === workTypeFilter);
+      }
+      if (exclude !== "workLocation" && workLocationFilter) {
+        filtered = filtered.filter(
+          (wo) => wo.work_location === workLocationFilter,
+        );
+      }
+      if (exclude !== "additionalWo" && additionalWoFilter) {
+        const isAdditional = additionalWoFilter === "yes";
+        filtered = filtered.filter(
+          (wo) => wo.is_additional_wo === isAdditional,
+        );
+      }
+      if (exclude !== "shipyardWo" && shipyardWoFilter) {
+        filtered = filtered.filter(
+          (wo) => wo.shipyard_wo_number === shipyardWoFilter,
+        );
+      }
+      if (exclude !== "customerWo" && customerWoFilter) {
+        filtered = filtered.filter(
+          (wo) => wo.customer_wo_number === customerWoFilter,
+        );
+      }
 
-    // Filter by work type
-    if (workTypeFilter) {
-      filtered = filtered.filter((wo) => wo.work_type === workTypeFilter);
-    }
+      return filtered;
+    },
+    [
+      vesselFilter,
+      projectFilter,
+      kaproFilter,
+      workTypeFilter,
+      workLocationFilter,
+      additionalWoFilter,
+      shipyardWoFilter,
+      customerWoFilter,
+    ],
+  );
 
-    // Filter by work location
-    if (workLocationFilter) {
-      filtered = filtered.filter(
-        (wo) => wo.work_location === workLocationFilter,
-      );
-    }
+  // Work orders matching every active filter — used to scope the actual
+  // work_progress query.
+  const filteredWorkOrders = useMemo(
+    () => applyWorkOrderFilters(allWorkOrders),
+    [allWorkOrders, applyWorkOrderFilters],
+  );
 
-    // Filter by additional WO
-    if (additionalWoFilter) {
-      const isAdditional = additionalWoFilter === "yes";
-      filtered = filtered.filter((wo) => wo.is_additional_wo === isAdditional);
-    }
-
-    // Filter by shipyard WO number
-    if (shipyardWoFilter) {
-      filtered = filtered.filter(
-        (wo) => wo.shipyard_wo_number === shipyardWoFilter,
-      );
-    }
-
-    // Filter by customer WO number
-    if (customerWoFilter) {
-      filtered = filtered.filter(
-        (wo) => wo.customer_wo_number === customerWoFilter,
-      );
-    }
-
-    return filtered;
-  }, [
-    allWorkOrders,
-    vesselFilter,
-    kaproFilter,
-    workTypeFilter,
-    workLocationFilter,
-    additionalWoFilter,
-    shipyardWoFilter,
-    customerWoFilter,
-  ]);
-
-  // Available vessels based on filtered work orders
+  // Available vessels — every OTHER active filter applied, but not vessel.
   const availableVessels = useMemo(() => {
     if (!hasActiveFilters) return allVessels;
-
-    const vesselIds = new Set(filteredWorkOrders.map((wo) => wo.vessel_id));
+    const scoped = applyWorkOrderFilters(allWorkOrders, "vessel");
+    const vesselIds = new Set(scoped.map((wo) => wo.vessel_id));
     return allVessels.filter((vessel) => vesselIds.has(vessel.id));
-  }, [allVessels, filteredWorkOrders, hasActiveFilters]);
+  }, [allVessels, allWorkOrders, applyWorkOrderFilters, hasActiveFilters]);
 
-  // Available shipyard WO numbers
+  // Available projects — every OTHER active filter applied, but not project.
+  const availableProjects = useMemo(() => {
+    if (!hasActiveFilters) return allProjects;
+    const scoped = applyWorkOrderFilters(allWorkOrders, "project");
+    const projectIds = new Set(
+      scoped
+        .map((wo) => wo.project_id)
+        .filter((id): id is number => id !== null && id !== undefined),
+    );
+    return allProjects.filter((project) => projectIds.has(project.id));
+  }, [allProjects, allWorkOrders, applyWorkOrderFilters, hasActiveFilters]);
+
+  // Available shipyard WO numbers — every OTHER active filter applied.
   const availableShipyardWoNumbers = useMemo(() => {
-    const numbers = filteredWorkOrders
+    const scoped = applyWorkOrderFilters(allWorkOrders, "shipyardWo");
+    const numbers = scoped
       .map((wo) => wo.shipyard_wo_number)
       .filter((num): num is string => !!num);
     return Array.from(new Set(numbers)).sort();
-  }, [filteredWorkOrders]);
+  }, [allWorkOrders, applyWorkOrderFilters]);
 
-  // Available customer WO numbers
+  // Available customer WO numbers — every OTHER active filter applied.
   const availableCustomerWoNumbers = useMemo(() => {
-    const numbers = filteredWorkOrders
+    const scoped = applyWorkOrderFilters(allWorkOrders, "customerWo");
+    const numbers = scoped
       .map((wo) => wo.customer_wo_number)
       .filter((num): num is string => !!num);
     return Array.from(new Set(numbers)).sort();
-  }, [filteredWorkOrders]);
+  }, [allWorkOrders, applyWorkOrderFilters]);
 
-  // Available work types
+  // Available work types — every OTHER active filter applied.
   const availableWorkTypes = useMemo(() => {
-    const types = filteredWorkOrders
+    const scoped = applyWorkOrderFilters(allWorkOrders, "workType");
+    const types = scoped
       .map((wo) => wo.work_type)
       .filter((type): type is string => !!type);
     return Array.from(new Set(types)).sort();
-  }, [filteredWorkOrders]);
+  }, [allWorkOrders, applyWorkOrderFilters]);
 
-  // Available work locations
+  // Available work locations — every OTHER active filter applied.
   const availableWorkLocations = useMemo(() => {
-    const locations = filteredWorkOrders
+    const scoped = applyWorkOrderFilters(allWorkOrders, "workLocation");
+    const locations = scoped
       .map((wo) => wo.work_location)
       .filter((loc): loc is string => !!loc);
     return Array.from(new Set(locations)).sort();
-  }, [filteredWorkOrders]);
+  }, [allWorkOrders, applyWorkOrderFilters]);
 
-  // Available kapros based on filtered work orders
+  // Available kapros — every OTHER active filter applied, but not kapro.
   const availableKapros = useMemo(() => {
     if (!hasActiveFilters) {
       return {
@@ -236,17 +293,18 @@ export default function WorkProgressTable({
       };
     }
 
+    const scoped = applyWorkOrderFilters(allWorkOrders, "kapro");
     const kaproIds = new Set(
-      filteredWorkOrders
+      scoped
         .map((wo) => wo.kapro_id)
         .filter((id): id is number => id !== null && id !== undefined),
     );
 
     const filteredKapros = allKapros.filter((kapro) => kaproIds.has(kapro.id));
-    const hasUnassigned = filteredWorkOrders.some((wo) => !wo.kapro_id);
+    const hasUnassigned = scoped.some((wo) => !wo.kapro_id);
 
     return { kapros: filteredKapros, hasUnassigned };
-  }, [allKapros, filteredWorkOrders, hasActiveFilters, allWorkOrders]);
+  }, [allKapros, allWorkOrders, applyWorkOrderFilters, hasActiveFilters]);
 
   // Filtered vessels for search dropdown
   const filteredVesselsForSearch = useMemo(() => {
@@ -266,6 +324,34 @@ export default function WorkProgressTable({
     });
   }, [availableVessels, vesselSearchTerm]);
 
+  // Filtered projects for search dropdown
+  const filteredProjectsForSearch = useMemo(() => {
+    if (!projectSearchTerm) return availableProjects;
+
+    const searchLower = projectSearchTerm.toLowerCase();
+    return availableProjects.filter((project) =>
+      project.project_name?.toLowerCase().includes(searchLower),
+    );
+  }, [availableProjects, projectSearchTerm]);
+
+  // Filtered shipyard WO numbers for search dropdown
+  const filteredShipyardWoForSearch = useMemo(() => {
+    if (!shipyardWoSearchTerm) return availableShipyardWoNumbers;
+    const searchLower = shipyardWoSearchTerm.toLowerCase();
+    return availableShipyardWoNumbers.filter((wo) =>
+      wo.toLowerCase().includes(searchLower),
+    );
+  }, [availableShipyardWoNumbers, shipyardWoSearchTerm]);
+
+  // Filtered customer WO numbers for search dropdown
+  const filteredCustomerWoForSearch = useMemo(() => {
+    if (!customerWoSearchTerm) return availableCustomerWoNumbers;
+    const searchLower = customerWoSearchTerm.toLowerCase();
+    return availableCustomerWoNumbers.filter((wo) =>
+      wo.toLowerCase().includes(searchLower),
+    );
+  }, [availableCustomerWoNumbers, customerWoSearchTerm]);
+
   // ==================== DATA FETCHING FUNCTIONS ====================
 
   const fetchFilterOptions = useCallback(async () => {
@@ -279,6 +365,16 @@ export default function WorkProgressTable({
 
       if (vesselError) throw vesselError;
       setAllVessels(vesselData || []);
+
+      // Fetch ALL Projects
+      const { data: projectData, error: projectError } = await supabase
+        .from("projects")
+        .select("id, project_name")
+        .is("deleted_at", null)
+        .order("project_name", { ascending: true });
+
+      if (projectError) throw projectError;
+      setAllProjects(projectData || []);
 
       // Fetch ALL Kapros
       const { data: kaproData, error: kaproError } = await supabase
@@ -294,7 +390,7 @@ export default function WorkProgressTable({
       const { data: woData, error: woError } = await supabase
         .from("work_order")
         .select(
-          "id, vessel_id, shipyard_wo_number, customer_wo_number, work_type, work_location, is_additional_wo, kapro_id",
+          "id, vessel_id, project_id, shipyard_wo_number, customer_wo_number, work_type, work_location, is_additional_wo, kapro_id",
         )
         .is("deleted_at", null);
 
@@ -396,6 +492,55 @@ export default function WorkProgressTable({
         query = query.in("work_details_id", workDetailsIds);
       }
 
+      // Free-text search across work detail description/PIC and progress
+      // notes. Resolved to plain numeric id lists first (via safely-encoded
+      // .ilike() calls) so the final .or() only ever contains ids we looked
+      // up ourselves — never raw user text — avoiding any filter-syntax
+      // injection risk from special characters in the search term.
+      if (!workDetailsId && hasSearchTerm) {
+        const term = `%${workDetailsSearchTerm.trim()}%`;
+
+        const [descMatches, picMatches, notesMatches] = await Promise.all([
+          supabase
+            .from("work_details")
+            .select("id")
+            .ilike("description", term)
+            .is("deleted_at", null),
+          supabase
+            .from("work_details")
+            .select("id")
+            .ilike("pic", term)
+            .is("deleted_at", null),
+          supabase.from("work_progress").select("id").ilike("notes", term),
+        ]);
+
+        const matchedDetailIds = new Set([
+          ...(descMatches.data || []).map((d) => d.id),
+          ...(picMatches.data || []).map((d) => d.id),
+        ]);
+        const matchedProgressIds = new Set(
+          (notesMatches.data || []).map((p) => p.id),
+        );
+
+        if (matchedDetailIds.size === 0 && matchedProgressIds.size === 0) {
+          setWorkProgress([]);
+          setTotalCount(0);
+          setLoading(false);
+          return;
+        }
+
+        const orParts: string[] = [];
+        if (matchedProgressIds.size > 0) {
+          orParts.push(`id.in.(${Array.from(matchedProgressIds).join(",")})`);
+        }
+        if (matchedDetailIds.size > 0) {
+          orParts.push(
+            `work_details_id.in.(${Array.from(matchedDetailIds).join(",")})`,
+          );
+        }
+        query = query.or(orParts.join(","));
+      }
+
       // Apply pagination
       const startIdx = (currentPage - 1) * itemsPerPage;
       query = query
@@ -457,7 +602,14 @@ export default function WorkProgressTable({
     } finally {
       setLoading(false);
     }
-  }, [currentPage, hasActiveFilters, filteredWorkOrders, workDetailsId]);
+  }, [
+    currentPage,
+    hasActiveFilters,
+    hasSearchTerm,
+    workDetailsSearchTerm,
+    filteredWorkOrders,
+    workDetailsId,
+  ]);
 
   const calculateMaxProgress = async (
     currentProgressData: WorkProgressWithDetails[],
@@ -509,17 +661,18 @@ export default function WorkProgressTable({
   const handleClearFilters = () => {
     setVesselFilter("");
     setVesselSearchTerm("");
+    setProjectFilter("");
+    setProjectSearchTerm("");
     setShipyardWoFilter("");
+    setShipyardWoSearchTerm("");
     setCustomerWoFilter("");
+    setCustomerWoSearchTerm("");
     setKaproFilter("");
     setWorkLocationFilter("");
     setWorkTypeFilter("");
     setAdditionalWoFilter("");
+    setWorkDetailsSearchTerm("");
     setCurrentPage(1);
-  };
-
-  const clearAllFilters = () => {
-    handleClearFilters();
   };
 
   const handleVesselSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -543,6 +696,90 @@ export default function WorkProgressTable({
     setShowVesselDropdown(false);
     setCurrentPage(1);
   };
+
+  const handleProjectSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setProjectSearchTerm(e.target.value);
+    setShowProjectDropdown(true);
+    if (projectFilter) {
+      setProjectFilter("");
+    }
+  };
+
+  const handleProjectSelectFromDropdown = (project: ProjectOption) => {
+    setProjectFilter(project.id.toString());
+    setProjectSearchTerm(project.project_name);
+    setShowProjectDropdown(false);
+    setCurrentPage(1);
+  };
+
+  const handleClearProjectSearch = () => {
+    setProjectSearchTerm("");
+    setProjectFilter("");
+    setShowProjectDropdown(false);
+    setCurrentPage(1);
+  };
+
+  const handleShipyardWoSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setShipyardWoSearchTerm(e.target.value);
+    setShowShipyardWoDropdown(true);
+    if (shipyardWoFilter) {
+      setShipyardWoFilter("");
+    }
+  };
+
+  const handleShipyardWoSelectFromDropdown = (wo: string) => {
+    setShipyardWoFilter(wo);
+    setShipyardWoSearchTerm(wo);
+    setShowShipyardWoDropdown(false);
+    setCurrentPage(1);
+  };
+
+  const handleClearShipyardWoSearch = () => {
+    setShipyardWoSearchTerm("");
+    setShipyardWoFilter("");
+    setShowShipyardWoDropdown(false);
+    setCurrentPage(1);
+  };
+
+  const handleCustomerWoSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCustomerWoSearchTerm(e.target.value);
+    setShowCustomerWoDropdown(true);
+    if (customerWoFilter) {
+      setCustomerWoFilter("");
+    }
+  };
+
+  const handleCustomerWoSelectFromDropdown = (wo: string) => {
+    setCustomerWoFilter(wo);
+    setCustomerWoSearchTerm(wo);
+    setShowCustomerWoDropdown(false);
+    setCurrentPage(1);
+  };
+
+  const handleClearCustomerWoSearch = () => {
+    setCustomerWoSearchTerm("");
+    setCustomerWoFilter("");
+    setShowCustomerWoDropdown(false);
+    setCurrentPage(1);
+  };
+
+  // Snapshot of every filter/search/page value, threaded through navigation
+  // state so the Edit page can hand it back when the user returns here.
+  const buildReturnFilters = () => ({
+    vesselFilter,
+    vesselSearchTerm,
+    projectFilter,
+    projectSearchTerm,
+    shipyardWoFilter,
+    customerWoFilter,
+    kaproFilter,
+    workLocationFilter,
+    workTypeFilter,
+    additionalWoFilter,
+    workDetailsSearchTerm,
+    currentPage,
+    showFilters,
+  });
 
   // ==================== NAVIGATION HANDLERS ====================
 
@@ -746,12 +983,14 @@ export default function WorkProgressTable({
     setCurrentPage(1);
   }, [
     vesselFilter,
+    projectFilter,
     shipyardWoFilter,
     customerWoFilter,
     kaproFilter,
     workLocationFilter,
     workTypeFilter,
     additionalWoFilter,
+    workDetailsSearchTerm,
   ]);
 
   useEffect(() => {
@@ -762,12 +1001,69 @@ export default function WorkProgressTable({
       ) {
         setShowVesselDropdown(false);
       }
+      if (
+        projectDropdownRef.current &&
+        !projectDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowProjectDropdown(false);
+      }
+      if (
+        shipyardWoDropdownRef.current &&
+        !shipyardWoDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowShipyardWoDropdown(false);
+      }
+      if (
+        customerWoDropdownRef.current &&
+        !customerWoDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowCustomerWoDropdown(false);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
+  }, []);
+
+  // Restore filters handed back by the Edit page when the user returns here,
+  // so clicking "Edit" and then going back doesn't reset the whole list.
+  useEffect(() => {
+    const returnFilters = (location.state as any)?.returnFilters;
+    if (!returnFilters) return;
+
+    if (returnFilters.vesselFilter) setVesselFilter(returnFilters.vesselFilter);
+    if (returnFilters.vesselSearchTerm)
+      setVesselSearchTerm(returnFilters.vesselSearchTerm);
+    if (returnFilters.projectFilter)
+      setProjectFilter(returnFilters.projectFilter);
+    if (returnFilters.projectSearchTerm)
+      setProjectSearchTerm(returnFilters.projectSearchTerm);
+    if (returnFilters.shipyardWoFilter) {
+      setShipyardWoFilter(returnFilters.shipyardWoFilter);
+      setShipyardWoSearchTerm(returnFilters.shipyardWoFilter);
+    }
+    if (returnFilters.customerWoFilter) {
+      setCustomerWoFilter(returnFilters.customerWoFilter);
+      setCustomerWoSearchTerm(returnFilters.customerWoFilter);
+    }
+    if (returnFilters.kaproFilter) setKaproFilter(returnFilters.kaproFilter);
+    if (returnFilters.workLocationFilter)
+      setWorkLocationFilter(returnFilters.workLocationFilter);
+    if (returnFilters.workTypeFilter)
+      setWorkTypeFilter(returnFilters.workTypeFilter);
+    if (returnFilters.additionalWoFilter)
+      setAdditionalWoFilter(returnFilters.additionalWoFilter);
+    if (returnFilters.workDetailsSearchTerm)
+      setWorkDetailsSearchTerm(returnFilters.workDetailsSearchTerm);
+    if (returnFilters.currentPage) setCurrentPage(returnFilters.currentPage);
+    if (returnFilters.showFilters) setShowFilters(true);
+
+    // Clear the navigation state so a later refresh doesn't re-apply it.
+    window.history.replaceState({ ...window.history.state, usr: undefined }, "");
+    // Only run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ==================== RENDER FUNCTIONS ====================
@@ -864,24 +1160,26 @@ export default function WorkProgressTable({
             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Search className="w-5 h-5" /> Filters
             </h3>
-            {hasActiveFilters && (
+            {(hasActiveFilters || hasSearchTerm) && (
               <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-bold">
                 {
                   [
                     vesselFilter,
+                    projectFilter,
                     shipyardWoFilter,
                     customerWoFilter,
                     kaproFilter,
                     workLocationFilter,
                     workTypeFilter,
                     additionalWoFilter,
+                    workDetailsSearchTerm,
                   ].filter(Boolean).length
                 }
               </span>
             )}
           </div>
           <div className="flex items-center gap-3">
-            {hasActiveFilters && (
+            {(hasActiveFilters || hasSearchTerm) && (
               <button
                 onClick={handleClearFilters}
                 className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
@@ -892,7 +1190,7 @@ export default function WorkProgressTable({
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`px-4 py-2 rounded-lg transition-colors ${
-                showFilters || hasActiveFilters
+                showFilters || hasActiveFilters || hasSearchTerm
                   ? "bg-blue-600 text-white"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
@@ -968,7 +1266,67 @@ export default function WorkProgressTable({
                 </div>
               </div>
 
-              {/* Shipyard WO Number Filter */}
+              {/* Project Filter with Search Dropdown */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                  <FolderKanban className="w-4 h-4" /> Project
+                  {availableProjects.length < allProjects.length && (
+                    <span className="ml-2 text-xs text-blue-600">
+                      ({availableProjects.length} of {allProjects.length})
+                    </span>
+                  )}
+                </label>
+                <div className="relative" ref={projectDropdownRef}>
+                  <input
+                    type="text"
+                    value={projectSearchTerm}
+                    onChange={handleProjectSearch}
+                    onFocus={() => setShowProjectDropdown(true)}
+                    placeholder="Search project..."
+                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  {projectSearchTerm && (
+                    <button
+                      onClick={handleClearProjectSearch}
+                      className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {showProjectDropdown &&
+                    filteredProjectsForSearch.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {filteredProjectsForSearch.map((project) => (
+                          <div
+                            key={project.id}
+                            onClick={() =>
+                              handleProjectSelectFromDropdown(project)
+                            }
+                            className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                              projectFilter === project.id.toString()
+                                ? "bg-blue-100"
+                                : ""
+                            }`}
+                          >
+                            <div className="font-medium text-gray-900 text-sm">
+                              {project.project_name}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                  {showProjectDropdown &&
+                    filteredProjectsForSearch.length === 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3 text-center text-sm text-gray-500">
+                        No projects found
+                      </div>
+                    )}
+                </div>
+              </div>
+
+              {/* Shipyard WO Number Filter with Search Dropdown */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
                   <FileText className="w-4 h-4" /> Shipyard WO Number
@@ -978,26 +1336,60 @@ export default function WorkProgressTable({
                     </span>
                   )}
                 </label>
-                <select
-                  value={shipyardWoFilter}
-                  onChange={(e) => setShipyardWoFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  disabled={availableShipyardWoNumbers.length === 0}
-                >
-                  <option value="">
-                    {availableShipyardWoNumbers.length === 0
-                      ? "No WO available"
-                      : "All Shipyard WO"}
-                  </option>
-                  {availableShipyardWoNumbers.map((wo) => (
-                    <option key={wo} value={wo}>
-                      {wo}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative" ref={shipyardWoDropdownRef}>
+                  <input
+                    type="text"
+                    value={shipyardWoSearchTerm}
+                    onChange={handleShipyardWoSearch}
+                    onFocus={() => setShowShipyardWoDropdown(true)}
+                    placeholder={
+                      availableShipyardWoNumbers.length === 0
+                        ? "No WO available"
+                        : "Search shipyard WO..."
+                    }
+                    disabled={availableShipyardWoNumbers.length === 0}
+                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                  {shipyardWoSearchTerm && (
+                    <button
+                      onClick={handleClearShipyardWoSearch}
+                      className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {showShipyardWoDropdown &&
+                    filteredShipyardWoForSearch.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {filteredShipyardWoForSearch.map((wo) => (
+                          <div
+                            key={wo}
+                            onClick={() =>
+                              handleShipyardWoSelectFromDropdown(wo)
+                            }
+                            className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                              shipyardWoFilter === wo ? "bg-blue-100" : ""
+                            }`}
+                          >
+                            <div className="font-medium text-gray-900 text-sm">
+                              {wo}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                  {showShipyardWoDropdown &&
+                    filteredShipyardWoForSearch.length === 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3 text-center text-sm text-gray-500">
+                        No shipyard WO found
+                      </div>
+                    )}
+                </div>
               </div>
 
-              {/* Customer WO Number Filter */}
+              {/* Customer WO Number Filter with Search Dropdown */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
                   <File className="w-4 h-4" /> Customer WO Number
@@ -1007,23 +1399,57 @@ export default function WorkProgressTable({
                     </span>
                   )}
                 </label>
-                <select
-                  value={customerWoFilter}
-                  onChange={(e) => setCustomerWoFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  disabled={availableCustomerWoNumbers.length === 0}
-                >
-                  <option value="">
-                    {availableCustomerWoNumbers.length === 0
-                      ? "No customer WO available"
-                      : "All Customer WO"}
-                  </option>
-                  {availableCustomerWoNumbers.map((wo) => (
-                    <option key={wo} value={wo}>
-                      {wo}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative" ref={customerWoDropdownRef}>
+                  <input
+                    type="text"
+                    value={customerWoSearchTerm}
+                    onChange={handleCustomerWoSearch}
+                    onFocus={() => setShowCustomerWoDropdown(true)}
+                    placeholder={
+                      availableCustomerWoNumbers.length === 0
+                        ? "No customer WO available"
+                        : "Search customer WO..."
+                    }
+                    disabled={availableCustomerWoNumbers.length === 0}
+                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                  {customerWoSearchTerm && (
+                    <button
+                      onClick={handleClearCustomerWoSearch}
+                      className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {showCustomerWoDropdown &&
+                    filteredCustomerWoForSearch.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {filteredCustomerWoForSearch.map((wo) => (
+                          <div
+                            key={wo}
+                            onClick={() =>
+                              handleCustomerWoSelectFromDropdown(wo)
+                            }
+                            className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                              customerWoFilter === wo ? "bg-blue-100" : ""
+                            }`}
+                          >
+                            <div className="font-medium text-gray-900 text-sm">
+                              {wo}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                  {showCustomerWoDropdown &&
+                    filteredCustomerWoForSearch.length === 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3 text-center text-sm text-gray-500">
+                        No customer WO found
+                      </div>
+                    )}
+                </div>
               </div>
 
               {/* Work Type Filter */}
@@ -1138,8 +1564,32 @@ export default function WorkProgressTable({
               </div>
             </div>
 
+            {/* Free-text Search */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                <Search className="w-4 h-4" /> Search Work Details
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={workDetailsSearchTerm}
+                  onChange={(e) => setWorkDetailsSearchTerm(e.target.value)}
+                  placeholder="Search by description, PIC, or notes..."
+                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {workDetailsSearchTerm && (
+                  <button
+                    onClick={() => setWorkDetailsSearchTerm("")}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* Active Filters Display */}
-            {hasActiveFilters && (
+            {(hasActiveFilters || hasSearchTerm) && (
               <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-200">
                 <span className="text-sm text-gray-600 font-medium">
                   Active filters:
@@ -1154,18 +1604,29 @@ export default function WorkProgressTable({
                     onRemove={handleClearVesselSearch}
                   />
                 )}
+                {projectFilter && (
+                  <FilterPill
+                    label="Project"
+                    value={
+                      allProjects.find(
+                        (p) => p.id.toString() === projectFilter,
+                      )?.project_name || projectFilter
+                    }
+                    onRemove={handleClearProjectSearch}
+                  />
+                )}
                 {shipyardWoFilter && (
                   <FilterPill
                     label="Shipyard WO"
                     value={shipyardWoFilter}
-                    onRemove={() => setShipyardWoFilter("")}
+                    onRemove={handleClearShipyardWoSearch}
                   />
                 )}
                 {customerWoFilter && (
                   <FilterPill
                     label="Customer WO"
                     value={customerWoFilter}
-                    onRemove={() => setCustomerWoFilter("")}
+                    onRemove={handleClearCustomerWoSearch}
                   />
                 )}
                 {workTypeFilter && (
@@ -1199,6 +1660,13 @@ export default function WorkProgressTable({
                     label="Additional"
                     value={additionalWoFilter === "yes" ? "Yes" : "No"}
                     onRemove={() => setAdditionalWoFilter("")}
+                  />
+                )}
+                {workDetailsSearchTerm && (
+                  <FilterPill
+                    label="Search"
+                    value={workDetailsSearchTerm}
+                    onRemove={() => setWorkDetailsSearchTerm("")}
                   />
                 )}
               </div>
@@ -1242,15 +1710,15 @@ export default function WorkProgressTable({
             No Progress Reports Found
           </h3>
           <p className="text-gray-500 mb-4">
-            {hasActiveFilters
+            {hasActiveFilters || hasSearchTerm
               ? "No progress reports match your current filters."
               : "No progress reports have been recorded yet."}
           </p>
 
           <div className="flex gap-3 justify-center">
-            {hasActiveFilters && (
+            {(hasActiveFilters || hasSearchTerm) && (
               <button
-                onClick={clearAllFilters}
+                onClick={handleClearFilters}
                 className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
               >
                 Clear Filters
@@ -1371,7 +1839,9 @@ export default function WorkProgressTable({
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         <button
                           onClick={() =>
-                            navigate(`/work-progress/edit/${item.id}`)
+                            navigate(`/work-progress/edit/${item.id}`, {
+                              state: { returnFilters: buildReturnFilters() },
+                            })
                           }
                           className="text-blue-600 hover:text-blue-800 text-sm font-medium inline-flex items-center gap-1 hover:underline"
                           title="Edit this progress report"
