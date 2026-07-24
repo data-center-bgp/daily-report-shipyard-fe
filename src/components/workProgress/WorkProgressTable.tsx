@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { openProgressEvidence } from "../../utils/progressEvidenceHandler";
 import type { WorkProgressWithDetails } from "../../types/progressTypes";
@@ -61,11 +61,17 @@ interface WorkOrderFullData {
 // ==================== MAIN COMPONENT ====================
 
 export default function WorkProgressTable({
-  workDetailsId,
+  workDetailsId: workDetailsIdProp,
   embedded = false,
 }: WorkProgressTableProps) {
   const navigate = useNavigate();
   const { isReadOnly } = useAuth();
+  // The /work-details/:workDetailsId/progress route renders this component
+  // with no props, so fall back to the URL param when one isn't passed in.
+  const params = useParams<{ workDetailsId?: string }>();
+  const workDetailsId =
+    workDetailsIdProp ??
+    (params.workDetailsId ? parseInt(params.workDetailsId) : undefined);
 
   // ==================== STATE - Data ====================
   const [workProgress, setWorkProgress] = useState<WorkProgressWithDetails[]>(
@@ -358,8 +364,11 @@ export default function WorkProgressTable({
         { count: "exact" },
       );
 
-      // Apply filters only if any filter is active
-      if (hasActiveFilters) {
+      // Scoped to a single work detail (e.g. opened via its "View / Edit
+      // Progress" action) takes priority over the dropdown filters below.
+      if (workDetailsId) {
+        query = query.eq("work_details_id", workDetailsId);
+      } else if (hasActiveFilters) {
         if (filteredWorkOrders.length === 0) {
           setWorkProgress([]);
           setTotalCount(0);
@@ -448,7 +457,7 @@ export default function WorkProgressTable({
     } finally {
       setLoading(false);
     }
-  }, [currentPage, hasActiveFilters, filteredWorkOrders]);
+  }, [currentPage, hasActiveFilters, filteredWorkOrders, workDetailsId]);
 
   const calculateMaxProgress = async (
     currentProgressData: WorkProgressWithDetails[],

@@ -912,10 +912,23 @@ export default function VesselWorkOrders() {
                         <td colSpan={8} className="px-0 py-0">
                           <div className="bg-gray-50 border-l-4 border-blue-400">
                             <div className="px-6 py-4">
-                              <h4 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
-                                <Wrench className="w-4 h-4" /> Work Details for{" "}
-                                {wo.shipyard_wo_number}
-                              </h4>
+                              <div className="flex items-center justify-between mb-3">
+                                <h4 className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                  <Wrench className="w-4 h-4" /> Work Details
+                                  for {wo.shipyard_wo_number}
+                                </h4>
+                                {!isReadOnly && (
+                                  <button
+                                    onClick={() =>
+                                      navigate(`/work-details/add/${wo.id}`)
+                                    }
+                                    className="bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1.5 text-sm font-medium"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" /> Add Work
+                                    Detail
+                                  </button>
+                                )}
+                              </div>
 
                               {wo.work_details.length > 0 ? (
                                 <div className="space-y-3">
@@ -1073,6 +1086,49 @@ export default function VesselWorkOrders() {
                                             )}
                                           </div>
                                         </div>
+                                      </div>
+
+                                      {/* Work Detail Actions */}
+                                      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+                                        {!isReadOnly && (
+                                          <button
+                                            onClick={() =>
+                                              navigate(
+                                                `/edit-work-details/${detail.id}`,
+                                              )
+                                            }
+                                            className="text-xs font-medium text-green-700 hover:text-green-900 bg-green-50 hover:bg-green-100 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                                          >
+                                            <Edit className="w-3.5 h-3.5" />{" "}
+                                            Edit Details
+                                          </button>
+                                        )}
+                                        {!isReadOnly && (
+                                          <button
+                                            onClick={() =>
+                                              navigate(
+                                                `/add-work-progress/${detail.id}`,
+                                              )
+                                            }
+                                            className="text-xs font-medium text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                                          >
+                                            <Plus className="w-3.5 h-3.5" />{" "}
+                                            Add Progress
+                                          </button>
+                                        )}
+                                        <button
+                                          onClick={() =>
+                                            navigate(
+                                              `/work-details/${detail.id}/progress`,
+                                            )
+                                          }
+                                          className="text-xs font-medium text-gray-700 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                                        >
+                                          <Eye className="w-3.5 h-3.5" />{" "}
+                                          {isReadOnly
+                                            ? "View Progress"
+                                            : "View / Edit Progress"}
+                                        </button>
                                       </div>
                                     </div>
                                   ))}

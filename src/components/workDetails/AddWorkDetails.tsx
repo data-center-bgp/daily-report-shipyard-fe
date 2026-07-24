@@ -16,6 +16,7 @@ import {
 
 interface WorkOrderWithVessel extends WorkOrder {
   vessel?: Vessel;
+  kapro?: { id: number; kapro_name: string };
 }
 
 interface Location {
@@ -78,8 +79,6 @@ export default function AddWorkDetails() {
   const [error, setError] = useState<string | null>(null);
 
   // Selection state
-  const [vessels, setVessels] = useState<Vessel[]>([]);
-  const [selectedVesselId, setSelectedVesselId] = useState<number>(0);
   const [workOrders, setWorkOrders] = useState<WorkOrderWithVessel[]>([]);
   const [selectedWorkOrder, setSelectedWorkOrder] =
     useState<WorkOrderWithVessel | null>(null);
@@ -88,7 +87,6 @@ export default function AddWorkDetails() {
   );
 
   // Loading states
-  const [loadingVessels, setLoadingVessels] = useState(false);
   const [loadingWorkOrders, setLoadingWorkOrders] = useState(false);
 
   const [locations, setLocations] = useState<Location[]>([]);
@@ -96,11 +94,8 @@ export default function AddWorkDetails() {
   const [_loadingLocations, setLoadingLocations] = useState(false);
   const [_loadingWorkScopes, setLoadingWorkScopes] = useState(false);
 
-  // Search dropdown states
-  const [vesselSearchTerm, setVesselSearchTerm] = useState("");
-  const [showVesselDropdown, setShowVesselDropdown] = useState(false);
-  const vesselDropdownRef = useRef<HTMLDivElement>(null);
-
+  // Search dropdown state — a single search across vessel name + WO number,
+  // instead of a vessel-first cascade (vessel is carried on the WO itself).
   const [workOrderSearchTerm, setWorkOrderSearchTerm] = useState("");
   const [showWorkOrderDropdown, setShowWorkOrderDropdown] = useState(false);
   const workOrderDropdownRef = useRef<HTMLDivElement>(null);
@@ -108,12 +103,6 @@ export default function AddWorkDetails() {
   // Handle click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        vesselDropdownRef.current &&
-        !vesselDropdownRef.current.contains(event.target as Node)
-      ) {
-        setShowVesselDropdown(false);
-      }
       if (
         workOrderDropdownRef.current &&
         !workOrderDropdownRef.current.contains(event.target as Node)
@@ -129,25 +118,6 @@ export default function AddWorkDetails() {
   }, []);
 
   // Fetch functions
-  const fetchVessels = async () => {
-    try {
-      setLoadingVessels(true);
-      const { data, error } = await supabase
-        .from("vessel")
-        .select("*")
-        .is("deleted_at", null)
-        .order("name", { ascending: true });
-
-      if (error) throw error;
-      setVessels(data || []);
-    } catch (err) {
-      console.error("Error fetching vessels:", err);
-      setError(err instanceof Error ? err.message : "Failed to load vessels");
-    } finally {
-      setLoadingVessels(false);
-    }
-  };
-
   const fetchLocations = async () => {
     try {
       setLoadingLocations(true);
@@ -188,7 +158,10 @@ export default function AddWorkDetails() {
     }
   };
 
-  const fetchWorkOrdersForVessel = async (vesselId: number) => {
+  // Fetches every work order up front (joined with its vessel + kapro) so
+  // the picker below can search across vessel name / WO number directly,
+  // instead of forcing a vessel-first cascade.
+  const fetchAllWorkOrders = async () => {
     try {
       setLoadingWorkOrders(true);
       const { data, error } = await supabase
@@ -201,10 +174,13 @@ export default function AddWorkDetails() {
             name,
             type,
             company
+          ),
+          kapro:kapro_id (
+            id,
+            kapro_name
           )
         `,
         )
-        .eq("vessel_id", vesselId)
         .is("deleted_at", null)
         .order("shipyard_wo_number", { ascending: true });
 
@@ -222,7 +198,7 @@ export default function AddWorkDetails() {
 
   // Initialize
   useEffect(() => {
-    fetchVessels();
+    fetchAllWorkOrders();
     fetchLocations();
     fetchWorkScopes();
 
@@ -239,6 +215,10 @@ export default function AddWorkDetails() {
                 name,
                 type,
                 company
+              ),
+              kapro:kapro_id (
+                id,
+                kapro_name
               )
             `,
             )
@@ -248,14 +228,9 @@ export default function AddWorkDetails() {
           if (error) throw error;
 
           if (workOrder && workOrder.vessel) {
-            setSelectedVesselId(workOrder.vessel.id);
             setSelectedWorkOrder(workOrder);
             setSelectedWorkOrderId(workOrder.id);
-            setVesselSearchTerm(
-              `${workOrder.vessel.name} - ${workOrder.vessel.type} (${workOrder.vessel.company})`,
-            );
             setWorkOrderSearchTerm(workOrder.shipyard_wo_number);
-            await fetchWorkOrdersForVessel(workOrder.vessel.id);
           }
         } catch (err) {
           console.error("Error initializing from work order:", err);
@@ -267,21 +242,14 @@ export default function AddWorkDetails() {
     }
   }, [workOrderId]);
 
-  // Filter functions
-  const filteredVesselsForSearch = vessels.filter((vessel) => {
-    const searchLower = vesselSearchTerm.toLowerCase();
-    return (
-      vessel.name?.toLowerCase().includes(searchLower) ||
-      vessel.type?.toLowerCase().includes(searchLower) ||
-      vessel.company?.toLowerCase().includes(searchLower)
-    );
-  });
-
+  // Filter functions — search across vessel name and WO number together,
+  // since the work order carries its vessel with it.
   const filteredWorkOrdersForSearch = workOrders.filter((wo) => {
     const searchLower = workOrderSearchTerm.toLowerCase();
     return (
       wo.shipyard_wo_number?.toLowerCase().includes(searchLower) ||
-      wo.customer_wo_number?.toLowerCase().includes(searchLower)
+      wo.customer_wo_number?.toLowerCase().includes(searchLower) ||
+      wo.vessel?.name?.toLowerCase().includes(searchLower)
     );
   });
 
@@ -328,28 +296,6 @@ export default function AddWorkDetails() {
     );
   };
 
-  // Vessel handlers
-  const handleVesselSelectFromDropdown = (vessel: Vessel) => {
-    setSelectedVesselId(vessel.id);
-    setVesselSearchTerm(`${vessel.name} - ${vessel.type} (${vessel.company})`);
-    setShowVesselDropdown(false);
-    setWorkOrders([]);
-    setSelectedWorkOrder(null);
-    setWorkOrderSearchTerm("");
-    setSelectedWorkOrderId(0);
-    fetchWorkOrdersForVessel(vessel.id);
-  };
-
-  const handleClearVesselSearch = () => {
-    setVesselSearchTerm("");
-    setSelectedVesselId(0);
-    setShowVesselDropdown(false);
-    setWorkOrders([]);
-    setSelectedWorkOrder(null);
-    setWorkOrderSearchTerm("");
-    setSelectedWorkOrderId(0);
-  };
-
   // Work Order handlers
   const handleWorkOrderSelectFromDropdown = (
     workOrder: WorkOrderWithVessel,
@@ -371,9 +317,6 @@ export default function AddWorkDetails() {
   const validateForm = () => {
     const errors: string[] = [];
 
-    if (!selectedVesselId || selectedVesselId === 0) {
-      errors.push("Please select a vessel");
-    }
     if (!selectedWorkOrderId || selectedWorkOrderId === 0) {
       errors.push("Please select a work order");
     }
@@ -608,157 +551,97 @@ export default function AddWorkDetails() {
             </div>
           )}
 
-          {/* Vessel & Work Order Selection */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            {/* Vessel Selection */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Vessel *
-              </label>
-              {workOrderId && selectedWorkOrder ? (
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-center">
-                    <Ship className="w-5 h-5 mr-2 text-blue-600" />
-                    <div>
-                      <div className="font-semibold text-blue-800">
-                        {selectedWorkOrder.vessel?.name || "Unknown Vessel"}
-                      </div>
-                      <div className="text-sm text-blue-600">
-                        {selectedWorkOrder.vessel?.type || "Unknown Type"} •{" "}
-                        {selectedWorkOrder.vessel?.company || "Unknown Company"}
-                      </div>
+          {/* Work Order Selection — a single search across vessel name and
+              WO number, since every work order already carries its vessel
+              and (now-required) Kapro with it. */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Work Order *
+            </label>
+            {selectedWorkOrder ? (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <HardHat className="w-5 h-5 mt-0.5 text-blue-600" />
+                  <div>
+                    <div className="font-semibold text-blue-900">
+                      {selectedWorkOrder.shipyard_wo_number}
                     </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="relative" ref={vesselDropdownRef}>
-                  <input
-                    type="text"
-                    value={vesselSearchTerm}
-                    onChange={(e) => {
-                      setVesselSearchTerm(e.target.value);
-                      setShowVesselDropdown(true);
-                      if (selectedVesselId) {
-                        handleClearVesselSearch();
-                      }
-                    }}
-                    onFocus={() => setShowVesselDropdown(true)}
-                    placeholder="Search vessel..."
-                    disabled={loadingVessels}
-                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
-                  />
-                  {vesselSearchTerm && (
-                    <button
-                      type="button"
-                      onClick={handleClearVesselSearch}
-                      className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-
-                  {showVesselDropdown &&
-                    filteredVesselsForSearch.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {filteredVesselsForSearch.map((vessel) => (
-                          <div
-                            key={vessel.id}
-                            onClick={() =>
-                              handleVesselSelectFromDropdown(vessel)
-                            }
-                            className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                              selectedVesselId === vessel.id
-                                ? "bg-blue-100"
-                                : ""
-                            }`}
-                          >
-                            <div className="font-medium text-gray-900 text-sm">
-                              {vessel.name}
-                            </div>
-                            <div className="text-xs text-gray-600">
-                              {vessel.type} • {vessel.company}
-                            </div>
-                          </div>
-                        ))}
+                    <div className="text-sm text-blue-700 flex items-center gap-1 mt-0.5">
+                      <Ship className="w-3.5 h-3.5" />
+                      {selectedWorkOrder.vessel?.name || "Unknown Vessel"} •{" "}
+                      {selectedWorkOrder.vessel?.type || "Unknown Type"} (
+                      {selectedWorkOrder.vessel?.company || "Unknown Company"})
+                    </div>
+                    {selectedWorkOrder.kapro && (
+                      <div className="text-xs text-blue-600 mt-0.5">
+                        Kapro: {selectedWorkOrder.kapro.kapro_name}
                       </div>
                     )}
-                </div>
-              )}
-            </div>
-
-            {/* Work Order Selection */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Work Order *
-              </label>
-              {workOrderId && selectedWorkOrder ? (
-                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="flex items-center">
-                    <HardHat className="w-5 h-5 mr-2 text-green-600" />
-                    <div>
-                      <div className="font-semibold text-green-800">
-                        {selectedWorkOrder.shipyard_wo_number}
-                      </div>
-                    </div>
                   </div>
                 </div>
-              ) : (
-                <div className="relative" ref={workOrderDropdownRef}>
-                  <input
-                    type="text"
-                    value={workOrderSearchTerm}
-                    onChange={(e) => {
-                      setWorkOrderSearchTerm(e.target.value);
-                      setShowWorkOrderDropdown(true);
-                      if (selectedWorkOrderId) {
-                        handleClearWorkOrderSearch();
-                      }
-                    }}
-                    onFocus={() => setShowWorkOrderDropdown(true)}
-                    placeholder={
-                      selectedVesselId === 0
-                        ? "Select vessel first"
-                        : "Search work order..."
-                    }
-                    disabled={loadingWorkOrders || selectedVesselId === 0}
-                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
-                  />
-                  {workOrderSearchTerm && (
-                    <button
-                      type="button"
-                      onClick={handleClearWorkOrderSearch}
-                      className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
+                {!workOrderId && (
+                  <button
+                    type="button"
+                    onClick={handleClearWorkOrderSearch}
+                    className="text-blue-400 hover:text-blue-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="relative" ref={workOrderDropdownRef}>
+                <input
+                  type="text"
+                  value={workOrderSearchTerm}
+                  onChange={(e) => {
+                    setWorkOrderSearchTerm(e.target.value);
+                    setShowWorkOrderDropdown(true);
+                  }}
+                  onFocus={() => setShowWorkOrderDropdown(true)}
+                  placeholder="Search by vessel name or WO number..."
+                  disabled={loadingWorkOrders}
+                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                />
+                {workOrderSearchTerm && (
+                  <button
+                    type="button"
+                    onClick={handleClearWorkOrderSearch}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
 
-                  {showWorkOrderDropdown &&
-                    selectedVesselId > 0 &&
-                    filteredWorkOrdersForSearch.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {filteredWorkOrdersForSearch.map((workOrder) => (
-                          <div
-                            key={workOrder.id}
-                            onClick={() =>
-                              handleWorkOrderSelectFromDropdown(workOrder)
-                            }
-                            className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                              selectedWorkOrderId === workOrder.id
-                                ? "bg-blue-100"
-                                : ""
-                            }`}
-                          >
-                            <div className="font-medium text-gray-900 text-sm">
-                              {workOrder.shipyard_wo_number}
-                            </div>
+                {showWorkOrderDropdown &&
+                  filteredWorkOrdersForSearch.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {filteredWorkOrdersForSearch.map((workOrder) => (
+                        <div
+                          key={workOrder.id}
+                          onClick={() =>
+                            handleWorkOrderSelectFromDropdown(workOrder)
+                          }
+                          className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                            selectedWorkOrderId === workOrder.id
+                              ? "bg-blue-100"
+                              : ""
+                          }`}
+                        >
+                          <div className="font-medium text-gray-900 text-sm">
+                            {workOrder.shipyard_wo_number}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                </div>
-              )}
-            </div>
+                          <div className="text-xs text-gray-600">
+                            {workOrder.vessel?.name} •{" "}
+                            {workOrder.vessel?.type} (
+                            {workOrder.vessel?.company})
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+              </div>
+            )}
           </div>
 
           {/* Work Details List */}
