@@ -36,17 +36,17 @@ interface ProjectRow {
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   NONE: { label: "No readiness form yet", className: "bg-gray-100 text-gray-600" },
   DRAFT: { label: "Readiness: Draft", className: "bg-gray-100 text-gray-700" },
-  PENDING_APPROVAL: {
-    label: "Readiness: Pending approval",
+  SUBMITTED: {
+    label: "Readiness: Awaiting HSSE review",
     className: "bg-amber-100 text-amber-700",
+  },
+  NEEDS_CLARIFICATION: {
+    label: "Readiness: Needs clarification",
+    className: "bg-orange-100 text-orange-700",
   },
   APPROVED: {
     label: "Readiness: Approved",
     className: "bg-green-100 text-green-700",
-  },
-  REJECTED: {
-    label: "Readiness: Rejected",
-    className: "bg-red-100 text-red-700",
   },
 };
 

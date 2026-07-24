@@ -52,12 +52,15 @@ interface WorkOrderRow {
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   DRAFT: { label: "Draft", className: "bg-gray-100 text-gray-700" },
-  PENDING_APPROVAL: {
-    label: "Pending approval",
+  SUBMITTED: {
+    label: "Awaiting HSSE review",
     className: "bg-amber-100 text-amber-700",
   },
+  NEEDS_CLARIFICATION: {
+    label: "Needs clarification",
+    className: "bg-orange-100 text-orange-700",
+  },
   APPROVED: { label: "Approved", className: "bg-green-100 text-green-700" },
-  REJECTED: { label: "Rejected", className: "bg-red-100 text-red-700" },
 };
 
 function overallProgress(wo: WorkOrderRow): number {

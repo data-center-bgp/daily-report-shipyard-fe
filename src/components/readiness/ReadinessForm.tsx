@@ -7,6 +7,7 @@ import type {
   ReadinessChecklistItem,
   ReadinessApprovalRole,
   ReadinessFormStatus,
+  HsseItemStatus,
 } from "../../types/readiness.types";
 import {
   ArrowLeft,
@@ -16,14 +17,18 @@ import {
   Loader,
   FileText,
   X,
+  Info,
+  ShieldCheck,
 } from "lucide-react";
 
 interface ResponseState {
   is_compliant: boolean | null;
   explanation: string;
+  hsse_status: HsseItemStatus;
+  hsse_notes: string;
 }
 
-interface ApprovalState {
+interface SignoffState {
   signer_name: string;
   signed_date: string;
 }
@@ -34,48 +39,47 @@ interface ProjectInfo {
   vessel: { id: number; name: string; type: string; company: string } | null;
 }
 
-function computeStatus(
-  responses: Record<number, ResponseState>,
-  approvals: Record<number, ApprovalState>,
-  totalItems: number,
-  totalRoles: number,
-): ReadinessFormStatus {
-  const answeredCount = Object.values(responses).filter(
-    (r) => r.is_compliant !== null,
-  ).length;
-  const signedCount = Object.values(approvals).filter(
-    (a) => a.signer_name.trim() && a.signed_date,
-  ).length;
+const STATUS_LABEL: Record<ReadinessFormStatus, string> = {
+  DRAFT: "Draft",
+  SUBMITTED: "Awaiting HSSE Review",
+  NEEDS_CLARIFICATION: "Needs Clarification",
+  APPROVED: "Approved",
+};
 
-  if (signedCount === totalRoles && totalRoles > 0) return "APPROVED";
-  if (answeredCount === totalItems && totalItems > 0) return "PENDING_APPROVAL";
-  return "DRAFT";
-}
+const STATUS_BADGE_STYLE: Record<ReadinessFormStatus, string> = {
+  DRAFT: "bg-gray-100 text-gray-700",
+  SUBMITTED: "bg-amber-100 text-amber-700",
+  NEEDS_CLARIFICATION: "bg-orange-100 text-orange-700",
+  APPROVED: "bg-green-100 text-green-700",
+};
 
 function getStatusMessage(status: ReadinessFormStatus): string {
   switch (status) {
     case "APPROVED":
-      return "Saved — fully approved and signed. This project can now proceed with work orders.";
-    case "PENDING_APPROVAL":
-      return "Saved — submitted for approval. Waiting on signatures from the approval roles below.";
-    case "REJECTED":
-      return "Saved — marked as rejected.";
+      return "Fully approved by HSSE. This project can now proceed with work orders.";
+    case "SUBMITTED":
+      return "Submitted — waiting on HSSE to review the checklist.";
+    case "NEEDS_CLARIFICATION":
+      return "HSSE requested clarification on one or more items — see the notes below, coordinate with the vessel owner, then update and resubmit.";
     default:
-      return "Saved as draft. Fill in the remaining checklist items to submit for approval.";
+      return "Saved as draft. Answer every checklist item to submit for HSSE review.";
   }
 }
 
 export default function ReadinessForm() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const { isReadOnly } = useAuth();
+  const { isReadOnly, profile } = useAuth();
+
+  const canFillAsAdmin = profile?.role === "PPIC" || profile?.role === "MASTER";
+  const canReviewAsHsse = profile?.role === "HSSE" || profile?.role === "MASTER";
 
   const [project, setProject] = useState<ProjectInfo | null>(null);
   const [formId, setFormId] = useState<number | null>(null);
   const [checklistItems, setChecklistItems] = useState<ReadinessChecklistItem[]>(
     [],
   );
-  const [approvalRoles, setApprovalRoles] = useState<ReadinessApprovalRole[]>([]);
+  const [hsseRole, setHsseRole] = useState<ReadinessApprovalRole | null>(null);
 
   const [headerData, setHeaderData] = useState({
     docking_date: "",
@@ -83,7 +87,10 @@ export default function ReadinessForm() {
     last_cargo_info: "",
   });
   const [responses, setResponses] = useState<Record<number, ResponseState>>({});
-  const [approvals, setApprovals] = useState<Record<number, ApprovalState>>({});
+  const [signoff, setSignoff] = useState<SignoffState>({
+    signer_name: "",
+    signed_date: "",
+  });
   const [gasTestDoc, setGasTestDoc] = useState<{
     url: string | null;
     storagePath: string | null;
@@ -135,18 +142,20 @@ export default function ReadinessForm() {
         ]);
 
       if (projectError) throw projectError;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setProject(projectData as any);
       setChecklistItems(items || []);
-      setApprovalRoles(roles || []);
+      const hsse = (roles || [])[0] || null;
+      setHsseRole(hsse);
 
       const initialResponses: Record<number, ResponseState> = {};
       (items || []).forEach((item) => {
-        initialResponses[item.id] = { is_compliant: null, explanation: "" };
-      });
-
-      const initialApprovals: Record<number, ApprovalState> = {};
-      (roles || []).forEach((role) => {
-        initialApprovals[role.id] = { signer_name: "", signed_date: "" };
+        initialResponses[item.id] = {
+          is_compliant: null,
+          explanation: "",
+          hsse_status: "PENDING",
+          hsse_notes: "",
+        };
       });
 
       const { data: existingForm, error: formError } = await supabase
@@ -180,6 +189,8 @@ export default function ReadinessForm() {
           initialResponses[r.checklist_item_id] = {
             is_compliant: r.is_compliant,
             explanation: r.explanation || "",
+            hsse_status: (r.hsse_status as HsseItemStatus) || "PENDING",
+            hsse_notes: r.hsse_notes || "",
           };
         });
 
@@ -188,18 +199,19 @@ export default function ReadinessForm() {
           .select("*")
           .eq("readiness_form_id", existingForm.id);
 
-        (existingApprovals || []).forEach((a) => {
-          initialApprovals[a.approval_role_id] = {
-            signer_name: a.signer_name || "",
-            signed_date: a.signed_date || "",
-          };
+        const hsseApproval = (existingApprovals || []).find(
+          (a) => a.approval_role_id === hsse?.id,
+        );
+        setSignoff({
+          signer_name: hsseApproval?.signer_name || "",
+          signed_date: hsseApproval?.signed_date || "",
         });
       } else {
         setFormId(null);
+        setSignoff({ signer_name: "", signed_date: "" });
       }
 
       setResponses(initialResponses);
-      setApprovals(initialApprovals);
     } catch (err) {
       console.error("Error loading readiness form:", err);
       setError(err instanceof Error ? err.message : "Failed to load readiness form");
@@ -216,13 +228,6 @@ export default function ReadinessForm() {
     setResponses((prev) => ({
       ...prev,
       [itemId]: { ...prev[itemId], ...patch },
-    }));
-  };
-
-  const setApproval = (roleId: number, patch: Partial<ApprovalState>) => {
-    setApprovals((prev) => ({
-      ...prev,
-      [roleId]: { ...prev[roleId], ...patch },
     }));
   };
 
@@ -285,7 +290,25 @@ export default function ReadinessForm() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // ─── Turn computation ───────────────────────────────────────────────────
+  const status: ReadinessFormStatus = savedStatus || "DRAFT";
+  const adminTurn = status === "DRAFT" || status === "NEEDS_CLARIFICATION";
+  const hsseTurn = status === "SUBMITTED";
+  const adminCanEdit = !isReadOnly && canFillAsAdmin && adminTurn;
+  const hsseCanReview = !isReadOnly && canReviewAsHsse && hsseTurn;
+
+  const allAnswered =
+    checklistItems.length > 0 &&
+    checklistItems.every((item) => responses[item.id]?.is_compliant !== null);
+  const allHsseDecided =
+    checklistItems.length > 0 &&
+    checklistItems.every((item) => responses[item.id]?.hsse_status !== "PENDING");
+  const anyRejectedByHsse = checklistItems.some(
+    (item) => responses[item.id]?.hsse_status === "REJECTED",
+  );
+
+  // ─── Admin submit — save the checklist, hand off to HSSE ────────────────
+  const handleAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!project) return;
 
@@ -298,19 +321,15 @@ export default function ReadinessForm() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
 
-      const { data: profile } = await supabase
+      const { data: profileRow } = await supabase
         .from("profiles")
         .select("id")
         .eq("auth_user_id", user.id)
         .single();
-      if (!profile) throw new Error("User profile not found");
+      if (!profileRow) throw new Error("User profile not found");
 
-      const status = computeStatus(
-        responses,
-        approvals,
-        checklistItems.length,
-        approvalRoles.length,
-      );
+      const newStatus: ReadinessFormStatus = allAnswered ? "SUBMITTED" : "DRAFT";
+      let targetFormId = formId;
 
       if (isEditMode && formId) {
         const { data: oldForm } = await supabase
@@ -325,50 +344,20 @@ export default function ReadinessForm() {
             docking_date: headerData.docking_date || null,
             owner_name: headerData.owner_name.trim() || null,
             last_cargo_info: headerData.last_cargo_info.trim() || null,
-            status,
+            status: newStatus,
             updated_at: new Date().toISOString(),
           })
           .eq("id", formId);
         if (updateError) throw updateError;
-
-        await supabase
-          .from("readiness_form_responses")
-          .delete()
-          .eq("readiness_form_id", formId);
-        await supabase
-          .from("readiness_form_approvals")
-          .delete()
-          .eq("readiness_form_id", formId);
-
-        await supabase.from("readiness_form_responses").insert(
-          checklistItems.map((item) => ({
-            readiness_form_id: formId,
-            checklist_item_id: item.id,
-            is_compliant: responses[item.id]?.is_compliant ?? null,
-            explanation: responses[item.id]?.explanation.trim() || null,
-          })),
-        );
-
-        await supabase.from("readiness_form_approvals").insert(
-          approvalRoles.map((role) => ({
-            readiness_form_id: formId,
-            approval_role_id: role.id,
-            signer_name: approvals[role.id]?.signer_name.trim() || null,
-            signed_date: approvals[role.id]?.signed_date || null,
-          })),
-        );
 
         await ActivityLogService.logActivity({
           action: "update",
           tableName: "vessel_readiness_forms",
           recordId: formId,
           oldData: oldForm || undefined,
-          newData: { ...headerData, status, id: formId },
-          description: `Updated readiness form for project ${project.project_name} (status: ${status})`,
+          newData: { ...headerData, status: newStatus, id: formId },
+          description: `Updated readiness form for project ${project.project_name} (status: ${newStatus})`,
         });
-
-        setSavedStatus(status);
-        setShowSuccessMessage(true);
       } else {
         const { data: newForm, error: insertError } = await supabase
           .from("vessel_readiness_forms")
@@ -378,30 +367,13 @@ export default function ReadinessForm() {
             docking_date: headerData.docking_date || null,
             owner_name: headerData.owner_name.trim() || null,
             last_cargo_info: headerData.last_cargo_info.trim() || null,
-            status,
-            user_id: profile.id,
+            status: newStatus,
+            user_id: profileRow.id,
           })
           .select()
           .single();
         if (insertError) throw insertError;
-
-        await supabase.from("readiness_form_responses").insert(
-          checklistItems.map((item) => ({
-            readiness_form_id: newForm.id,
-            checklist_item_id: item.id,
-            is_compliant: responses[item.id]?.is_compliant ?? null,
-            explanation: responses[item.id]?.explanation.trim() || null,
-          })),
-        );
-
-        await supabase.from("readiness_form_approvals").insert(
-          approvalRoles.map((role) => ({
-            readiness_form_id: newForm.id,
-            approval_role_id: role.id,
-            signer_name: approvals[role.id]?.signer_name.trim() || null,
-            signed_date: approvals[role.id]?.signed_date || null,
-          })),
-        );
+        targetFormId = newForm.id;
 
         const { error: linkError } = await supabase
           .from("projects")
@@ -414,16 +386,169 @@ export default function ReadinessForm() {
           tableName: "vessel_readiness_forms",
           recordId: newForm.id,
           newData: newForm,
-          description: `Created readiness form for project ${project.project_name} (status: ${status})`,
+          description: `Created readiness form for project ${project.project_name} (status: ${newStatus})`,
         });
-
-        setFormId(newForm.id);
-        setSavedStatus(status);
-        setShowSuccessMessage(true);
       }
+
+      if (!targetFormId) throw new Error("Failed to resolve readiness form id");
+
+      // Admin only ever touches is_compliant/explanation here, and every
+      // resubmission resets hsse_status back to PENDING so HSSE reviews the
+      // whole checklist fresh — hsse_notes are left alone so prior feedback
+      // stays visible as context instead of being wiped each round.
+      const { error: responsesError } = await supabase
+        .from("readiness_form_responses")
+        .upsert(
+          checklistItems.map((item) => ({
+            readiness_form_id: targetFormId,
+            checklist_item_id: item.id,
+            is_compliant: responses[item.id]?.is_compliant ?? null,
+            explanation: responses[item.id]?.explanation.trim() || null,
+            hsse_status: "PENDING",
+          })),
+          { onConflict: "readiness_form_id,checklist_item_id" },
+        );
+      if (responsesError) throw responsesError;
+
+      setFormId(targetFormId);
+      setSavedStatus(newStatus);
+      setResponses((prev) => {
+        const next = { ...prev };
+        checklistItems.forEach((item) => {
+          next[item.id] = { ...next[item.id], hsse_status: "PENDING" };
+        });
+        return next;
+      });
+      setShowSuccessMessage(true);
     } catch (err) {
       console.error("Error saving readiness form:", err);
       setError(err instanceof Error ? err.message : "Failed to save readiness form");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ─── HSSE submit — per-item decisions, sign off only if fully approved ──
+  const handleHsseSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!project || !formId) return;
+
+    if (!allHsseDecided) {
+      setError("Please approve or reject every checklist item before submitting your review.");
+      return;
+    }
+    if (anyRejectedByHsse) {
+      const missingNotes = checklistItems.some(
+        (item) =>
+          responses[item.id]?.hsse_status === "REJECTED" &&
+          !responses[item.id]?.hsse_notes.trim(),
+      );
+      if (missingNotes) {
+        setError("Please add a note explaining why on every rejected item.");
+        return;
+      }
+    } else if (!signoff.signer_name.trim() || !signoff.signed_date) {
+      setError("Please enter your name and date to sign off before approving.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
+      const { data: profileRow } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("auth_user_id", user.id)
+        .single();
+      if (!profileRow) throw new Error("User profile not found");
+
+      const newStatus: ReadinessFormStatus = anyRejectedByHsse
+        ? "NEEDS_CLARIFICATION"
+        : "APPROVED";
+      const nowIso = new Date().toISOString();
+
+      // A rejected item means HSSE found the vessel doesn't actually meet
+      // this requirement — flip the checklist answer to Tidak so it reflects
+      // that, instead of leaving the admin's original "Ya" sitting there
+      // alongside a rejection note that contradicts it.
+      const { error: responsesError } = await supabase
+        .from("readiness_form_responses")
+        .upsert(
+          checklistItems.map((item) => ({
+            readiness_form_id: formId,
+            checklist_item_id: item.id,
+            is_compliant:
+              responses[item.id]?.hsse_status === "REJECTED"
+                ? false
+                : responses[item.id]?.is_compliant ?? null,
+            explanation: responses[item.id]?.explanation.trim() || null,
+            hsse_status: responses[item.id]?.hsse_status || "PENDING",
+            hsse_notes: responses[item.id]?.hsse_notes.trim() || null,
+            hsse_reviewed_by: profileRow.id,
+            hsse_reviewed_at: nowIso,
+          })),
+          { onConflict: "readiness_form_id,checklist_item_id" },
+        );
+      if (responsesError) throw responsesError;
+
+      if (!anyRejectedByHsse && hsseRole) {
+        const { error: approvalError } = await supabase
+          .from("readiness_form_approvals")
+          .upsert(
+            {
+              readiness_form_id: formId,
+              approval_role_id: hsseRole.id,
+              signer_name: signoff.signer_name.trim(),
+              signed_date: signoff.signed_date,
+            },
+            { onConflict: "readiness_form_id,approval_role_id" },
+          );
+        if (approvalError) throw approvalError;
+      }
+
+      const { data: oldForm } = await supabase
+        .from("vessel_readiness_forms")
+        .select("*")
+        .eq("id", formId)
+        .single();
+
+      const { error: updateError } = await supabase
+        .from("vessel_readiness_forms")
+        .update({ status: newStatus, updated_at: nowIso })
+        .eq("id", formId);
+      if (updateError) throw updateError;
+
+      await ActivityLogService.logActivity({
+        action: "update",
+        tableName: "vessel_readiness_forms",
+        recordId: formId,
+        oldData: oldForm || undefined,
+        newData: { status: newStatus, id: formId },
+        description: `HSSE review ${
+          anyRejectedByHsse ? "requested clarification on" : "approved"
+        } readiness form for project ${project.project_name}`,
+      });
+
+      setSavedStatus(newStatus);
+      setResponses((prev) => {
+        const next = { ...prev };
+        checklistItems.forEach((item) => {
+          if (next[item.id]?.hsse_status === "REJECTED") {
+            next[item.id] = { ...next[item.id], is_compliant: false };
+          }
+        });
+        return next;
+      });
+      setShowSuccessMessage(true);
+    } catch (err) {
+      console.error("Error submitting HSSE review:", err);
+      setError(err instanceof Error ? err.message : "Failed to submit HSSE review");
     } finally {
       setSubmitting(false);
     }
@@ -456,6 +581,23 @@ export default function ReadinessForm() {
     }),
   );
 
+  const turnMessage = hsseCanReview
+    ? "It's your turn — review each item below and submit your decision."
+    : adminCanEdit
+      ? status === "NEEDS_CLARIFICATION"
+        ? "HSSE requested clarification — update the checklist below based on the vessel owner's response, then resubmit."
+        : "Fill in the checklist below and submit it for HSSE review."
+      : status === "DRAFT"
+        ? "Waiting for WO Shipyard to fill in and submit this checklist."
+        : status === "SUBMITTED"
+          ? "Submitted — waiting on HSSE to review."
+          : status === "NEEDS_CLARIFICATION"
+            ? "HSSE requested clarification — waiting on WO Shipyard to update and resubmit."
+            : null;
+
+  const handleSubmit = hsseCanReview ? handleHsseSubmit : handleAdminSubmit;
+  const canSubmitForm = adminCanEdit || hsseCanReview;
+
   return (
     <div className="p-6 space-y-6 max-w-4xl mx-auto">
       <div>
@@ -472,17 +614,11 @@ export default function ReadinessForm() {
         <p className="text-gray-600 mt-1">
           FM-OPS-04-11 — {project.project_name} • {project.vessel?.name}
         </p>
-        {savedStatus && (
+        {isEditMode && (
           <span
-            className={`inline-flex items-center mt-2 px-2 py-1 rounded text-xs font-medium ${
-              savedStatus === "APPROVED"
-                ? "bg-green-100 text-green-700"
-                : savedStatus === "PENDING_APPROVAL"
-                  ? "bg-amber-100 text-amber-700"
-                  : "bg-gray-100 text-gray-700"
-            }`}
+            className={`inline-flex items-center mt-2 px-2 py-1 rounded text-xs font-medium ${STATUS_BADGE_STYLE[status]}`}
           >
-            Status: {savedStatus.replace("_", " ")}
+            Status: {STATUS_LABEL[status]}
           </span>
         )}
       </div>
@@ -514,6 +650,13 @@ export default function ReadinessForm() {
         </div>
       )}
 
+      {turnMessage && !showSuccessMessage && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-2">
+          <Info className="w-5 h-5 text-blue-600 flex-shrink-0" />
+          <p className="text-blue-800 text-sm">{turnMessage}</p>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Header info */}
         <div className="bg-white rounded-lg shadow p-6">
@@ -531,8 +674,8 @@ export default function ReadinessForm() {
                 onChange={(e) =>
                   setHeaderData((prev) => ({ ...prev, docking_date: e.target.value }))
                 }
-                disabled={isReadOnly}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                disabled={!adminCanEdit}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
               />
             </div>
             <div>
@@ -545,9 +688,9 @@ export default function ReadinessForm() {
                 onChange={(e) =>
                   setHeaderData((prev) => ({ ...prev, owner_name: e.target.value }))
                 }
-                disabled={isReadOnly}
+                disabled={!adminCanEdit}
                 placeholder="Vessel owner / operating company"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
               />
             </div>
           </div>
@@ -564,7 +707,11 @@ export default function ReadinessForm() {
                 const response = responses[item.id] || {
                   is_compliant: null,
                   explanation: "",
+                  hsse_status: "PENDING" as HsseItemStatus,
+                  hsse_notes: "",
                 };
+                const showHsseFeedback =
+                  hsseCanReview || response.hsse_status !== "PENDING";
                 return (
                   <div
                     key={item.id}
@@ -574,24 +721,24 @@ export default function ReadinessForm() {
                     <div className="flex gap-3">
                       <button
                         type="button"
-                        disabled={isReadOnly}
+                        disabled={!adminCanEdit}
                         onClick={() => setResponse(item.id, { is_compliant: true })}
-                        className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                        className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-colors disabled:cursor-not-allowed ${
                           response.is_compliant === true
                             ? "bg-green-600 text-white border-green-600"
-                            : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                            : "border-gray-300 text-gray-700 hover:bg-gray-50 disabled:hover:bg-white"
                         }`}
                       >
                         Ya
                       </button>
                       <button
                         type="button"
-                        disabled={isReadOnly}
+                        disabled={!adminCanEdit}
                         onClick={() => setResponse(item.id, { is_compliant: false })}
-                        className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                        className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-colors disabled:cursor-not-allowed ${
                           response.is_compliant === false
                             ? "bg-red-600 text-white border-red-600"
-                            : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                            : "border-gray-300 text-gray-700 hover:bg-gray-50 disabled:hover:bg-white"
                         }`}
                       >
                         Tidak
@@ -604,10 +751,87 @@ export default function ReadinessForm() {
                         onChange={(e) =>
                           setResponse(item.id, { explanation: e.target.value })
                         }
-                        disabled={isReadOnly}
+                        disabled={!adminCanEdit}
                         placeholder="Bila tidak, jelaskan..."
-                        className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm disabled:bg-gray-50"
                       />
+                    )}
+
+                    {showHsseFeedback && (
+                      <div
+                        className={`mt-3 rounded-lg border p-3 ${
+                          response.hsse_status === "APPROVED"
+                            ? "bg-green-50 border-green-200"
+                            : response.hsse_status === "REJECTED"
+                              ? "bg-orange-50 border-orange-200"
+                              : "bg-gray-50 border-gray-200"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <ShieldCheck className="w-4 h-4 text-gray-500" />
+                          <span className="text-xs font-semibold text-gray-700">
+                            HSSE Review
+                          </span>
+                        </div>
+                        {hsseCanReview ? (
+                          <>
+                            <div className="flex gap-2 mb-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setResponse(item.id, { hsse_status: "APPROVED" })
+                                }
+                                className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
+                                  response.hsse_status === "APPROVED"
+                                    ? "bg-green-600 text-white border-green-600"
+                                    : "border-gray-300 text-gray-700 hover:bg-gray-100"
+                                }`}
+                              >
+                                Approve
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setResponse(item.id, { hsse_status: "REJECTED" })
+                                }
+                                className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
+                                  response.hsse_status === "REJECTED"
+                                    ? "bg-orange-600 text-white border-orange-600"
+                                    : "border-gray-300 text-gray-700 hover:bg-gray-100"
+                                }`}
+                              >
+                                Reject
+                              </button>
+                            </div>
+                            {response.hsse_status === "REJECTED" && (
+                              <textarea
+                                value={response.hsse_notes}
+                                onChange={(e) =>
+                                  setResponse(item.id, { hsse_notes: e.target.value })
+                                }
+                                rows={2}
+                                placeholder="Explain what needs to be clarified..."
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                              />
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-xs font-medium text-gray-700">
+                              {response.hsse_status === "APPROVED"
+                                ? "Approved"
+                                : response.hsse_status === "REJECTED"
+                                  ? "Needs clarification"
+                                  : "Pending review"}
+                            </p>
+                            {response.hsse_notes && (
+                              <p className="text-sm text-gray-700 mt-1">
+                                {response.hsse_notes}
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
@@ -630,9 +854,9 @@ export default function ReadinessForm() {
               onChange={(e) =>
                 setHeaderData((prev) => ({ ...prev, last_cargo_info: e.target.value }))
               }
-              disabled={isReadOnly}
+              disabled={!adminCanEdit}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
             />
           </div>
 
@@ -664,8 +888,8 @@ export default function ReadinessForm() {
                 type="file"
                 accept=".pdf,.jpg,.jpeg,.png"
                 onChange={handleDocumentUpload}
-                disabled={uploadingDoc || isReadOnly}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                disabled={uploadingDoc || !adminCanEdit}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
               />
               {uploadingDoc && (
                 <div className="flex items-center gap-2 text-blue-600 mt-2">
@@ -677,34 +901,55 @@ export default function ReadinessForm() {
           )}
         </div>
 
-        {/* Approvals */}
+        {/* HSSE Sign-off */}
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-1">
-            Sign-off
+            HSSE Sign-off
           </h2>
           <p className="text-sm text-gray-600 mb-4">
-            All {approvalRoles.length} sign-offs must be filled in before this
-            form counts as approved.
+            Required once every checklist item above is approved — this is
+            what marks the form as fully approved.
           </p>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3 border-b pb-2">
-              Telah Diterima dan Disetujui oleh Pihak Galangan
-            </h3>
-            <div className="space-y-4 max-w-md">
-              {approvalRoles.map((role) => (
-                <ApprovalRow
-                  key={role.id}
-                  role={role}
-                  value={approvals[role.id] || { signer_name: "", signed_date: "" }}
-                  onChange={(patch) => setApproval(role.id, patch)}
-                  disabled={isReadOnly}
+          <div className="max-w-md">
+            <div className="border border-gray-200 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-gray-900">
+                  {hsseRole?.role_label || "HSSE Shipyard"}
+                </p>
+                {signoff.signer_name.trim() && signoff.signed_date && (
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mb-2">
+                {hsseRole?.action_label || "Disetujui oleh"}
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  placeholder="Name"
+                  value={signoff.signer_name}
+                  onChange={(e) =>
+                    setSignoff((prev) => ({ ...prev, signer_name: e.target.value }))
+                  }
+                  disabled={!hsseCanReview}
+                  className="px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
                 />
-              ))}
+                <input
+                  type="date"
+                  value={signoff.signed_date}
+                  onChange={(e) =>
+                    setSignoff((prev) => ({ ...prev, signed_date: e.target.value }))
+                  }
+                  disabled={!hsseCanReview}
+                  max={new Date().toISOString().split("T")[0]}
+                  className="px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                />
+              </div>
             </div>
           </div>
         </div>
 
-        {!isReadOnly && (
+        {canSubmitForm && (
           <div className="flex gap-3">
             <button
               type="submit"
@@ -718,7 +963,15 @@ export default function ReadinessForm() {
               ) : (
                 <>
                   <FileText className="w-4 h-4" />{" "}
-                  {isEditMode ? "Update Readiness Form" : "Save Readiness Form"}
+                  {hsseCanReview
+                    ? !allHsseDecided
+                      ? "Submit HSSE Review"
+                      : anyRejectedByHsse
+                        ? "Send Back for Clarification"
+                        : "Approve & Sign Off"
+                    : allAnswered
+                      ? "Submit for HSSE Review"
+                      : "Save Draft"}
                 </>
               )}
             </button>
@@ -732,47 +985,6 @@ export default function ReadinessForm() {
           </div>
         )}
       </form>
-    </div>
-  );
-}
-
-function ApprovalRow({
-  role,
-  value,
-  onChange,
-  disabled,
-}: {
-  role: ReadinessApprovalRole;
-  value: ApprovalState;
-  onChange: (patch: Partial<ApprovalState>) => void;
-  disabled: boolean;
-}) {
-  const filled = value.signer_name.trim() && value.signed_date;
-  return (
-    <div className="border border-gray-200 rounded-lg p-3">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-medium text-gray-900">{role.role_label}</p>
-        {filled && <CheckCircle2 className="w-4 h-4 text-green-600" />}
-      </div>
-      <p className="text-xs text-gray-500 mb-2">{role.action_label}</p>
-      <div className="grid grid-cols-2 gap-2">
-        <input
-          type="text"
-          placeholder="Name"
-          value={value.signer_name}
-          onChange={(e) => onChange({ signer_name: e.target.value })}
-          disabled={disabled}
-          className="px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
-        />
-        <input
-          type="date"
-          value={value.signed_date}
-          onChange={(e) => onChange({ signed_date: e.target.value })}
-          disabled={disabled}
-          max={new Date().toISOString().split("T")[0]}
-          className="px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
     </div>
   );
 }

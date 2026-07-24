@@ -26,7 +26,8 @@ export interface UserProfile {
     | "OPERATION"
     | "ADMIN"
     | "FINANCE"
-    | "MANAGER";
+    | "MANAGER"
+    | "HSSE";
   auth_user_id: string;
 }
 
@@ -64,8 +65,17 @@ const FEATURE_ACCESS = {
     "ADMIN",
     "FINANCE",
     "MANAGER",
+    "HSSE",
   ],
-  workOrders: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "MANAGER"],
+  workOrders: [
+    "MASTER",
+    "PPIC",
+    "PRODUCTION",
+    "OPERATION",
+    "ADMIN",
+    "MANAGER",
+    "HSSE",
+  ],
   workDetails: [
     "MASTER",
     "PPIC",

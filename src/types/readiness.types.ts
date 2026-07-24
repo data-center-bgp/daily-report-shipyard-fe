@@ -1,8 +1,10 @@
 export type ReadinessFormStatus =
   | "DRAFT"
-  | "PENDING_APPROVAL"
-  | "APPROVED"
-  | "REJECTED";
+  | "SUBMITTED"
+  | "NEEDS_CLARIFICATION"
+  | "APPROVED";
+
+export type HsseItemStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 export interface ReadinessChecklistItem {
   id: number;
@@ -18,6 +20,10 @@ export interface ReadinessFormResponse {
   checklist_item_id: number;
   is_compliant: boolean | null;
   explanation: string | null;
+  hsse_status: HsseItemStatus;
+  hsse_notes: string | null;
+  hsse_reviewed_by: number | null;
+  hsse_reviewed_at: string | null;
 }
 
 export interface ReadinessApprovalRole {
