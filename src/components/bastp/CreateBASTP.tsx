@@ -2,6 +2,11 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase, type Vessel, type WorkDetails } from "../../lib/supabase";
 import type { BASTP } from "../../types/bastp.types";
+import {
+  getLatestVerificationByWorkDetails,
+  isApproved,
+} from "../../utils/workVerificationStatus";
+import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import type {
   GeneralServiceType,
   GeneralServiceInput,
@@ -221,7 +226,8 @@ export default function CreateBASTP() {
           ),
           work_progress (
             progress_percentage,
-            report_date
+            report_date,
+            created_at
           ),
           location:location_id (
             id,
@@ -242,14 +248,9 @@ export default function CreateBASTP() {
             return { ...wd, current_progress: 0, has_progress_data: false };
           }
 
-          const sortedProgress = progressRecords.sort(
-            (a: any, b: any) =>
-              new Date(b.report_date).getTime() -
-              new Date(a.report_date).getTime(),
-          );
-
-          const latestProgress = sortedProgress[0]?.progress_percentage || 0;
-          const latestProgressDate = sortedProgress[0]?.report_date;
+          const latestRecord = getLatestProgressRecord(progressRecords);
+          const latestProgress = latestRecord?.progress_percentage || 0;
+          const latestProgressDate = latestRecord?.report_date;
 
           return {
             ...wd,
@@ -260,22 +261,24 @@ export default function CreateBASTP() {
         })
         .filter((wd) => wd.current_progress === 100);
 
-      // Check which work details are verified
+      // Check which work details are approved — the latest review per work
+      // detail decides this, not just "does a work_verification row exist,"
+      // since a rejected item can later be approved after rework.
       const { data: verifications, error: verError } = await supabase
         .from("work_verification")
-        .select("work_details_id")
+        .select("work_details_id, status, created_at")
         .is("deleted_at", null);
 
       if (verError) throw verError;
 
-      const verifiedIds = new Set(
-        verifications?.map((v) => v.work_details_id) || [],
+      const latestVerificationByWorkDetails = getLatestVerificationByWorkDetails(
+        verifications || [],
       );
 
       // Mark verified work details
       const workWithVerification = completedWork.map((wd) => ({
         ...wd,
-        is_verified: verifiedIds.has(wd.id),
+        is_verified: isApproved(latestVerificationByWorkDetails.get(wd.id)),
       }));
 
       // Filter out work details already in other BASTPs (except current one in edit mode)

@@ -8,6 +8,7 @@ import {
 } from "../../lib/supabase";
 import { openPermitFile } from "../../utils/urlHandler";
 import { useAuth } from "../../hooks/useAuth";
+import { isOpenForRework } from "../../utils/workVerificationStatus";
 import { ActivityLogService } from "../../services/activityLogService";
 import {
   Ship,
@@ -35,6 +36,7 @@ import {
   Search,
   FileCheck,
   FolderKanban,
+  Undo2,
 } from "lucide-react";
 
 interface ProjectOption {
@@ -61,6 +63,7 @@ interface WorkDetailsWithWorkOrder extends WorkDetails {
   current_progress?: number;
   latest_progress_date?: string;
   progress_count?: number;
+  isOpenForRework?: boolean;
   work_scope?: {
     id: number;
     work_scope: string;
@@ -75,6 +78,34 @@ interface WorkDetailsTableProps {
   workOrderId?: number;
   onRefresh?: () => void;
   embedded?: boolean;
+}
+
+// Whether this work detail was sent back for rework and hasn't been
+// resubmitted yet — used to flag it in the table so production staff notice
+// without having to open Add Progress.
+function deriveIsOpenForRework(
+  progressRecords: { created_at: string }[],
+  verificationRecords:
+    | {
+        status: "APPROVED" | "REJECTED";
+        created_at: string;
+        deleted_at: string | null;
+      }[]
+    | undefined,
+): boolean {
+  const latestProgressCreatedAt = progressRecords.reduce(
+    (latest: string | undefined, p) =>
+      !latest || new Date(p.created_at).getTime() > new Date(latest).getTime()
+        ? p.created_at
+        : latest,
+    undefined,
+  );
+  const latestVerification = (verificationRecords || [])
+    .filter((v) => !v.deleted_at)
+    .sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    )[0];
+  return isOpenForRework(latestVerification, latestProgressCreatedAt);
 }
 
 export default function WODetailsTable({
@@ -354,6 +385,7 @@ export default function WODetailsTable({
           ),
           profiles (id, name, email),
           work_progress (id, progress_percentage, report_date, created_at),
+          work_verification (status, created_at, deleted_at),
           location:location_id (id, location),
           work_scope:work_scope_id (id, work_scope)
         `,
@@ -400,6 +432,10 @@ export default function WODetailsTable({
       // Process work details with progress data
       const workDetailsWithProgress = (data || []).map((detail) => {
         const progressRecords = detail.work_progress || [];
+        const isOpenForReworkFlag = deriveIsOpenForRework(
+          progressRecords,
+          detail.work_verification,
+        );
 
         if (progressRecords.length === 0) {
           return {
@@ -407,6 +443,7 @@ export default function WODetailsTable({
             current_progress: 0,
             latest_progress_date: undefined,
             progress_count: 0,
+            isOpenForRework: isOpenForReworkFlag,
           };
         }
 
@@ -421,6 +458,7 @@ export default function WODetailsTable({
           current_progress: sortedProgress[0]?.progress_percentage || 0,
           latest_progress_date: sortedProgress[0]?.report_date,
           progress_count: progressRecords.length,
+          isOpenForRework: isOpenForReworkFlag,
         };
       });
 
@@ -1010,6 +1048,7 @@ export default function WODetailsTable({
         ),
         profiles (id, name, email),
         work_progress (id, progress_percentage, report_date, created_at),
+        work_verification (status, created_at, deleted_at),
         location:location_id (id, location),
         work_scope:work_scope_id (id, work_scope)
       `,
@@ -1056,6 +1095,10 @@ export default function WODetailsTable({
         // Process work details with progress data
         const workDetailsWithProgress = (data || []).map((detail) => {
           const progressRecords = detail.work_progress || [];
+          const isOpenForReworkFlag = deriveIsOpenForRework(
+            progressRecords,
+            detail.work_verification,
+          );
 
           if (progressRecords.length === 0) {
             return {
@@ -1063,6 +1106,7 @@ export default function WODetailsTable({
               current_progress: 0,
               latest_progress_date: undefined,
               progress_count: 0,
+              isOpenForRework: isOpenForReworkFlag,
             };
           }
 
@@ -1077,6 +1121,7 @@ export default function WODetailsTable({
             current_progress: sortedProgress[0]?.progress_percentage || 0,
             latest_progress_date: sortedProgress[0]?.report_date,
             progress_count: progressRecords.length,
+            isOpenForRework: isOpenForReworkFlag,
           };
         });
 
@@ -1224,6 +1269,11 @@ export default function WODetailsTable({
                 {detail.location && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
                     <MapPin className="w-3 h-3" /> {detail.location.location}
+                  </span>
+                )}
+                {detail.isOpenForRework && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">
+                    <Undo2 className="w-3 h-3" /> Needs Rework
                   </span>
                 )}
               </div>

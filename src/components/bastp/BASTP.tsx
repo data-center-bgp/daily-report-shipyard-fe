@@ -4,6 +4,10 @@ import { supabase } from "../../lib/supabase";
 import type { BASTPWithDetails, BASTPStatus } from "../../types/bastp.types";
 import { useAuth } from "../../hooks/useAuth";
 import {
+  getLatestVerificationByWorkDetails,
+  isApproved,
+} from "../../utils/workVerificationStatus";
+import {
   Plus,
   AlertTriangle,
   Search,
@@ -126,15 +130,16 @@ export default function BASTP() {
 
           const { data: verifications, error } = await supabase
             .from("work_verification")
-            .select("work_details_id")
-            .in("work_details_id", workDetailIds);
+            .select("work_details_id, status, created_at")
+            .in("work_details_id", workDetailIds)
+            .is("deleted_at", null);
 
           if (!error) {
-            const verifiedIds = (verifications || []).map(
-              (v) => v.work_details_id,
+            const latestByWorkDetails = getLatestVerificationByWorkDetails(
+              verifications || [],
             );
             const allVerified = workDetailIds.every((id) =>
-              verifiedIds.includes(id),
+              isApproved(latestByWorkDetails.get(id)),
             );
             if (allVerified) {
               await supabase

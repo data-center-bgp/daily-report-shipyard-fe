@@ -23,7 +23,7 @@ export interface UserProfile {
     | "MASTER"
     | "PPIC"
     | "PRODUCTION"
-    | "OPERATION"
+    | "OP_HEAD"
     | "ADMIN"
     | "FINANCE"
     | "MANAGER"
@@ -61,7 +61,7 @@ const FEATURE_ACCESS = {
     "MASTER",
     "PPIC",
     "PRODUCTION",
-    "OPERATION",
+    "OP_HEAD",
     "ADMIN",
     "FINANCE",
     "MANAGER",
@@ -71,7 +71,7 @@ const FEATURE_ACCESS = {
     "MASTER",
     "PPIC",
     "PRODUCTION",
-    "OPERATION",
+    "OP_HEAD",
     "ADMIN",
     "MANAGER",
     "HSSE",
@@ -80,29 +80,25 @@ const FEATURE_ACCESS = {
     "MASTER",
     "PPIC",
     "PRODUCTION",
-    "OPERATION",
+    "OP_HEAD",
     "ADMIN",
     "MANAGER",
   ],
-  progress: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "MANAGER"],
-  verification: [
-    "MASTER",
-    "PPIC",
-    "PRODUCTION",
-    "OPERATION",
-    "ADMIN",
-    "MANAGER",
-  ],
+  progress: ["MASTER", "PPIC", "PRODUCTION", "OP_HEAD", "ADMIN", "MANAGER"],
+  // Verification is OP_HEAD's job specifically (the fleet/vessel
+  // coordinator) — MASTER/MANAGER keep read-only visibility like everywhere
+  // else, but PPIC/PRODUCTION/ADMIN no longer see or act on this page.
+  verification: ["MASTER", "OP_HEAD", "MANAGER"],
   bastp: [
     "MASTER",
     "PPIC",
     "PRODUCTION",
-    "OPERATION",
+    "OP_HEAD",
     "ADMIN",
     "FINANCE",
     "MANAGER",
   ],
-  vessels: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "MANAGER"],
+  vessels: ["MASTER", "PPIC", "PRODUCTION", "OP_HEAD", "ADMIN", "MANAGER"],
   invoices: ["MASTER", "FINANCE", "MANAGER"],
   userManagement: ["MASTER"],
   systemSettings: ["MASTER"],
@@ -110,14 +106,14 @@ const FEATURE_ACCESS = {
     "MASTER",
     "PPIC",
     "PRODUCTION",
-    "OPERATION",
+    "OP_HEAD",
     "ADMIN",
     "FINANCE",
     "MANAGER",
   ],
-  exportData: ["MASTER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN", "MANAGER"],
+  exportData: ["MASTER", "PPIC", "PRODUCTION", "OP_HEAD", "ADMIN", "MANAGER"],
   activityLogs: ["MASTER", "MANAGER"],
-  additionalWoApprovals: ["MASTER", "OPERATION", "MANAGER"],
+  additionalWoApprovals: ["MASTER", "OP_HEAD", "MANAGER"],
   readinessQueue: ["MASTER", "HSSE"],
 };
 

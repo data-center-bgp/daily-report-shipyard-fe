@@ -8,6 +8,14 @@ import {
 } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import {
+  getLatestVerificationByWorkDetails,
+  isApproved,
+  isOpenForRework,
+  hasRejectionHistory,
+  type VerificationRecord,
+} from "../../utils/workVerificationStatus";
+import { getLatestProgressRecord } from "../../utils/progressPercentage";
+import {
   Ship,
   X,
   FileEdit,
@@ -24,47 +32,45 @@ import {
   Eye,
   User,
   AlertTriangle,
+  Undo2,
+  RotateCcw,
+  FolderKanban,
 } from "lucide-react";
+
+interface ProjectOption {
+  id: number;
+  project_name: string;
+}
+
+interface WorkOrderOption {
+  id: number;
+  shipyard_wo_number: string;
+  customer_wo_number?: string;
+}
 
 interface WorkDetailsWithProgress extends WorkDetails {
   current_progress?: number;
   has_progress_data?: boolean;
   latest_progress_date?: string;
+  latest_progress_created_at?: string;
   work_order?: WorkOrder & {
     vessel?: Vessel;
+    project?: ProjectOption;
   };
   location?: {
     id: number;
     location: string;
   };
-  is_in_bastp?: boolean;
-  bastp_id?: number;
-  bastp_added_date?: string;
 }
 
-interface WorkVerification {
-  id: number;
-  created_at: string;
-  updated_at: string;
-  deleted_at?: string;
-  verification_date: string;
-  work_details_id: number;
-  user_id: number;
-  verification_notes?: string;
-}
-
-interface VerificationWithDetails extends WorkVerification {
+interface VerificationWithDetails extends VerificationRecord {
   work_details: WorkDetailsWithProgress;
-  profiles?: {
-    id: number;
-    name: string;
-    email: string;
-  };
 }
 
 interface WorkProgressItem {
   progress_percentage: number;
   report_date: string;
+  created_at: string;
 }
 
 interface BASTPs {
@@ -84,7 +90,8 @@ interface BASTPs {
 
 export default function WorkVerification() {
   const navigate = useNavigate();
-  const { isReadOnly } = useAuth();
+  const { isReadOnly, canAccess } = useAuth();
+  const canReview = canAccess("verification") && !isReadOnly;
 
   const [completedWorkDetails, setCompletedWorkDetails] = useState<
     WorkDetailsWithProgress[]
@@ -92,22 +99,37 @@ export default function WorkVerification() {
   const [verifications, setVerifications] = useState<VerificationWithDetails[]>(
     [],
   );
+  // work_details_id -> bastp_id, from the real join table (bastp linkage was
+  // never actually stored on work_details itself — see bastp_work_details).
+  const [bastpLinkByWorkDetails, setBastpLinkByWorkDetails] = useState<
+    Map<number, number>
+  >(new Map());
   const [bastps, setBastps] = useState<BASTPs[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<
-    "pending" | "pendingWithBastp" | "verified"
+    "pending" | "pendingWithBastp" | "needsRework" | "verified"
   >("pending");
 
   // Filter states
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [selectedVesselId, setSelectedVesselId] = useState<number>(0);
+  const [selectedProjectId, setSelectedProjectId] = useState<number>(0);
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<number>(0);
 
   // Search dropdown states
   const [vesselSearchTerm, setVesselSearchTerm] = useState("");
   const [showVesselDropdown, setShowVesselDropdown] = useState(false);
   const vesselDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [projectSearchTerm, setProjectSearchTerm] = useState("");
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const projectDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [workOrderSearchTerm, setWorkOrderSearchTerm] = useState("");
+  const [showWorkOrderDropdown, setShowWorkOrderDropdown] = useState(false);
+  const workOrderDropdownRef = useRef<HTMLDivElement>(null);
 
   const [expandedGroups, setExpandedGroups] = useState<
     Set<number | "no-bastp">
@@ -120,6 +142,18 @@ export default function WorkVerification() {
         !vesselDropdownRef.current.contains(event.target as Node)
       ) {
         setShowVesselDropdown(false);
+      }
+      if (
+        projectDropdownRef.current &&
+        !projectDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowProjectDropdown(false);
+      }
+      if (
+        workOrderDropdownRef.current &&
+        !workOrderDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowWorkOrderDropdown(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -169,9 +203,49 @@ export default function WorkVerification() {
     setShowVesselDropdown(false);
   };
 
-  const handleVerifyClick = (workDetailsId: number) => {
-    if (isReadOnly) {
-      alert("❌ You don't have permission to verify work details.");
+  const handleProjectSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setProjectSearchTerm(e.target.value);
+    setShowProjectDropdown(true);
+    if (selectedProjectId) {
+      setSelectedProjectId(0);
+    }
+  };
+
+  const handleProjectSelectFromDropdown = (project: ProjectOption) => {
+    setSelectedProjectId(project.id);
+    setProjectSearchTerm(project.project_name);
+    setShowProjectDropdown(false);
+  };
+
+  const handleClearProjectSearch = () => {
+    setProjectSearchTerm("");
+    setSelectedProjectId(0);
+    setShowProjectDropdown(false);
+  };
+
+  const handleWorkOrderSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setWorkOrderSearchTerm(e.target.value);
+    setShowWorkOrderDropdown(true);
+    if (selectedWorkOrderId) {
+      setSelectedWorkOrderId(0);
+    }
+  };
+
+  const handleWorkOrderSelectFromDropdown = (workOrder: WorkOrderOption) => {
+    setSelectedWorkOrderId(workOrder.id);
+    setWorkOrderSearchTerm(workOrder.shipyard_wo_number || "");
+    setShowWorkOrderDropdown(false);
+  };
+
+  const handleClearWorkOrderSearch = () => {
+    setWorkOrderSearchTerm("");
+    setSelectedWorkOrderId(0);
+    setShowWorkOrderDropdown(false);
+  };
+
+  const handleReviewClick = (workDetailsId: number) => {
+    if (!canReview) {
+      alert("❌ You don't have permission to review work details.");
       return;
     }
     navigate(`/work-verification/verify/${workDetailsId}`);
@@ -199,11 +273,16 @@ export default function WorkVerification() {
               name,
               type,
               company
+            ),
+            project:project_id (
+              id,
+              project_name
             )
           ),
           work_progress (
             progress_percentage,
-            report_date
+            report_date,
+            created_at
           ),
           location:location_id (
             id,
@@ -218,7 +297,7 @@ export default function WorkVerification() {
 
       // Process work details to find completed ones (100% progress)
       const workDetailsWithProgress = (workDetailsData || []).map((wd) => {
-        const progressRecords = wd.work_progress || [];
+        const progressRecords: WorkProgressItem[] = wd.work_progress || [];
         if (progressRecords.length === 0) {
           return {
             ...wd,
@@ -226,18 +305,20 @@ export default function WorkVerification() {
             has_progress_data: false,
           };
         }
-        const sortedProgress = progressRecords.sort(
-          (a: WorkProgressItem, b: WorkProgressItem) =>
-            new Date(b.report_date).getTime() -
-            new Date(a.report_date).getTime(),
+        const latestRecord = getLatestProgressRecord(progressRecords);
+        const latestCreatedAt = progressRecords.reduce(
+          (latest: string | undefined, p) =>
+            !latest || new Date(p.created_at).getTime() > new Date(latest).getTime()
+              ? p.created_at
+              : latest,
+          undefined,
         );
-        const latestProgress = sortedProgress[0]?.progress_percentage || 0;
-        const latestProgressDate = sortedProgress[0]?.report_date;
         return {
           ...wd,
-          current_progress: latestProgress,
+          current_progress: latestRecord?.progress_percentage || 0,
           has_progress_data: true,
-          latest_progress_date: latestProgressDate,
+          latest_progress_date: latestRecord?.report_date,
+          latest_progress_created_at: latestCreatedAt,
         };
       });
 
@@ -269,6 +350,10 @@ export default function WorkVerification() {
                 name,
                 type,
                 company
+              ),
+              project:project_id (
+                id,
+                project_name
               )
             )
           ),
@@ -283,7 +368,20 @@ export default function WorkVerification() {
         .order("created_at", { ascending: false });
 
       if (verError) throw verError;
-      setVerifications(verificationData || []);
+      setVerifications((verificationData as unknown as VerificationWithDetails[]) || []);
+
+      // Real BASTP linkage lives in bastp_work_details — work_details'
+      // own is_in_bastp/bastp_id columns are legacy and nothing writes to
+      // them anymore, so they're never used here.
+      const { data: bastpLinks, error: linkError } = await supabase
+        .from("bastp_work_details")
+        .select("work_details_id, bastp_id")
+        .is("deleted_at", null);
+
+      if (linkError) throw linkError;
+      setBastpLinkByWorkDetails(
+        new Map((bastpLinks || []).map((l) => [l.work_details_id, l.bastp_id])),
+      );
 
       // Fetch BASTPs with vessel information
       const { data: bastpData, error: bastpError } = await supabase
@@ -344,39 +442,124 @@ export default function WorkVerification() {
     });
   };
 
-  // Get pending work details (completed but not yet verified)
-  const verifiedWorkDetailsIds = verifications.map((v) => v.work_details_id);
-  const pendingWorkDetails = completedWorkDetails.filter(
-    (wd) => !verifiedWorkDetailsIds.includes(wd.id),
+  // Current review state, per work_details_id, derived from the latest
+  // non-deleted work_verification row — never from "does any row exist,"
+  // since a rejected item can later be approved after rework.
+  const latestReviewByWorkDetails = getLatestVerificationByWorkDetails(
+    verifications,
   );
 
-  // Apply vessel filter
-  const filteredPending = pendingWorkDetails.filter((wd) => {
-    const vesselMatch =
-      selectedVesselId === 0 || wd.work_order?.vessel?.id === selectedVesselId;
-    if (!vesselMatch) return false;
+  const needsReworkList: WorkDetailsWithProgress[] = [];
+  const pendingList: WorkDetailsWithProgress[] = [];
+
+  completedWorkDetails.forEach((wd) => {
+    const latest = latestReviewByWorkDetails.get(wd.id);
+    if (isApproved(latest)) return; // shown via the verifications list instead
+    if (isOpenForRework(latest, wd.latest_progress_created_at)) {
+      needsReworkList.push(wd);
+    } else {
+      pendingList.push(wd);
+    }
+  });
+
+  const wdSearchFields = (wd: WorkDetailsWithProgress) => [
+    wd.description,
+    wd.location?.location,
+    wd.pic,
+    wd.work_order?.customer_wo_number,
+    wd.work_order?.shipyard_wo_number,
+    wd.work_order?.vessel?.name,
+    wd.work_order?.vessel?.company,
+  ];
+
+  // Each dropdown's own selection is excluded when checking scope for that
+  // SAME dropdown's option list, so picking a value never collapses its own
+  // other options — only the vessel filter (an independent full-vessel-table
+  // list) sits outside this scope check.
+  type ScopeFilter = "project" | "workOrder";
+  const matchesScope = (
+    wd: WorkDetailsWithProgress | undefined,
+    exclude?: ScopeFilter,
+  ) => {
+    if (!wd) return false;
+    if (selectedVesselId !== 0 && wd.work_order?.vessel?.id !== selectedVesselId) {
+      return false;
+    }
+    if (
+      exclude !== "project" &&
+      selectedProjectId !== 0 &&
+      wd.work_order?.project?.id !== selectedProjectId
+    ) {
+      return false;
+    }
+    if (
+      exclude !== "workOrder" &&
+      selectedWorkOrderId !== 0 &&
+      wd.work_order?.id !== selectedWorkOrderId
+    ) {
+      return false;
+    }
+    return true;
+  };
+
+  const matchesFilters = (wd: WorkDetailsWithProgress | undefined) => {
+    if (!matchesScope(wd)) return false;
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
-    const safeIncludes = (value: string | null | undefined) => {
-      return value?.toLowerCase().includes(searchLower) || false;
-    };
+    return wdSearchFields(wd!).some((value) =>
+      value?.toLowerCase().includes(searchLower),
+    );
+  };
+
+  // Options for the Project / Work Order dropdowns, scoped to whichever
+  // completed work details are still in play under every OTHER active
+  // filter (never its own selection).
+  const availableProjects: ProjectOption[] = Array.from(
+    new Map(
+      completedWorkDetails
+        .filter((wd) => matchesScope(wd, "project") && wd.work_order?.project)
+        .map((wd) => [wd.work_order!.project!.id, wd.work_order!.project!]),
+    ).values(),
+  ).sort((a, b) => a.project_name.localeCompare(b.project_name));
+
+  const availableWorkOrders: WorkOrderOption[] = Array.from(
+    new Map(
+      completedWorkDetails
+        .filter((wd) => matchesScope(wd, "workOrder") && wd.work_order)
+        .map((wd) => [
+          wd.work_order!.id,
+          {
+            id: wd.work_order!.id,
+            shipyard_wo_number: wd.work_order!.shipyard_wo_number,
+            customer_wo_number: wd.work_order!.customer_wo_number,
+          },
+        ]),
+    ).values(),
+  ).sort((a, b) =>
+    (a.shipyard_wo_number || "").localeCompare(b.shipyard_wo_number || ""),
+  );
+
+  const filteredProjectsForSearch = availableProjects.filter((project) =>
+    project.project_name.toLowerCase().includes(projectSearchTerm.toLowerCase()),
+  );
+  const filteredWorkOrdersForSearch = availableWorkOrders.filter((wo) => {
+    const searchLower = workOrderSearchTerm.toLowerCase();
     return (
-      safeIncludes(wd.description) ||
-      safeIncludes(wd.location?.location) ||
-      safeIncludes(wd.pic) ||
-      safeIncludes(wd.work_order?.customer_wo_number) ||
-      safeIncludes(wd.work_order?.shipyard_wo_number) ||
-      safeIncludes(wd.work_order?.vessel?.name) ||
-      safeIncludes(wd.work_order?.vessel?.company)
+      wo.shipyard_wo_number?.toLowerCase().includes(searchLower) ||
+      wo.customer_wo_number?.toLowerCase().includes(searchLower)
     );
   });
 
+  // Apply vessel + project + work order + text filters
+  const filteredPending = pendingList.filter((wd) => matchesFilters(wd));
+  const filteredNeedsRework = needsReworkList.filter((wd) => matchesFilters(wd));
+
   // Split pending work details for tabs
   const pendingNotInBASTP = filteredPending.filter(
-    (wd) => !wd.is_in_bastp || !wd.bastp_id,
+    (wd) => !bastpLinkByWorkDetails.has(wd.id),
   );
-  const pendingWithBASTP = filteredPending.filter(
-    (wd) => wd.is_in_bastp && wd.bastp_id,
+  const pendingWithBASTP = filteredPending.filter((wd) =>
+    bastpLinkByWorkDetails.has(wd.id),
   );
 
   // Group pendingWithBASTP by BASTP
@@ -386,7 +569,7 @@ export default function WorkVerification() {
   }[] = [];
   const pendingBastpMap = new Map<number, WorkDetailsWithProgress[]>();
   pendingWithBASTP.forEach((wd) => {
-    const id = wd.bastp_id!;
+    const id = bastpLinkByWorkDetails.get(wd.id)!;
     if (!pendingBastpMap.has(id)) pendingBastpMap.set(id, []);
     pendingBastpMap.get(id)!.push(wd);
   });
@@ -400,26 +583,13 @@ export default function WorkVerification() {
     return new Date(b.bastp.date).getTime() - new Date(a.bastp.date).getTime();
   });
 
-  // Group verified by BASTP
+  // Verified = latest review per work detail is APPROVED
   const filteredVerified = verifications.filter((verification) => {
-    const vesselMatch =
-      selectedVesselId === 0 ||
-      verification.work_details?.work_order?.vessel?.id === selectedVesselId;
-    if (!vesselMatch) return false;
-    if (!searchTerm) return true;
-    const searchLower = searchTerm.toLowerCase();
-    const safeIncludes = (value: string | null | undefined) => {
-      return value?.toLowerCase().includes(searchLower) || false;
-    };
-    return (
-      safeIncludes(verification.work_details?.description) ||
-      safeIncludes(verification.work_details?.location?.location) ||
-      safeIncludes(verification.work_details?.pic) ||
-      safeIncludes(verification.work_details?.work_order?.customer_wo_number) ||
-      safeIncludes(verification.work_details?.work_order?.shipyard_wo_number) ||
-      safeIncludes(verification.work_details?.work_order?.vessel?.name) ||
-      safeIncludes(verification.work_details?.work_order?.vessel?.company)
-    );
+    if (latestReviewByWorkDetails.get(verification.work_details_id)?.id !== verification.id) {
+      return false; // superseded by a later review — history, not current state
+    }
+    if (!isApproved(verification)) return false;
+    return matchesFilters(verification.work_details);
   });
 
   const groupedVerified: {
@@ -427,25 +597,26 @@ export default function WorkVerification() {
     verifications: VerificationWithDetails[];
   }[] = [];
   const verifiedBastpMap = new Map<number, VerificationWithDetails[]>();
-  filteredVerified
-    .filter((v) => v.work_details?.is_in_bastp && v.work_details?.bastp_id)
-    .forEach((verification) => {
-      const bastpId = verification.work_details.bastp_id!;
+  const verifiedNoBastp: VerificationWithDetails[] = [];
+  filteredVerified.forEach((verification) => {
+    const bastpId = bastpLinkByWorkDetails.get(verification.work_details_id);
+    if (bastpId) {
       if (!verifiedBastpMap.has(bastpId)) verifiedBastpMap.set(bastpId, []);
       verifiedBastpMap.get(bastpId)!.push(verification);
-    });
-  verifiedBastpMap.forEach((verifications, bastpId) => {
-    const bastp = bastps.find((b) => b.id === bastpId);
-    if (bastp) {
-      groupedVerified.push({
-        bastp,
-        verifications,
-      });
+    } else {
+      verifiedNoBastp.push(verification);
     }
   });
+  verifiedBastpMap.forEach((verificationsForBastp, bastpId) => {
+    const bastp = bastps.find((b) => b.id === bastpId) || null;
+    groupedVerified.push({ bastp, verifications: verificationsForBastp });
+  });
+  if (verifiedNoBastp.length > 0) {
+    groupedVerified.push({ bastp: null, verifications: verifiedNoBastp });
+  }
   groupedVerified.sort((a, b) => {
-    if (a.bastp === null) return -1;
-    if (b.bastp === null) return 1;
+    if (a.bastp === null) return 1;
+    if (b.bastp === null) return -1;
     return new Date(b.bastp.date).getTime() - new Date(a.bastp.date).getTime();
   });
 
@@ -495,6 +666,13 @@ export default function WorkVerification() {
     );
   };
 
+  const clearFilters = () => {
+    setSearchTerm("");
+    setSelectedVesselId(0);
+    handleClearProjectSearch();
+    handleClearWorkOrderSearch();
+  };
+
   if (loading) {
     return (
       <div className="p-8">
@@ -517,9 +695,9 @@ export default function WorkVerification() {
             Work Verification
           </h1>
           <p className="text-gray-600 mt-2">
-            {isReadOnly
-              ? "View completed work details (100% progress) • Grouped by BASTP"
-              : "Verify completed work details (100% progress) • Grouped by BASTP"}
+            {canReview
+              ? "Review completed work details (100% progress) before they go into a BASTP"
+              : "View completed work details (100% progress) and their review status"}
           </p>
         </div>
         <button
@@ -559,26 +737,26 @@ export default function WorkVerification() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">
-                Pending Verification
+                Pending Review
               </p>
               <p className="text-2xl font-bold text-gray-900">
-                {pendingNotInBASTP.length}
+                {pendingNotInBASTP.length + pendingWithBASTP.length}
               </p>
             </div>
             <Clock className="w-8 h-8 text-yellow-500" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-purple-500">
+        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">
-                Pending Verification with BASTP
+                Needs Rework
               </p>
               <p className="text-2xl font-bold text-gray-900">
-                {pendingWithBASTP.length}
+                {filteredNeedsRework.length}
               </p>
             </div>
-            <FileText className="w-8 h-8 text-purple-500" />
+            <Undo2 className="w-8 h-8 text-red-500" />
           </div>
         </div>
         <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
@@ -598,9 +776,9 @@ export default function WorkVerification() {
       <div className="bg-white rounded-lg shadow">
         {/* Filters */}
         <div className="p-6 border-b border-gray-200">
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Vessel Filter with Search Dropdown */}
-            <div className="flex-1 relative" ref={vesselDropdownRef}>
+            <div className="relative" ref={vesselDropdownRef}>
               <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
                 <Ship className="w-4 h-4" /> Filter by Vessel
               </label>
@@ -643,8 +821,93 @@ export default function WorkVerification() {
                 </div>
               )}
             </div>
+            {/* Project Filter with Search Dropdown */}
+            <div className="relative" ref={projectDropdownRef}>
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                <FolderKanban className="w-4 h-4" /> Filter by Project
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={projectSearchTerm}
+                  onChange={handleProjectSearch}
+                  onFocus={() => setShowProjectDropdown(true)}
+                  placeholder="Search project..."
+                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {projectSearchTerm && (
+                  <button
+                    onClick={handleClearProjectSearch}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              {showProjectDropdown && filteredProjectsForSearch.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {filteredProjectsForSearch.map((project) => (
+                    <div
+                      key={project.id}
+                      onClick={() => handleProjectSelectFromDropdown(project)}
+                      className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                        selectedProjectId === project.id ? "bg-blue-100" : ""
+                      }`}
+                    >
+                      <div className="font-medium text-gray-900 text-sm">
+                        {project.project_name}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* Work Order Filter with Search Dropdown */}
+            <div className="relative" ref={workOrderDropdownRef}>
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                <FileText className="w-4 h-4" /> Filter by Work Order
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={workOrderSearchTerm}
+                  onChange={handleWorkOrderSearch}
+                  onFocus={() => setShowWorkOrderDropdown(true)}
+                  placeholder="Search WO number..."
+                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {workOrderSearchTerm && (
+                  <button
+                    onClick={handleClearWorkOrderSearch}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              {showWorkOrderDropdown && filteredWorkOrdersForSearch.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {filteredWorkOrdersForSearch.map((workOrder) => (
+                    <div
+                      key={workOrder.id}
+                      onClick={() => handleWorkOrderSelectFromDropdown(workOrder)}
+                      className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                        selectedWorkOrderId === workOrder.id ? "bg-blue-100" : ""
+                      }`}
+                    >
+                      <div className="font-medium text-gray-900 text-sm">
+                        {workOrder.shipyard_wo_number}
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        {workOrder.customer_wo_number}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             {/* Text Search */}
-            <div className="flex-1">
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
                 <Search className="w-4 h-4" /> Search
               </label>
@@ -660,30 +923,40 @@ export default function WorkVerification() {
         </div>
         {/* Tabs */}
         <div className="border-b border-gray-200">
-          <div className="flex space-x-8 px-6">
+          <div className="flex space-x-8 px-6 overflow-x-auto">
             <button
               onClick={() => setActiveTab("pending")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                 activeTab === "pending"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
-              Pending Verification ({pendingNotInBASTP.length})
+              Pending Review ({pendingNotInBASTP.length})
             </button>
             <button
               onClick={() => setActiveTab("pendingWithBastp")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                 activeTab === "pendingWithBastp"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
-              Pending Verification with BASTP ({pendingWithBASTP.length})
+              Pending Review with BASTP ({pendingWithBASTP.length})
+            </button>
+            <button
+              onClick={() => setActiveTab("needsRework")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                activeTab === "needsRework"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Needs Rework ({filteredNeedsRework.length})
             </button>
             <button
               onClick={() => setActiveTab("verified")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                 activeTab === "verified"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700"
@@ -722,7 +995,7 @@ export default function WorkVerification() {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                         Progress
                       </th>
-                      {!isReadOnly && (
+                      {canReview && (
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Action
                         </th>
@@ -742,6 +1015,12 @@ export default function WorkVerification() {
                           <div className="text-sm text-gray-500 flex items-center gap-1">
                             <User className="w-3 h-3" /> {wd.pic || "-"}
                           </div>
+                          {hasRejectionHistory(verifications, wd.id) && (
+                            <span className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded mt-1">
+                              <RotateCcw className="w-3 h-3" /> Resubmitted
+                              after rework
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
@@ -787,13 +1066,13 @@ export default function WorkVerification() {
                             </span>
                           )}
                         </td>
-                        {!isReadOnly && (
+                        {canReview && (
                           <td className="px-6 py-4 whitespace-nowrap">
                             <button
-                              onClick={() => handleVerifyClick(wd.id)}
+                              onClick={() => handleReviewClick(wd.id)}
                               className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
                             >
-                              Verify
+                              Review
                             </button>
                           </td>
                         )}
@@ -806,13 +1085,10 @@ export default function WorkVerification() {
               <div className="text-center py-12">
                 <Search className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-500 text-lg mb-2">
-                  No pending verifications found matching your filters
+                  No pending reviews found matching your filters
                 </p>
                 <button
-                  onClick={() => {
-                    setSearchTerm("");
-                    setSelectedVesselId(0);
-                  }}
+                  onClick={clearFilters}
                   className="text-blue-600 hover:text-blue-800 transition-colors"
                 >
                   Clear filters
@@ -906,7 +1182,7 @@ export default function WorkVerification() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                   Progress
                                 </th>
-                                {!isReadOnly && (
+                                {canReview && (
                                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                     Action
                                   </th>
@@ -972,13 +1248,13 @@ export default function WorkVerification() {
                                       </span>
                                     )}
                                   </td>
-                                  {!isReadOnly && (
+                                  {canReview && (
                                     <td className="px-6 py-4 whitespace-nowrap">
                                       <button
-                                        onClick={() => handleVerifyClick(wd.id)}
+                                        onClick={() => handleReviewClick(wd.id)}
                                         className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
                                       >
-                                        Verify
+                                        Review
                                       </button>
                                     </td>
                                   )}
@@ -996,14 +1272,98 @@ export default function WorkVerification() {
               <div className="text-center py-12">
                 <Search className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-500 text-lg mb-2">
-                  No pending verifications with BASTP found matching your
-                  filters
+                  No pending reviews with BASTP found matching your filters
                 </p>
                 <button
-                  onClick={() => {
-                    setSearchTerm("");
-                    setSelectedVesselId(0);
-                  }}
+                  onClick={clearFilters}
+                  className="text-blue-600 hover:text-blue-800 transition-colors"
+                >
+                  Clear filters
+                </button>
+              </div>
+            ))}
+          {activeTab === "needsRework" &&
+            (filteredNeedsRework.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-12">
+                        #
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Description
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Work Order
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Vessel
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Sent Back By
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Reason
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredNeedsRework.map((wd, idx) => {
+                      const review = latestReviewByWorkDetails.get(wd.id);
+                      return (
+                        <tr key={wd.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {idx + 1}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-medium text-gray-900">
+                              {wd.description}
+                            </div>
+                            <div className="text-sm text-gray-500 flex items-center gap-1">
+                              <User className="w-3 h-3" /> {wd.pic || "-"}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">
+                              {wd.work_order?.shipyard_wo_number || "-"}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {wd.work_order?.customer_wo_number || "-"}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-medium text-gray-900">
+                              {wd.work_order?.vessel?.name || "-"}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {wd.work_order?.vessel?.type || "-"} •{" "}
+                              {wd.work_order?.vessel?.company || "-"}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-500">
+                            <div>{review?.profiles?.name || "Unknown"}</div>
+                            <div className="text-xs text-gray-400">
+                              {review && formatDate(review.verification_date)}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-700 max-w-xs">
+                            {review?.verification_notes || "-"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <Undo2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500 text-lg mb-2">
+                  No work sent back for rework matching your filters
+                </p>
+                <button
+                  onClick={clearFilters}
                   className="text-blue-600 hover:text-blue-800 transition-colors"
                 >
                   Clear filters
@@ -1056,7 +1416,17 @@ export default function WorkVerification() {
                                   </span>
                                 </div>
                               </div>
-                            ) : null}
+                            ) : (
+                              <div className="text-left">
+                                <h3 className="text-lg font-bold text-gray-900">
+                                  Not yet in a BASTP
+                                </h3>
+                                <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                                  {group.verifications.length} item
+                                  {group.verifications.length > 1 ? "s" : ""}
+                                </span>
+                              </div>
+                            )}
                           </div>
                           {group.bastp && (
                             <button
@@ -1095,10 +1465,10 @@ export default function WorkVerification() {
                                   Qty
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                  Verified By
+                                  Approved By
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                  Verification Date
+                                  Approval Date
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                   Notes
@@ -1184,10 +1554,7 @@ export default function WorkVerification() {
                   No verified work details found matching your filters
                 </p>
                 <button
-                  onClick={() => {
-                    setSearchTerm("");
-                    setSelectedVesselId(0);
-                  }}
+                  onClick={clearFilters}
                   className="text-blue-600 hover:text-blue-800 transition-colors"
                 >
                   Clear filters

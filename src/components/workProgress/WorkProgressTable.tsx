@@ -6,6 +6,11 @@ import { openProgressEvidence } from "../../utils/progressEvidenceHandler";
 import type { WorkProgressWithDetails } from "../../types/progressTypes";
 import { useAuth } from "../../hooks/useAuth";
 import {
+  getLatestVerificationByWorkDetails,
+  isOpenForRework,
+} from "../../utils/workVerificationStatus";
+import { getLatestProgressRecord } from "../../utils/progressPercentage";
+import {
   Search,
   RefreshCw,
   Ship,
@@ -27,6 +32,7 @@ import {
   Camera,
   Pin,
   FolderKanban,
+  Undo2,
 } from "lucide-react";
 
 // ==================== INTERFACES ====================
@@ -88,6 +94,11 @@ export default function WorkProgressTable({
   const [totalCount, setTotalCount] = useState(0);
   const [maxProgressByWorkDetail, setMaxProgressByWorkDetail] = useState<
     Record<number, number>
+  >({});
+  // work_details_id -> currently sent back for rework, awaiting a new
+  // progress report before it re-enters the verification queue.
+  const [needsReworkByWorkDetail, setNeedsReworkByWorkDetail] = useState<
+    Record<number, boolean>
   >({});
 
   // ==================== STATE - Filters ====================
@@ -595,7 +606,10 @@ export default function WorkProgressTable({
       setWorkProgress(progressData);
       setTotalCount(count || 0);
 
-      await calculateMaxProgress(progressData);
+      await Promise.all([
+        calculateMaxProgress(progressData),
+        calculateReworkFlags(progressData),
+      ]);
     } catch (err) {
       console.error("Error fetching work progress:", err);
       setError("Failed to load work progress data");
@@ -626,15 +640,20 @@ export default function WorkProgressTable({
 
       const { data: maxProgressData, error } = await supabase
         .from("work_progress")
-        .select("work_details_id, progress_percentage")
-        .in("work_details_id", workDetailIds)
-        .order("progress_percentage", { ascending: false });
+        .select("work_details_id, progress_percentage, report_date, created_at")
+        .in("work_details_id", workDetailIds);
 
       if (error) {
         console.error("Error fetching max progress:", error);
         return;
       }
 
+      // Despite the name, this tracks the CURRENT progress (latest by
+      // report_date) rather than the historical peak — matching the
+      // convention used everywhere else. That distinction matters now that
+      // a rework resubmission can regress below a past 100%, so the old
+      // "highest percentage ever" reading would otherwise stay stuck at 100
+      // and incorrectly keep showing "Complete" / blocking further reports.
       const maxProgressMap: Record<number, number> = {};
 
       if (maxProgressData) {
@@ -642,10 +661,9 @@ export default function WorkProgressTable({
           const progressReports = maxProgressData.filter(
             (item) => item.work_details_id === workDetailId,
           );
-          if (progressReports.length > 0) {
-            maxProgressMap[workDetailId] = Math.max(
-              ...progressReports.map((item) => item.progress_percentage),
-            );
+          const latest = getLatestProgressRecord(progressReports);
+          if (latest) {
+            maxProgressMap[workDetailId] = latest.progress_percentage;
           }
         });
       }
@@ -653,6 +671,60 @@ export default function WorkProgressTable({
       setMaxProgressByWorkDetail(maxProgressMap);
     } catch (err) {
       console.error("Error calculating max progress:", err);
+    }
+  };
+
+  const calculateReworkFlags = async (
+    currentProgressData: WorkProgressWithDetails[],
+  ) => {
+    try {
+      const workDetailIds = [
+        ...new Set(currentProgressData.map((item) => item.work_details.id)),
+      ];
+
+      if (workDetailIds.length === 0) {
+        setNeedsReworkByWorkDetail({});
+        return;
+      }
+
+      const [progressResult, verificationResult] = await Promise.all([
+        supabase
+          .from("work_progress")
+          .select("work_details_id, created_at")
+          .in("work_details_id", workDetailIds),
+        supabase
+          .from("work_verification")
+          .select("work_details_id, status, created_at, deleted_at")
+          .in("work_details_id", workDetailIds)
+          .is("deleted_at", null),
+      ]);
+
+      if (progressResult.error) throw progressResult.error;
+      if (verificationResult.error) throw verificationResult.error;
+
+      const latestProgressByWorkDetail = new Map<number, string>();
+      (progressResult.data || []).forEach((p) => {
+        const current = latestProgressByWorkDetail.get(p.work_details_id);
+        if (!current || new Date(p.created_at).getTime() > new Date(current).getTime()) {
+          latestProgressByWorkDetail.set(p.work_details_id, p.created_at);
+        }
+      });
+
+      const latestVerificationByWorkDetail = getLatestVerificationByWorkDetails(
+        verificationResult.data || [],
+      );
+
+      const reworkMap: Record<number, boolean> = {};
+      workDetailIds.forEach((id) => {
+        reworkMap[id] = isOpenForRework(
+          latestVerificationByWorkDetail.get(id),
+          latestProgressByWorkDetail.get(id),
+        );
+      });
+
+      setNeedsReworkByWorkDetail(reworkMap);
+    } catch (err) {
+      console.error("Error calculating rework flags:", err);
     }
   };
 
@@ -1804,6 +1876,7 @@ export default function WorkProgressTable({
                       <WorkDetailsCell
                         workDetails={item.work_details}
                         isCompleted={isCompleted}
+                        needsRework={needsReworkByWorkDetail[workDetailsId]}
                       />
                     </td>
                     <td className="px-6 py-4">
@@ -2004,9 +2077,11 @@ function ProgressCell({
 function WorkDetailsCell({
   workDetails,
   isCompleted,
+  needsRework,
 }: {
   workDetails: WorkProgressWithDetails["work_details"];
   isCompleted: boolean;
+  needsRework?: boolean;
 }) {
   const locationText = workDetails.location
     ? typeof workDetails.location === "string"
@@ -2016,13 +2091,18 @@ function WorkDetailsCell({
 
   return (
     <div>
-      <div className="flex items-center">
+      <div className="flex items-center flex-wrap gap-y-1">
         <div className="text-sm font-medium text-gray-900">
           {workDetails.description}
         </div>
         {isCompleted && (
           <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
             <CheckCircle2 className="w-3 h-3" /> Complete
+          </span>
+        )}
+        {needsRework && (
+          <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+            <Undo2 className="w-3 h-3" /> Needs Rework
           </span>
         )}
       </div>

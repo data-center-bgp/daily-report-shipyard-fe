@@ -43,3 +43,20 @@ export function isValidProgressPercentage(value: string): boolean {
 export function formatProgressPercentage(value: number): string {
   return value.toString().replace(".", ",");
 }
+
+/**
+ * The current progress record out of a work detail's history: latest by
+ * report_date, using created_at as a tiebreaker when multiple reports share
+ * the same date (report_date is user-entered and often defaults to "today"
+ * for every report logged that day, so ties are common).
+ */
+export function getLatestProgressRecord<
+  T extends { report_date: string; created_at: string },
+>(records: T[]): T | undefined {
+  return [...records].sort((a, b) => {
+    const dateDiff =
+      new Date(b.report_date).getTime() - new Date(a.report_date).getTime();
+    if (dateDiff !== 0) return dateDiff;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  })[0];
+}

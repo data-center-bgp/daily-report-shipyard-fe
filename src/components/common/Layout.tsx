@@ -130,7 +130,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       current:
         location.pathname === "/work-verification" ||
         location.pathname.startsWith("/work-verification/"),
-      show: canAccess("workOrders"),
+      show: canAccess("verification"),
     },
     {
       name: "BASTP",

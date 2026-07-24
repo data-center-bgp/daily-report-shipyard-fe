@@ -8,7 +8,9 @@ import {
   parseProgressPercentage,
   isValidProgressPercentage,
   formatProgressPercentage,
+  getLatestProgressRecord,
 } from "../../utils/progressPercentage";
+import { isOpenForRework } from "../../utils/workVerificationStatus";
 import {
   FileText,
   Ship,
@@ -24,6 +26,7 @@ import {
   MapPin,
   User,
   FolderKanban,
+  Undo2,
 } from "lucide-react";
 
 interface AddWorkProgressProps {
@@ -65,6 +68,10 @@ interface WorkDetailsFormData {
   };
   pic: string;
   current_progress: number;
+  // True when this item was sent back for rework and hasn't been
+  // resubmitted yet — it stays selectable in the picker even though it's
+  // at 100%, unlike other fully-complete items.
+  isOpenForRework: boolean;
 }
 
 interface WorkDetailsContext {
@@ -111,6 +118,13 @@ export default function AddWorkProgress({
   const [currentMaxProgress, setCurrentMaxProgress] = useState<number | null>(
     null,
   );
+
+  // Whether the selected work detail was sent back for rework and hasn't
+  // been resubmitted yet — lifts the "already at 100%" lock specifically
+  // for this item, and reworkNotes carries the reviewer's reason to show
+  // as a banner.
+  const [isReworkReopen, setIsReworkReopen] = useState(false);
+  const [reworkNotes, setReworkNotes] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     progress_percentage: "",
@@ -162,28 +176,66 @@ export default function AddWorkProgress({
   useEffect(() => {
     if (!selectedWorkDetailsId) {
       setCurrentMaxProgress(null);
+      setIsReworkReopen(false);
+      setReworkNotes(null);
       return;
     }
 
     let cancelled = false;
 
-    const fetchMaxProgress = async () => {
+    const fetchGuardState = async () => {
       try {
-        const { data, error } = await supabase
-          .from("work_progress")
-          .select("progress_percentage")
-          .eq("work_details_id", selectedWorkDetailsId)
-          .order("progress_percentage", { ascending: false })
-          .limit(1);
+        const [progressResult, verificationResult] = await Promise.all([
+          supabase
+            .from("work_progress")
+            .select("progress_percentage, report_date, created_at")
+            .eq("work_details_id", selectedWorkDetailsId),
+          supabase
+            .from("work_verification")
+            .select("work_details_id, status, created_at, verification_notes")
+            .eq("work_details_id", selectedWorkDetailsId)
+            .is("deleted_at", null)
+            .order("created_at", { ascending: false })
+            .limit(1),
+        ]);
 
-        if (error) throw error;
+        if (progressResult.error) throw progressResult.error;
+        if (verificationResult.error) throw verificationResult.error;
         if (cancelled) return;
 
-        const maxProgress = data && data.length > 0 ? data[0].progress_percentage : 0;
-        setCurrentMaxProgress(maxProgress);
+        const progressRows = progressResult.data || [];
+        // "Current progress" is the LATEST report by report_date — same
+        // convention used everywhere else in the app (Work Details, Work
+        // Verification, BASTP). This matters now that rework can regress
+        // progress: the historical peak is no longer the same thing as the
+        // current state once a rejection is resubmitted below 100%.
+        const currentProgress =
+          getLatestProgressRecord(progressRows)?.progress_percentage ?? 0;
+        const latestProgressCreatedAt = progressRows.reduce(
+          (latest: string | undefined, p) =>
+            !latest ||
+            new Date(p.created_at).getTime() > new Date(latest).getTime()
+              ? p.created_at
+              : latest,
+          undefined,
+        );
+        setCurrentMaxProgress(currentProgress);
 
-        if (maxProgress > 0 && maxProgress < 100) {
-          const suggested = Math.min(maxProgress + 10, 100);
+        const latestVerification = verificationResult.data?.[0];
+        const openForRework = isOpenForRework(
+          latestVerification,
+          latestProgressCreatedAt,
+        );
+        setIsReworkReopen(openForRework);
+        setReworkNotes(
+          openForRework ? latestVerification?.verification_notes ?? null : null,
+        );
+
+        // No suggested value for a rework reopen — the field is left blank
+        // so whoever's fixing it has to deliberately state the real
+        // percentage (which may be below 100 if more work remains).
+        if (currentProgress > 0 && currentProgress < 100 && !openForRework) {
+          const suggested = Math.min(currentProgress + 10, 100);
           setFormData((prev) =>
             prev.progress_percentage === ""
               ? {
@@ -194,12 +246,16 @@ export default function AddWorkProgress({
           );
         }
       } catch (err) {
-        console.error("Error fetching current max progress:", err);
-        if (!cancelled) setCurrentMaxProgress(0);
+        console.error("Error fetching current progress/review state:", err);
+        if (!cancelled) {
+          setCurrentMaxProgress(0);
+          setIsReworkReopen(false);
+          setReworkNotes(null);
+        }
       }
     };
 
-    fetchMaxProgress();
+    fetchGuardState();
     return () => {
       cancelled = true;
     };
@@ -274,7 +330,8 @@ export default function AddWorkProgress({
           location
         ),
         pic,
-        work_progress ( progress_percentage )
+        work_progress ( progress_percentage, report_date, created_at ),
+        work_verification ( status, created_at, deleted_at )
       `,
         )
         .eq("work_order_id", workOrderId)
@@ -283,20 +340,60 @@ export default function AddWorkProgress({
 
       if (error) throw error;
 
-      const workDetailsData: WorkDetailsFormData[] = (data || []).map(
-        (item: any) => ({
-          id: item.id,
-          description: item.description,
-          location: Array.isArray(item.location)
-            ? item.location[0]
-            : item.location,
-          pic: item.pic,
-          current_progress: (item.work_progress || []).reduce(
-            (max: number, p: { progress_percentage: number }) =>
-              Math.max(max, p.progress_percentage),
-            0,
-          ),
-        }),
+      const workDetailsData: WorkDetailsFormData[] = (
+        (data || []) as unknown as {
+          id: number;
+          description: string;
+          pic: string;
+          location: { id: number; location: string } | { id: number; location: string }[] | null;
+          work_progress: {
+            progress_percentage: number;
+            report_date: string;
+            created_at: string;
+          }[];
+          work_verification: {
+            status: "APPROVED" | "REJECTED";
+            created_at: string;
+            deleted_at: string | null;
+          }[];
+        }[]
+      ).map((item) => {
+          const progressRecords = item.work_progress || [];
+          // Latest by report_date, not the historical peak — matches the
+          // "current progress" convention used everywhere else, and matters
+          // now that a rework resubmission can regress below a past 100%.
+          const current_progress =
+            getLatestProgressRecord(progressRecords)?.progress_percentage ?? 0;
+          const latestProgressCreatedAt = progressRecords.reduce(
+            (latest: string | undefined, p) =>
+              !latest ||
+              new Date(p.created_at).getTime() > new Date(latest).getTime()
+                ? p.created_at
+                : latest,
+            undefined,
+          );
+          const latestVerification = (item.work_verification || [])
+            .filter((v) => !v.deleted_at)
+            .sort(
+              (a, b) =>
+                new Date(b.created_at).getTime() -
+                new Date(a.created_at).getTime(),
+            )[0];
+
+          return {
+            id: item.id,
+            description: item.description,
+            location: Array.isArray(item.location)
+              ? item.location[0]
+              : item.location,
+            pic: item.pic,
+            current_progress,
+            isOpenForRework: isOpenForRework(
+              latestVerification,
+              latestProgressCreatedAt,
+            ),
+          };
+        },
       );
 
       setWorkDetailsList(workDetailsData);
@@ -460,13 +557,16 @@ export default function AddWorkProgress({
     );
 
     if (currentMaxProgress !== null) {
-      if (currentMaxProgress >= 100) {
+      if (currentMaxProgress >= 100 && !isReworkReopen) {
         setError(
           "This work detail has already reached 100% completion — no further progress reports can be added.",
         );
         return;
       }
-      if (progressValue < currentMaxProgress) {
+      // A rework resubmission can honestly regress below the old 100% — the
+      // "no regression" floor only applies once it's back in normal tracking
+      // (i.e. after this first post-rejection report).
+      if (!isReworkReopen && progressValue < currentMaxProgress) {
         setError(
           `Progress can't be lower than the current recorded progress (${formatProgressPercentage(currentMaxProgress)}%). Edit an existing report instead if it needs correcting.`,
         );
@@ -584,9 +684,14 @@ export default function AddWorkProgress({
   );
 
   const progressValue = parseProgressPercentage(formData.progress_percentage);
-  const isAlreadyComplete = currentMaxProgress !== null && currentMaxProgress >= 100;
+  const isAlreadyComplete =
+    currentMaxProgress !== null &&
+    currentMaxProgress >= 100 &&
+    !isReworkReopen;
   const isBelowCurrentProgress =
-    currentMaxProgress !== null && progressValue < currentMaxProgress;
+    currentMaxProgress !== null &&
+    !isReworkReopen &&
+    progressValue < currentMaxProgress;
   const isFormValid =
     selectedWorkDetailsId > 0 &&
     formData.report_date &&
@@ -634,9 +739,14 @@ export default function AddWorkProgress({
 
   const filteredWorkDetailsForSearch = workDetailsList.filter((wd) => {
     // Hide work details that already reached 100% — nothing left to report
-    // progress on. The currently-selected item stays visible even if
-    // complete, so a deep link into an already-finished item still shows it.
-    if (wd.current_progress >= 100 && wd.id !== selectedWorkDetailsId) {
+    // progress on. Exceptions: the currently-selected item (so a deep link
+    // into an already-finished item still shows it) and items sent back for
+    // rework, which need to be resubmittable from the normal picker flow.
+    if (
+      wd.current_progress >= 100 &&
+      !wd.isOpenForRework &&
+      wd.id !== selectedWorkDetailsId
+    ) {
       return false;
     }
 
@@ -897,6 +1007,11 @@ export default function AddWorkProgress({
                               "No location"}{" "}
                           • <User className="w-3 h-3" /> {workDetails.pic}
                         </div>
+                        {workDetails.isOpenForRework && (
+                          <span className="inline-flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded mt-1">
+                            <Undo2 className="w-3 h-3" /> Needs Rework
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -949,23 +1064,49 @@ export default function AddWorkProgress({
                   {currentMaxProgress !== null && currentMaxProgress > 0 && (
                     <div
                       className={`flex items-center gap-1 mt-2 ${
-                        isAlreadyComplete ? "text-green-700" : "text-blue-700"
+                        isAlreadyComplete
+                          ? "text-green-700"
+                          : isReworkReopen
+                            ? "text-red-700"
+                            : "text-blue-700"
                       }`}
                     >
                       <BarChart3 className="w-3.5 h-3.5" />
                       Current progress:{" "}
                       {formatProgressPercentage(currentMaxProgress)}%
                       {isAlreadyComplete && " — already complete"}
+                      {isReworkReopen && " — sent back for rework"}
                     </div>
                   )}
                 </div>
 
-                {isAlreadyComplete && (
-                  <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800 flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    This work detail has already reached 100% completion — no
-                    further progress reports can be added.
+                {isReworkReopen ? (
+                  <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-800 flex items-start gap-2">
+                    <Undo2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <div>
+                      This work was sent back for rework by the Operation
+                      Head.
+                      {reworkNotes && (
+                        <div className="mt-1 font-medium">
+                          Reason: {reworkNotes}
+                        </div>
+                      )}
+                      <div className="mt-1">
+                        Submit a new progress report reflecting the real
+                        state of the work — it doesn't have to be 100% if
+                        more work remains. It'll go back up for review once
+                        it reaches 100% again.
+                      </div>
+                    </div>
                   </div>
+                ) : (
+                  isAlreadyComplete && (
+                    <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800 flex items-start gap-2">
+                      <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      This work detail has already reached 100% completion —
+                      no further progress reports can be added.
+                    </div>
+                  )
                 )}
               </div>
             )}

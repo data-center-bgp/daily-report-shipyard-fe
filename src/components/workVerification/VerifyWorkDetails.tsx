@@ -6,7 +6,15 @@ import {
   type WorkOrder,
   type Vessel,
 } from "../../lib/supabase";
+import { useAuth } from "../../hooks/useAuth";
 import { ActivityLogService } from "../../services/activityLogService";
+import {
+  getLatestVerificationByWorkDetails,
+  isApproved,
+  isOpenForRework,
+  type VerificationRecord,
+} from "../../utils/workVerificationStatus";
+import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import {
   ArrowLeft,
   Wrench,
@@ -16,14 +24,21 @@ import {
   Ship,
   BarChart3,
   CheckCircle2,
+  XCircle,
   AlertTriangle,
   ChevronDown,
+  FileText,
+  Image as ImageIcon,
+  History,
+  Undo2,
+  Lock,
 } from "lucide-react";
 
 interface WorkDetailsWithProgress extends WorkDetails {
   current_progress?: number;
   has_progress_data?: boolean;
   latest_progress_date?: string;
+  latest_progress_created_at?: string;
   work_order?: WorkOrder & {
     vessel?: Vessel;
     customer_wo_date?: string;
@@ -33,25 +48,16 @@ interface WorkDetailsWithProgress extends WorkDetails {
     location: string;
   };
   work_location: string;
-  work_progress?: Array<{
-    id: number;
-    progress_percentage: number;
-    report_date: string;
-    created_at: string;
-    profiles?: {
-      id: number;
-      name: string;
-      email: string;
-    };
-  }>;
+  work_progress?: WorkProgressItem[];
 }
 
-// Add interface for the progress items
 interface WorkProgressItem {
   id: number;
   progress_percentage: number;
   report_date: string;
   created_at: string;
+  evidence_url?: string | null;
+  storage_path?: string | null;
   profiles?: {
     id: number;
     name: string;
@@ -59,50 +65,40 @@ interface WorkProgressItem {
   };
 }
 
-// Add interface for existing verification response
-interface ExistingVerification {
-  id: number;
-  verification_date: string;
-  profiles?:
-    | {
-        name: string;
-      }
-    | {
-        name: string;
-      }[];
-}
-
 export default function VerifyWorkDetails() {
   const navigate = useNavigate();
   const { workDetailsId } = useParams<{ workDetailsId: string }>();
+  const { canAccess, isReadOnly } = useAuth();
+  const canReview = canAccess("verification") && !isReadOnly;
 
   const [workDetails, setWorkDetails] =
     useState<WorkDetailsWithProgress | null>(null);
+  const [reviewHistory, setReviewHistory] = useState<VerificationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [blockedReason, setBlockedReason] = useState<
+    "approved" | "awaitingRework" | null
+  >(null);
   const [verificationDate, setVerificationDate] = useState(
     new Date().toISOString().split("T")[0],
   );
   const [verificationNotes, setVerificationNotes] = useState("");
   const [expandedSections, setExpandedSections] = useState({
-    workDetails: true,
-    workOrder: false,
-    schedule: false,
     progress: false,
-    workPermit: false,
+    history: false,
   });
 
   const fetchWorkDetails = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
+      setBlockedReason(null);
 
       if (!workDetailsId) {
         throw new Error("Work Details ID is required");
       }
 
-      // Fetch the specific work details with progress data and reporter info
       const { data: workDetailsData, error: wdError } = await supabase
         .from("work_details")
         .select(
@@ -130,6 +126,8 @@ export default function VerifyWorkDetails() {
       progress_percentage,
       report_date,
       created_at,
+      evidence_url,
+      storage_path,
       profiles (
         id,
         name,
@@ -142,71 +140,66 @@ export default function VerifyWorkDetails() {
         .single();
 
       if (wdError) throw wdError;
-
       if (!workDetailsData) {
         throw new Error("Work details not found");
       }
 
-      // Process progress data with explicit typing
       const progressRecords: WorkProgressItem[] =
         workDetailsData.work_progress || [];
       let current_progress = 0;
-      let has_progress_data = false;
-      let latest_progress_date = null;
+      let latest_progress_date: string | undefined;
+      let latest_progress_created_at: string | undefined;
 
       if (progressRecords.length > 0) {
-        has_progress_data = true;
-        const sortedProgress = progressRecords.sort(
-          (a: WorkProgressItem, b: WorkProgressItem) =>
-            new Date(b.report_date).getTime() -
-            new Date(a.report_date).getTime(),
+        const latestRecord = getLatestProgressRecord(progressRecords);
+        current_progress = latestRecord?.progress_percentage || 0;
+        latest_progress_date = latestRecord?.report_date;
+        latest_progress_created_at = progressRecords.reduce(
+          (latest: string | undefined, p) =>
+            !latest ||
+            new Date(p.created_at).getTime() > new Date(latest).getTime()
+              ? p.created_at
+              : latest,
+          undefined,
         );
-
-        current_progress = sortedProgress[0]?.progress_percentage || 0;
-        latest_progress_date = sortedProgress[0]?.report_date;
       }
 
-      // Check if work details is completed (100%)
       if (current_progress !== 100) {
         throw new Error(
           "Work details is not completed yet (must be 100% progress)",
         );
       }
 
-      // Check if already verified
-      const { data: existingVerification, error: verError } = await supabase
+      // Full review history for this work detail, newest first.
+      const { data: historyData, error: historyError } = await supabase
         .from("work_verification")
-        .select("id, verification_date, profiles(name)")
+        .select(
+          "id, work_details_id, status, verification_date, verification_notes, created_at, profiles(id, name, email)",
+        )
         .eq("work_details_id", parseInt(workDetailsId))
-        .is("deleted_at", null);
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
 
-      if (verError) {
-        console.error("Error checking existing verification:", verError);
+      if (historyError) throw historyError;
+
+      const history = (historyData as unknown as VerificationRecord[]) || [];
+      setReviewHistory(history);
+
+      const latestMap = getLatestVerificationByWorkDetails(history);
+      const latest = latestMap.get(parseInt(workDetailsId));
+
+      if (isOpenForRework(latest, latest_progress_created_at)) {
+        setBlockedReason("awaitingRework");
+      } else if (isApproved(latest)) {
+        setBlockedReason("approved");
       }
 
-      if (existingVerification && existingVerification.length > 0) {
-        const existing = existingVerification[0] as ExistingVerification;
-
-        // Handle profiles being either single object or array
-        const profileName = Array.isArray(existing.profiles)
-          ? existing.profiles[0]?.name
-          : existing.profiles?.name;
-
-        throw new Error(
-          `Work details has already been verified on ${new Date(
-            existing.verification_date,
-          ).toLocaleDateString()} by ${profileName || "Unknown User"}`,
-        );
-      }
-
-      const processedWorkDetails = {
+      setWorkDetails({
         ...workDetailsData,
         current_progress,
-        has_progress_data,
         latest_progress_date,
-      };
-
-      setWorkDetails(processedWorkDetails);
+        latest_progress_created_at,
+      });
     } catch (err) {
       console.error("Error fetching work details:", err);
       setError(
@@ -223,9 +216,14 @@ export default function VerifyWorkDetails() {
     }
   }, [workDetailsId, fetchWorkDetails]);
 
-  const handleVerifyWorkDetails = async () => {
+  const handleSubmitReview = async (status: "APPROVED" | "REJECTED") => {
     if (!workDetails || !verificationDate) {
-      setError("Please select a verification date");
+      setError("Please select a review date");
+      return;
+    }
+
+    if (status === "REJECTED" && !verificationNotes.trim()) {
+      setError("Please explain why this work is being sent back for rework");
       return;
     }
 
@@ -233,7 +231,28 @@ export default function VerifyWorkDetails() {
       setSubmitting(true);
       setError(null);
 
-      // Get current user
+      // Guard against a concurrent review landing while this page was open.
+      const { data: raceCheck, error: raceError } = await supabase
+        .from("work_verification")
+        .select("id, created_at")
+        .eq("work_details_id", workDetails.id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (raceError) throw raceError;
+
+      const currentLatestId = reviewHistory[0]?.id;
+      if (
+        raceCheck &&
+        raceCheck.length > 0 &&
+        raceCheck[0].id !== currentLatestId
+      ) {
+        throw new Error(
+          "This work detail was just reviewed by someone else. Please go back and refresh.",
+        );
+      }
+
       const {
         data: { user },
         error: userError,
@@ -242,7 +261,6 @@ export default function VerifyWorkDetails() {
         throw new Error("User not authenticated");
       }
 
-      // Get the user profile to get the user_id
       const { data: userProfile, error: profileError } = await supabase
         .from("profiles")
         .select("id, name")
@@ -254,39 +272,43 @@ export default function VerifyWorkDetails() {
         throw new Error("Failed to fetch user profile");
       }
 
-      const { data: verificationData, error } = await supabase
+      const { data: verificationData, error: insertError } = await supabase
         .from("work_verification")
         .insert({
           verification_date: verificationDate,
           work_details_id: workDetails.id,
           user_id: userProfile.id,
           verification_notes: verificationNotes.trim() || null,
+          status,
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (insertError) throw insertError;
 
-      // Log the activity
       if (verificationData) {
         await ActivityLogService.logActivity({
           action: "create",
           tableName: "work_verification",
           recordId: verificationData.id,
           newData: verificationData,
-          description: `Verified work details: ${workDetails.description.substring(0, 50)}${workDetails.description.length > 50 ? "..." : ""}`,
+          description: `${status === "APPROVED" ? "Approved" : "Sent back for rework"}: ${workDetails.description.substring(0, 50)}${workDetails.description.length > 50 ? "..." : ""}`,
         });
       }
 
-      // Navigate back with success message
+      const outcomeLine =
+        status === "APPROVED"
+          ? "✅ Work approved and ready for BASTP!"
+          : "↩️ Work sent back to the shipyard for rework.";
+
       navigate("/work-verification", {
         state: {
-          successMessage: `✅ Work verification recorded successfully!\n\nWork: "${workDetails.description.substring(
+          successMessage: `${outcomeLine}\n\nWork: "${workDetails.description.substring(
             0,
             50,
           )}${
             workDetails.description.length > 50 ? "..." : ""
-          }"\nVerified by: ${userProfile.name}\nVerification Date: ${new Date(
+          }"\nReviewed by: ${userProfile.name}\nReview Date: ${new Date(
             verificationDate,
           ).toLocaleDateString()}\nWork Order: ${
             workDetails.work_order?.shipyard_wo_number || "N/A"
@@ -358,7 +380,7 @@ export default function VerifyWorkDetails() {
               <AlertTriangle className="w-6 h-6 text-white" />
             </div>
             <h2 className="text-lg font-semibold text-slate-800 mb-2">
-              Cannot Verify Work Details
+              Cannot Review Work Details
             </h2>
             <p className="text-slate-600 text-sm mb-6 whitespace-pre-line">
               {error}
@@ -402,7 +424,7 @@ export default function VerifyWorkDetails() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Compact Header - Fixed CSS conflict */}
+      {/* Compact Header */}
       <div className="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-10 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -418,19 +440,15 @@ export default function VerifyWorkDetails() {
                   Work Verification
                 </h1>
                 <p className="text-xs text-slate-500">
-                  Record site verification in system
+                  Approve or send back for rework
                 </p>
               </div>
             </div>
 
-            {/* Status Badge */}
             <div className="flex items-center space-x-3">
               <div className="flex items-center space-x-2 bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-700 px-3 py-1 rounded-full text-sm border border-emerald-200 shadow-sm">
                 <div className="w-2 h-2 bg-gradient-to-r from-emerald-400 to-green-500 rounded-full animate-pulse"></div>
                 <span className="font-medium">100% Complete</span>
-              </div>
-              <div className="flex items-center space-x-2 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 px-3 py-1 rounded-full text-sm border border-blue-200 shadow-sm">
-                <span className="font-medium">Ready for BASTP</span>
               </div>
             </div>
           </div>
@@ -438,7 +456,6 @@ export default function VerifyWorkDetails() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Error Message */}
         {error && (
           <div className="mb-4 bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-lg p-3 shadow-sm">
             <div className="flex items-center text-sm">
@@ -451,7 +468,47 @@ export default function VerifyWorkDetails() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Content - 2/3 */}
           <div className="lg:col-span-2 space-y-4">
-            {/* Work Details - Always Expanded */}
+            {/* Work Order info */}
+            <div className="bg-white rounded-xl shadow-lg border border-slate-200/50 overflow-hidden">
+              <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-blue-50">
+                <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                  <FileText className="w-5 h-5" /> Work Order
+                </h3>
+              </div>
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    Shipyard WO Number
+                  </label>
+                  <p className="mt-1 text-sm text-slate-700">
+                    {workDetails.work_order?.shipyard_wo_number || "-"}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    Customer WO Number
+                  </label>
+                  <p className="mt-1 text-sm text-slate-700">
+                    {workDetails.work_order?.customer_wo_number || "-"}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    Vessel
+                  </label>
+                  <p className="mt-1 text-sm text-slate-700 flex items-center gap-1">
+                    <Ship className="w-4 h-4" />{" "}
+                    {workDetails.work_order?.vessel?.name || "-"}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {workDetails.work_order?.vessel?.type || "-"} •{" "}
+                    {workDetails.work_order?.vessel?.company || "-"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Work Details */}
             <div className="bg-white rounded-xl shadow-lg border border-slate-200/50 overflow-hidden">
               <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-indigo-50">
                 <h3 className="font-semibold text-slate-800 flex items-center gap-2">
@@ -502,24 +559,79 @@ export default function VerifyWorkDetails() {
                       {workDetails.period_close_target}
                     </p>
                   </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                      Vessel
-                    </label>
-                    <p className="mt-1 text-sm text-slate-700 bg-gradient-to-r from-blue-50 to-indigo-50 p-2 rounded-lg border border-blue-200 flex items-center gap-1">
-                      <Ship className="w-4 h-4" />{" "}
-                      {workDetails.work_order?.vessel?.name || "-"}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {workDetails.work_order?.vessel?.type || "-"} •{" "}
-                      {workDetails.work_order?.vessel?.company || "-"}
-                    </p>
-                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Progress History section with proper typing for sort */}
+            {/* Review History */}
+            {reviewHistory.length > 0 && (
+              <div className="bg-white rounded-xl shadow-lg border border-slate-200/50 overflow-hidden">
+                <button
+                  onClick={() => toggleSection("history")}
+                  className="w-full p-4 text-left border-b border-slate-100 hover:bg-gradient-to-r hover:from-amber-50 hover:to-orange-50 transition-all duration-200"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                      <History className="w-5 h-5" /> Review History
+                      <span className="bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 px-2 py-1 rounded-full text-xs font-semibold border border-amber-200">
+                        {reviewHistory.length}
+                      </span>
+                    </h3>
+                    <ChevronDown
+                      className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${
+                        expandedSections.history ? "rotate-180" : "rotate-0"
+                      }`}
+                    />
+                  </div>
+                </button>
+                <div
+                  className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                    expandedSections.history
+                      ? "max-h-[600px] opacity-100"
+                      : "max-h-0 opacity-0"
+                  }`}
+                >
+                  <div className="p-4 space-y-3 bg-gradient-to-r from-amber-50/30 to-orange-50/30">
+                    {reviewHistory.map((review) => (
+                      <div
+                        key={review.id}
+                        className="p-3 bg-white rounded-lg shadow-sm border border-slate-200/50"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full ${
+                              review.status === "APPROVED"
+                                ? "bg-green-100 text-green-700"
+                                : "bg-red-100 text-red-700"
+                            }`}
+                          >
+                            {review.status === "APPROVED" ? (
+                              <CheckCircle2 className="w-3 h-3" />
+                            ) : (
+                              <Undo2 className="w-3 h-3" />
+                            )}
+                            {review.status === "APPROVED"
+                              ? "Approved"
+                              : "Sent back for rework"}
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {formatDate(review.verification_date)} by{" "}
+                            {review.profiles?.name || "Unknown"}
+                          </span>
+                        </div>
+                        {review.verification_notes && (
+                          <p className="text-sm text-slate-600 mt-2">
+                            {review.verification_notes}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Progress History */}
             <div className="bg-white rounded-xl shadow-lg border border-slate-200/50 overflow-hidden">
               <button
                 onClick={() => toggleSection("progress")}
@@ -544,7 +656,7 @@ export default function VerifyWorkDetails() {
               <div
                 className={`overflow-hidden transition-all duration-300 ease-in-out ${
                   expandedSections.progress
-                    ? "max-h-[600px] opacity-100"
+                    ? "max-h-[800px] opacity-100 overflow-y-auto"
                     : "max-h-0 opacity-0"
                 }`}
               >
@@ -552,50 +664,70 @@ export default function VerifyWorkDetails() {
                   {workDetails.work_progress &&
                   workDetails.work_progress.length > 0 ? (
                     <div className="space-y-3">
-                      {workDetails.work_progress
+                      {[...workDetails.work_progress]
                         .sort(
-                          (a: WorkProgressItem, b: WorkProgressItem) =>
+                          (a, b) =>
                             new Date(b.report_date).getTime() -
                             new Date(a.report_date).getTime(),
                         )
                         .map((progress, index) => (
                           <div
                             key={progress.id}
-                            className="flex items-center justify-between p-3 bg-white rounded-lg shadow-sm border border-slate-200/50"
+                            className="p-3 bg-white rounded-lg shadow-sm border border-slate-200/50"
                           >
-                            <div className="flex items-center space-x-3">
-                              <div
-                                className={`w-12 h-8 rounded-md flex items-center justify-center text-xs font-bold shadow-sm ${
-                                  progress.progress_percentage === 100
-                                    ? "bg-gradient-to-r from-emerald-100 to-green-100 text-emerald-800 border border-emerald-200"
-                                    : progress.progress_percentage >= 75
-                                      ? "bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-800 border border-blue-200"
-                                      : progress.progress_percentage >= 50
-                                        ? "bg-gradient-to-r from-yellow-100 to-amber-100 text-yellow-800 border border-yellow-200"
-                                        : "bg-gradient-to-r from-slate-100 to-gray-100 text-slate-700 border border-slate-200"
-                                }`}
-                              >
-                                {progress.progress_percentage}%
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-3">
+                                <div
+                                  className={`w-12 h-8 rounded-md flex items-center justify-center text-xs font-bold shadow-sm ${
+                                    progress.progress_percentage === 100
+                                      ? "bg-gradient-to-r from-emerald-100 to-green-100 text-emerald-800 border border-emerald-200"
+                                      : progress.progress_percentage >= 75
+                                        ? "bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-800 border border-blue-200"
+                                        : progress.progress_percentage >= 50
+                                          ? "bg-gradient-to-r from-yellow-100 to-amber-100 text-yellow-800 border border-yellow-200"
+                                          : "bg-gradient-to-r from-slate-100 to-gray-100 text-slate-700 border border-slate-200"
+                                  }`}
+                                >
+                                  {progress.progress_percentage}%
+                                </div>
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-800">
+                                    {formatDate(progress.report_date)}
+                                  </p>
+                                  <p className="text-xs text-slate-500">
+                                    by {progress.profiles?.name || "Unknown"}
+                                  </p>
+                                </div>
                               </div>
-                              <div>
-                                <p className="text-sm font-semibold text-slate-800">
-                                  {formatDate(progress.report_date)}
-                                </p>
+                              <div className="text-right">
                                 <p className="text-xs text-slate-500">
-                                  by {progress.profiles?.name || "Unknown"}
+                                  {formatDateTime(progress.created_at)}
                                 </p>
+                                {index === 0 && (
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gradient-to-r from-emerald-100 to-green-100 text-emerald-800 mt-1 border border-emerald-200 font-medium">
+                                    Latest
+                                  </span>
+                                )}
                               </div>
                             </div>
-                            <div className="text-right">
-                              <p className="text-xs text-slate-500">
-                                {formatDateTime(progress.created_at)}
-                              </p>
-                              {index === 0 && (
-                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gradient-to-r from-emerald-100 to-green-100 text-emerald-800 mt-1 border border-emerald-200 font-medium">
-                                  Latest
+                            {progress.evidence_url && (
+                              <a
+                                href={progress.evidence_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-2 flex items-center gap-2 text-xs text-blue-600 hover:text-blue-800"
+                              >
+                                <img
+                                  src={progress.evidence_url}
+                                  alt="Progress evidence"
+                                  className="w-16 h-16 object-cover rounded-md border border-slate-200"
+                                />
+                                <span className="flex items-center gap-1">
+                                  <ImageIcon className="w-3.5 h-3.5" /> View
+                                  full photo
                                 </span>
-                              )}
-                            </div>
+                              </a>
+                            )}
                           </div>
                         ))}
                     </div>
@@ -609,100 +741,161 @@ export default function VerifyWorkDetails() {
             </div>
           </div>
 
-          {/* Verification Sidebar - 1/3 */}
+          {/* Sidebar - 1/3 */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl shadow-lg border border-slate-200/50 sticky top-24 overflow-hidden">
-              <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-green-50">
-                <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5" /> Record Verification
-                </h3>
-                <p className="text-xs text-slate-600 mt-1 font-medium">
-                  Record site verification in system
-                </p>
-              </div>
-
-              <div className="p-4 space-y-4">
-                {/* Verification Date */}
-                <div>
-                  <label
-                    htmlFor="verification-date"
-                    className="block text-sm font-semibold text-slate-700 mb-2"
+            {blockedReason === "approved" ? (
+              <div className="bg-white rounded-xl shadow-lg border border-slate-200/50 sticky top-24 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-green-50 to-emerald-50">
+                  <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-green-600" /> Already
+                    Approved
+                  </h3>
+                </div>
+                <div className="p-4 text-sm text-slate-600 space-y-3">
+                  <p>
+                    This work detail has already been approved and is ready
+                    for BASTP. No further action is needed here.
+                  </p>
+                  <button
+                    onClick={() => navigate("/work-verification")}
+                    className="w-full px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all duration-200 text-sm font-medium"
                   >
-                    Verification Date *
-                  </label>
-                  <input
-                    type="date"
-                    id="verification-date"
-                    value={verificationDate}
-                    onChange={(e) => setVerificationDate(e.target.value)}
-                    max={new Date().toISOString().split("T")[0]}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm shadow-sm bg-white"
-                    required
-                  />
-                  <p className="text-xs text-slate-500 mt-1 font-medium">
-                    Date when work was verified on-site
+                    Back to Verification List
+                  </button>
+                </div>
+              </div>
+            ) : blockedReason === "awaitingRework" ? (
+              <div className="bg-white rounded-xl shadow-lg border border-slate-200/50 sticky top-24 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-amber-50 to-orange-50">
+                  <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                    <Lock className="w-5 h-5 text-amber-600" /> Awaiting Rework
+                  </h3>
+                </div>
+                <div className="p-4 text-sm text-slate-600 space-y-3">
+                  <p>
+                    This item was sent back to the shipyard for rework and
+                    hasn't been resubmitted yet. It'll return to the review
+                    queue automatically once a new progress report is logged.
+                  </p>
+                  <button
+                    onClick={() => navigate("/work-verification")}
+                    className="w-full px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all duration-200 text-sm font-medium"
+                  >
+                    Back to Verification List
+                  </button>
+                </div>
+              </div>
+            ) : !canReview ? (
+              <div className="bg-white rounded-xl shadow-lg border border-slate-200/50 sticky top-24 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-gray-50">
+                  <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                    <Lock className="w-5 h-5 text-slate-500" /> View Only
+                  </h3>
+                </div>
+                <div className="p-4 text-sm text-slate-600 space-y-3">
+                  <p>You don't have permission to review work details.</p>
+                  <button
+                    onClick={() => navigate("/work-verification")}
+                    className="w-full px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all duration-200 text-sm font-medium"
+                  >
+                    Back to Verification List
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl shadow-lg border border-slate-200/50 sticky top-24 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-green-50">
+                  <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5" /> Record Review
+                  </h3>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">
+                    Approve if the work is acceptable, or send it back if it
+                    needs more work
                   </p>
                 </div>
 
-                {/* Verification Notes - NEW FIELD */}
-                <div>
-                  <label
-                    htmlFor="verification-notes"
-                    className="block text-sm font-semibold text-slate-700 mb-2"
-                  >
-                    Verification Notes
-                    <span className="text-slate-400 font-normal ml-1">
-                      (Optional)
-                    </span>
-                  </label>
-                  <textarea
-                    id="verification-notes"
-                    value={verificationNotes}
-                    onChange={(e) => setVerificationNotes(e.target.value)}
-                    rows={4}
-                    maxLength={500}
-                    placeholder="Add any observations, issues found, or additional comments from site verification..."
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm shadow-sm bg-white resize-none"
-                  />
-                  <div className="flex items-center justify-between mt-1">
-                    <p className="text-xs text-slate-500 font-medium">
-                      Additional comments or observations
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      {verificationNotes.length}/500
-                    </p>
+                <div className="p-4 space-y-4">
+                  <div>
+                    <label
+                      htmlFor="verification-date"
+                      className="block text-sm font-semibold text-slate-700 mb-2"
+                    >
+                      Review Date *
+                    </label>
+                    <input
+                      type="date"
+                      id="verification-date"
+                      value={verificationDate}
+                      onChange={(e) => setVerificationDate(e.target.value)}
+                      max={new Date().toISOString().split("T")[0]}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm shadow-sm bg-white"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="verification-notes"
+                      className="block text-sm font-semibold text-slate-700 mb-2"
+                    >
+                      Notes
+                      <span className="text-slate-400 font-normal ml-1">
+                        (required if sending back)
+                      </span>
+                    </label>
+                    <textarea
+                      id="verification-notes"
+                      value={verificationNotes}
+                      onChange={(e) => setVerificationNotes(e.target.value)}
+                      rows={4}
+                      maxLength={500}
+                      placeholder="If sending back, explain what needs to be fixed. Otherwise, add any observations..."
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm shadow-sm bg-white resize-none"
+                    />
+                    <div className="flex items-center justify-end mt-1">
+                      <p className="text-xs text-slate-400">
+                        {verificationNotes.length}/500
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <button
+                      onClick={() => handleSubmitReview("APPROVED")}
+                      disabled={submitting || !verificationDate}
+                      className="w-full bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-3 rounded-lg hover:from-emerald-600 hover:to-green-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm font-semibold shadow-lg"
+                    >
+                      {submitting ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          Recording...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" /> Approve
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleSubmitReview("REJECTED")}
+                      disabled={submitting || !verificationDate}
+                      className="w-full bg-gradient-to-r from-red-500 to-rose-600 text-white px-4 py-3 rounded-lg hover:from-red-600 hover:to-rose-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm font-semibold shadow-lg"
+                    >
+                      <XCircle className="w-4 h-4" /> Send Back for Rework
+                    </button>
+
+                    <button
+                      onClick={() => navigate("/work-verification")}
+                      disabled={submitting}
+                      className="w-full px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-gradient-to-r hover:from-slate-50 hover:to-gray-50 transition-all duration-200 disabled:opacity-50 text-sm font-medium shadow-sm"
+                    >
+                      Cancel
+                    </button>
                   </div>
                 </div>
-
-                {/* Action Buttons */}
-                <div className="space-y-2 pt-2">
-                  <button
-                    onClick={handleVerifyWorkDetails}
-                    disabled={submitting || !verificationDate}
-                    className="w-full bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-3 rounded-lg hover:from-emerald-600 hover:to-green-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm font-semibold shadow-lg"
-                  >
-                    {submitting ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        Recording...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-4 h-4" /> Record Verification
-                      </>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => navigate("/work-verification")}
-                    disabled={submitting}
-                    className="w-full px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-gradient-to-r hover:from-slate-50 hover:to-gray-50 transition-all duration-200 disabled:opacity-50 text-sm font-medium shadow-sm"
-                  >
-                    Cancel
-                  </button>
-                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

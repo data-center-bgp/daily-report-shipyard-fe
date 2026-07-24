@@ -45,7 +45,7 @@ export const OperationsAccess = ({
   children: React.ReactNode;
 }) => (
   <RoleGuard
-    roles={["MASTER", "MANAGER", "PPIC", "PRODUCTION", "OPERATION", "ADMIN"]}
+    roles={["MASTER", "MANAGER", "PPIC", "PRODUCTION", "OP_HEAD", "ADMIN"]}
     children={children}
   />
 );
