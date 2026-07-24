@@ -21,7 +21,6 @@ import {
   Circle,
   AlertTriangle,
   X,
-  Clock,
   RefreshCw,
   Plus,
   Wrench,
@@ -35,7 +34,14 @@ import {
   ArrowDown,
   Search,
   FileCheck,
+  FolderKanban,
 } from "lucide-react";
+
+interface ProjectOption {
+  id: number;
+  project_name: string;
+  vessel_id: number;
+}
 
 interface WorkDetailsWithWorkOrder extends WorkDetails {
   work_order?: WorkOrder & {
@@ -125,10 +131,15 @@ export default function WODetailsTable({
 
   // Filter State
   const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [selectedVesselId, setSelectedVesselId] = useState<number>(() => {
     const vesselId = searchParams.get("vesselId");
     return vesselId ? parseInt(vesselId) : workOrderId || 0;
+  });
+  const [selectedProjectId, setSelectedProjectId] = useState<number>(() => {
+    const projectId = searchParams.get("projectId");
+    return projectId ? parseInt(projectId) : 0;
   });
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<number>(() => {
     const woId = searchParams.get("workOrderId");
@@ -146,6 +157,9 @@ export default function WODetailsTable({
   const [vesselSearchTerm, setVesselSearchTerm] = useState(
     () => searchParams.get("vesselSearch") || "",
   );
+  const [projectSearchTerm, setProjectSearchTerm] = useState(
+    () => searchParams.get("projectSearch") || "",
+  );
   const [workOrderSearchTerm, setWorkOrderSearchTerm] = useState(
     () => searchParams.get("woSearch") || "",
   );
@@ -155,12 +169,15 @@ export default function WODetailsTable({
 
   // Dropdown State
   const [showVesselDropdown, setShowVesselDropdown] = useState(false);
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [showWorkOrderDropdown, setShowWorkOrderDropdown] = useState(false);
   const [loadingVessels, setLoadingVessels] = useState(false);
+  const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingWorkOrders, setLoadingWorkOrders] = useState(false);
 
   // Refs
   const vesselDropdownRef = useRef<HTMLDivElement>(null);
+  const projectDropdownRef = useRef<HTMLDivElement>(null);
   const workOrderDropdownRef = useRef<HTMLDivElement>(null);
 
   // ==================== COMPUTED VALUES ====================
@@ -211,6 +228,15 @@ export default function WODetailsTable({
     );
   }, [vessels, vesselSearchTerm]);
 
+  // Filter projects for search dropdown
+  const filteredProjectsForSearch = useMemo(() => {
+    if (!projectSearchTerm) return projects;
+    const searchLower = projectSearchTerm.toLowerCase();
+    return projects.filter((project) =>
+      project.project_name?.toLowerCase().includes(searchLower),
+    );
+  }, [projects, projectSearchTerm]);
+
   // Filter work orders for search dropdown
   const filteredWorkOrdersForSearch = useMemo(() => {
     if (!workOrderSearchTerm) return workOrders;
@@ -242,24 +268,51 @@ export default function WODetailsTable({
     }
   }, []);
 
-  const fetchWorkOrdersForVessel = useCallback(async (vesselId: number) => {
+  const fetchProjects = useCallback(async () => {
     try {
-      setLoadingWorkOrders(true);
+      setLoadingProjects(true);
       const { data, error } = await supabase
-        .from("work_order")
-        .select("*")
-        .eq("vessel_id", vesselId)
+        .from("projects")
+        .select("id, project_name, vessel_id")
         .is("deleted_at", null)
-        .order("shipyard_wo_number", { ascending: true });
+        .order("project_name", { ascending: true });
 
       if (error) throw error;
-      setWorkOrders(data || []);
+      setProjects(data || []);
     } catch (err) {
-      console.error("Error fetching work orders:", err);
+      console.error("Error fetching projects:", err);
     } finally {
-      setLoadingWorkOrders(false);
+      setLoadingProjects(false);
     }
   }, []);
+
+  // Work orders for the dropdown, scoped to whichever of vessel/project
+  // filters are active (either alone is enough; both together AND).
+  const fetchWorkOrdersForFilters = useCallback(
+    async (vesselIdParam: number, projectIdParam: number) => {
+      try {
+        setLoadingWorkOrders(true);
+        let query = supabase
+          .from("work_order")
+          .select("*")
+          .is("deleted_at", null)
+          .order("shipyard_wo_number", { ascending: true });
+
+        if (vesselIdParam > 0) query = query.eq("vessel_id", vesselIdParam);
+        if (projectIdParam > 0) query = query.eq("project_id", projectIdParam);
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+        setWorkOrders(data || []);
+      } catch (err) {
+        console.error("Error fetching work orders:", err);
+      } finally {
+        setLoadingWorkOrders(false);
+      }
+    },
+    [],
+  );
 
   const fetchWorkOrderDetails = useCallback(async (workOrderId: number) => {
     try {
@@ -312,15 +365,21 @@ export default function WODetailsTable({
         baseQuery = baseQuery.eq("work_order_id", workOrderId);
       } else if (selectedWorkOrderId > 0) {
         baseQuery = baseQuery.eq("work_order_id", selectedWorkOrderId);
-      } else if (selectedVesselId > 0) {
-        const { data: vesselWorkOrders } = await supabase
+      } else if (selectedVesselId > 0 || selectedProjectId > 0) {
+        let woQuery = supabase
           .from("work_order")
           .select("id")
-          .eq("vessel_id", selectedVesselId)
           .is("deleted_at", null);
+        if (selectedVesselId > 0) {
+          woQuery = woQuery.eq("vessel_id", selectedVesselId);
+        }
+        if (selectedProjectId > 0) {
+          woQuery = woQuery.eq("project_id", selectedProjectId);
+        }
+        const { data: matchingWorkOrders } = await woQuery;
 
-        if (vesselWorkOrders && vesselWorkOrders.length > 0) {
-          const workOrderIds = vesselWorkOrders.map((wo) => wo.id);
+        if (matchingWorkOrders && matchingWorkOrders.length > 0) {
+          const workOrderIds = matchingWorkOrders.map((wo) => wo.id);
           baseQuery = baseQuery.in("work_order_id", workOrderIds);
         } else {
           setWorkDetails([]);
@@ -374,6 +433,7 @@ export default function WODetailsTable({
     }
   }, [
     selectedVesselId,
+    selectedProjectId,
     selectedWorkOrderId,
     workOrderId,
     sortField,
@@ -439,7 +499,7 @@ export default function WODetailsTable({
       page: 1,
     });
 
-    fetchWorkOrdersForVessel(vessel.id);
+    fetchWorkOrdersForFilters(vessel.id, selectedProjectId);
   };
 
   const handleClearVesselSearch = () => {
@@ -448,7 +508,6 @@ export default function WODetailsTable({
     setShowVesselDropdown(false);
     setSelectedWorkOrderId(0);
     setWorkOrderSearchTerm("");
-    setWorkOrders([]);
     setCurrentPage(1);
     setSelectedWorkOrderDetails(null);
 
@@ -459,6 +518,65 @@ export default function WODetailsTable({
       woSearch: null,
       page: 1,
     });
+
+    if (selectedProjectId > 0) {
+      fetchWorkOrdersForFilters(0, selectedProjectId);
+    } else {
+      setWorkOrders([]);
+    }
+  };
+
+  const handleProjectSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setProjectSearchTerm(e.target.value);
+    setShowProjectDropdown(true);
+    if (selectedProjectId) {
+      setSelectedProjectId(0);
+      setSelectedWorkOrderId(0);
+      setWorkOrders([]);
+    }
+  };
+
+  const handleProjectSelectFromDropdown = (project: ProjectOption) => {
+    setSelectedProjectId(project.id);
+    setProjectSearchTerm(project.project_name);
+    setShowProjectDropdown(false);
+    setSelectedWorkOrderId(0);
+    setWorkOrderSearchTerm("");
+    setCurrentPage(1);
+
+    updateUrlParams({
+      projectId: project.id,
+      projectSearch: project.project_name,
+      workOrderId: null,
+      woSearch: null,
+      page: 1,
+    });
+
+    fetchWorkOrdersForFilters(selectedVesselId, project.id);
+  };
+
+  const handleClearProjectSearch = () => {
+    setProjectSearchTerm("");
+    setSelectedProjectId(0);
+    setShowProjectDropdown(false);
+    setSelectedWorkOrderId(0);
+    setWorkOrderSearchTerm("");
+    setCurrentPage(1);
+    setSelectedWorkOrderDetails(null);
+
+    updateUrlParams({
+      projectId: null,
+      projectSearch: null,
+      workOrderId: null,
+      woSearch: null,
+      page: 1,
+    });
+
+    if (selectedVesselId > 0) {
+      fetchWorkOrdersForFilters(selectedVesselId, 0);
+    } else {
+      setWorkOrders([]);
+    }
   };
 
   const handleWorkOrderSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -525,6 +643,8 @@ export default function WODetailsTable({
     const filterState = {
       vesselId: selectedVesselId,
       vesselSearch: vesselSearchTerm,
+      projectId: selectedProjectId,
+      projectSearch: projectSearchTerm,
       workOrderId: selectedWorkOrderId,
       woSearch: workOrderSearchTerm,
       search: workDetailsSearchTerm,
@@ -551,6 +671,8 @@ export default function WODetailsTable({
     const filterState = {
       vesselId: selectedVesselId,
       vesselSearch: vesselSearchTerm,
+      projectId: selectedProjectId,
+      projectSearch: projectSearchTerm,
       workOrderId: selectedWorkOrderId,
       woSearch: workOrderSearchTerm,
       search: workDetailsSearchTerm,
@@ -658,28 +780,6 @@ export default function WODetailsTable({
     });
   };
 
-  const getStatus = (detail: WorkDetailsWithWorkOrder) => {
-    if (detail.actual_close_date) {
-      return {
-        text: "Completed",
-        color: "bg-green-100 text-green-800 border-green-200",
-        icon: <CheckCircle2 className="w-4 h-4" />,
-      };
-    } else if (detail.actual_start_date) {
-      return {
-        text: "In Progress",
-        color: "bg-blue-100 text-blue-800 border-blue-200",
-        icon: <Clock className="w-4 h-4" />,
-      };
-    } else {
-      return {
-        text: "Not Ready",
-        color: "bg-red-100 text-red-600 border-red-200",
-        icon: <Circle className="w-4 h-4 text-red-600 fill-red-600" />,
-      };
-    }
-  };
-
   const getProgressColor = (progress: number) => {
     if (progress >= 100) return "bg-green-500";
     if (progress >= 75) return "bg-blue-500";
@@ -722,6 +822,12 @@ export default function WODetailsTable({
         setShowVesselDropdown(false);
       }
       if (
+        projectDropdownRef.current &&
+        !projectDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowProjectDropdown(false);
+      }
+      if (
         workOrderDropdownRef.current &&
         !workOrderDropdownRef.current.contains(event.target as Node)
       ) {
@@ -738,6 +844,7 @@ export default function WODetailsTable({
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setShowVesselDropdown(false);
+        setShowProjectDropdown(false);
         setShowWorkOrderDropdown(false);
       }
     };
@@ -749,8 +856,9 @@ export default function WODetailsTable({
   useEffect(() => {
     if (!workOrderId) {
       fetchVessels();
+      fetchProjects();
     }
-  }, [workOrderId, fetchVessels]);
+  }, [workOrderId, fetchVessels, fetchProjects]);
 
   useEffect(() => {
     if (workOrderId) {
@@ -794,14 +902,30 @@ export default function WODetailsTable({
             setCurrentPage(navigationState.page);
           }
 
-          // Restore vessel and work order filters
-          if (navigationState.vesselId) {
-            console.log("Restoring vessel:", navigationState.vesselId);
-            setSelectedVesselId(navigationState.vesselId);
-            setVesselSearchTerm(navigationState.vesselSearch || "");
+          // Restore project filter
+          if (navigationState.projectId) {
+            console.log("Restoring project:", navigationState.projectId);
+            setSelectedProjectId(navigationState.projectId);
+            setProjectSearchTerm(navigationState.projectSearch || "");
+          }
 
-            // Fetch work orders for the vessel
-            await fetchWorkOrdersForVessel(navigationState.vesselId);
+          // Restore vessel and work order filters
+          if (navigationState.vesselId || navigationState.projectId) {
+            console.log(
+              "Restoring vessel/project:",
+              navigationState.vesselId,
+              navigationState.projectId,
+            );
+            if (navigationState.vesselId) {
+              setSelectedVesselId(navigationState.vesselId);
+              setVesselSearchTerm(navigationState.vesselSearch || "");
+            }
+
+            // Fetch work orders for the restored vessel and/or project
+            await fetchWorkOrdersForFilters(
+              navigationState.vesselId || 0,
+              navigationState.projectId || 0,
+            );
 
             if (navigationState.workOrderId) {
               console.log("Restoring work order:", navigationState.workOrderId);
@@ -833,6 +957,7 @@ export default function WODetailsTable({
             // Force refetch by directly calling the fetch with the restored values
             fetchWorkDetailsWithFilters(
               navigationState.vesselId || 0,
+              navigationState.projectId || 0,
               navigationState.workOrderId || 0,
               navigationState.sortField || "planned_start_date",
               navigationState.sortDirection || "asc",
@@ -853,6 +978,7 @@ export default function WODetailsTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     selectedVesselId,
+    selectedProjectId,
     selectedWorkOrderId,
     sortField,
     sortDirection,
@@ -862,6 +988,7 @@ export default function WODetailsTable({
   const fetchWorkDetailsWithFilters = useCallback(
     async (
       vesselIdParam: number,
+      projectIdParam: number,
       workOrderIdParam: number,
       sortFieldParam: typeof sortField,
       sortDirectionParam: "asc" | "desc",
@@ -894,15 +1021,21 @@ export default function WODetailsTable({
           baseQuery = baseQuery.eq("work_order_id", workOrderId);
         } else if (workOrderIdParam > 0) {
           baseQuery = baseQuery.eq("work_order_id", workOrderIdParam);
-        } else if (vesselIdParam > 0) {
-          const { data: vesselWorkOrders } = await supabase
+        } else if (vesselIdParam > 0 || projectIdParam > 0) {
+          let woQuery = supabase
             .from("work_order")
             .select("id")
-            .eq("vessel_id", vesselIdParam)
             .is("deleted_at", null);
+          if (vesselIdParam > 0) {
+            woQuery = woQuery.eq("vessel_id", vesselIdParam);
+          }
+          if (projectIdParam > 0) {
+            woQuery = woQuery.eq("project_id", projectIdParam);
+          }
+          const { data: matchingWorkOrders } = await woQuery;
 
-          if (vesselWorkOrders && vesselWorkOrders.length > 0) {
-            const workOrderIds = vesselWorkOrders.map((wo) => wo.id);
+          if (matchingWorkOrders && matchingWorkOrders.length > 0) {
+            const workOrderIds = matchingWorkOrders.map((wo) => wo.id);
             baseQuery = baseQuery.in("work_order_id", workOrderIds);
           } else {
             setWorkDetails([]);
@@ -970,8 +1103,20 @@ export default function WODetailsTable({
       });
     }
 
-    if (selectedVesselId > 0 && workOrders.length === 0) {
-      fetchWorkOrdersForVessel(selectedVesselId);
+    if (selectedProjectId > 0 && projects.length === 0) {
+      fetchProjects().then(() => {
+        const project = projects.find((p) => p.id === selectedProjectId);
+        if (project && !projectSearchTerm) {
+          setProjectSearchTerm(project.project_name);
+        }
+      });
+    }
+
+    if (
+      (selectedVesselId > 0 || selectedProjectId > 0) &&
+      workOrders.length === 0
+    ) {
+      fetchWorkOrdersForFilters(selectedVesselId, selectedProjectId);
     }
 
     if (selectedWorkOrderId > 0 && !selectedWorkOrderDetails) {
@@ -979,13 +1124,17 @@ export default function WODetailsTable({
     }
   }, [
     selectedVesselId,
+    selectedProjectId,
     selectedWorkOrderId,
     vessels.length,
+    projects.length,
     workOrders.length,
     selectedWorkOrderDetails,
     vesselSearchTerm,
+    projectSearchTerm,
     fetchVessels,
-    fetchWorkOrdersForVessel,
+    fetchProjects,
+    fetchWorkOrdersForFilters,
     fetchWorkOrderDetails,
   ]);
 
@@ -1031,7 +1180,6 @@ export default function WODetailsTable({
   );
 
   const renderTableRow = (detail: WorkDetailsWithWorkOrder) => {
-    const status = getStatus(detail);
     const isExpanded = expandedRows.has(detail.id);
 
     return (
@@ -1058,13 +1206,6 @@ export default function WODetailsTable({
             <div className="text-sm">
               <div className="font-medium text-gray-900">
                 {detail.work_scope?.work_scope || "N/A"}
-              </div>
-              <div className="flex flex-wrap gap-1 mt-1">
-                <span
-                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${status.color}`}
-                >
-                  {status.icon} {status.text}
-                </span>
               </div>
             </div>
           </td>
@@ -1114,17 +1255,6 @@ export default function WODetailsTable({
               {!detail.spk_number && !detail.spkk_number && (
                 <span className="text-gray-400 text-xs">Not set</span>
               )}
-            </div>
-          </td>
-
-          <td className="px-6 py-4 whitespace-nowrap">
-            <div className="text-sm">
-              <div className="font-bold text-blue-900 text-base">
-                {detail.quantity || 0}
-              </div>
-              <div className="text-xs text-blue-700 font-medium">
-                {detail.uom || "N/A"}
-              </div>
             </div>
           </td>
 
@@ -1586,7 +1716,55 @@ export default function WODetailsTable({
     return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div className="space-y-4">
+          <p className="text-xs text-gray-500">
+            Filter by project and/or vessel — either one is enough to narrow
+            down the work order list below.
+          </p>
           <div className="flex flex-col sm:flex-row gap-4">
+            {/* Project Filter */}
+            <div className="flex-1 relative" ref={projectDropdownRef}>
+              <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
+                <FolderKanban className="w-4 h-4" /> Project
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={projectSearchTerm}
+                  onChange={handleProjectSearch}
+                  onFocus={() => setShowProjectDropdown(true)}
+                  placeholder="Search project..."
+                  disabled={loadingProjects}
+                  className="w-full px-3 py-2 pr-8 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                />
+                {projectSearchTerm && (
+                  <button
+                    onClick={handleClearProjectSearch}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {showProjectDropdown && filteredProjectsForSearch.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {filteredProjectsForSearch.map((project) => (
+                    <div
+                      key={project.id}
+                      onClick={() => handleProjectSelectFromDropdown(project)}
+                      className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                        selectedProjectId === project.id ? "bg-blue-100" : ""
+                      }`}
+                    >
+                      <div className="font-medium text-gray-900 text-sm">
+                        {project.project_name}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Vessel Filter */}
             <div className="flex-1 relative" ref={vesselDropdownRef}>
               <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
@@ -1646,11 +1824,14 @@ export default function WODetailsTable({
                   onChange={handleWorkOrderSearch}
                   onFocus={() => setShowWorkOrderDropdown(true)}
                   placeholder={
-                    selectedVesselId === 0
-                      ? "Select vessel first"
+                    selectedVesselId === 0 && selectedProjectId === 0
+                      ? "Select project or vessel first"
                       : "Search work order..."
                   }
-                  disabled={loadingWorkOrders || selectedVesselId === 0}
+                  disabled={
+                    loadingWorkOrders ||
+                    (selectedVesselId === 0 && selectedProjectId === 0)
+                  }
                   className="w-full px-3 py-2 pr-8 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
                 {workOrderSearchTerm && (
@@ -1664,7 +1845,7 @@ export default function WODetailsTable({
               </div>
 
               {showWorkOrderDropdown &&
-                selectedVesselId > 0 &&
+                (selectedVesselId > 0 || selectedProjectId > 0) &&
                 filteredWorkOrdersForSearch.length > 0 && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                     {filteredWorkOrdersForSearch.map((workOrder) => (
@@ -1740,8 +1921,8 @@ export default function WODetailsTable({
             ? "Add work details to break down this work order into manageable tasks."
             : selectedWorkOrderId > 0
               ? "No work details found for the selected work order."
-              : selectedVesselId > 0
-                ? "No work details found for the selected vessel."
+              : selectedVesselId > 0 || selectedProjectId > 0
+                ? "No work details found for the selected project/vessel."
                 : "Create work details to track and manage work tasks."}
       </p>
       {!workDetailsSearchTerm && !isReadOnly && (
