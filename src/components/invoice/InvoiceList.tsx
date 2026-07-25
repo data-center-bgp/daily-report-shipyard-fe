@@ -84,11 +84,6 @@ export default function InvoiceList() {
               )
             )
           ),
-          profiles:user_id (
-            id,
-            name,
-            email
-          ),
           invoice_work_details (
             id,
             work_details_id,
@@ -160,6 +155,13 @@ export default function InvoiceList() {
     fetchInvoices();
     fetchReadyBASTPs();
   }, [fetchInvoices, fetchReadyBASTPs]);
+
+  // Otherwise a search/filter that narrows the results while on page 2+ can
+  // land on an empty page and render the "No invoices found" empty state
+  // even though matches exist on page 1.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
 
   // Filtering
   const filteredInvoices = useMemo(() => {
@@ -242,12 +244,13 @@ export default function InvoiceList() {
     bastpNumber: string,
   ) => {
     if (!storagePath) {
-      alert("No document available");
+      setError("No document available");
       return;
     }
 
     try {
       setViewingDocument(true);
+      setError(null);
       setCurrentBastpNumber(bastpNumber);
       setCurrentStoragePath(storagePath);
 
@@ -263,7 +266,7 @@ export default function InvoiceList() {
       setShowDocumentModal(true);
     } catch (err) {
       console.error("Error accessing document:", err);
-      alert("❌ Failed to view document. Please try again.");
+      setError("Failed to view document. Please try again.");
     } finally {
       setViewingDocument(false);
     }

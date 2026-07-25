@@ -31,9 +31,13 @@ export default function InvoiceDetails() {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [profilesMap, setProfilesMap] = useState<
+    Record<number, { id: number; name: string; email: string }>
+  >({});
 
   // Document viewer states
   const [viewingDocument, setViewingDocument] = useState(false);
+  const [documentError, setDocumentError] = useState<string | null>(null);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
 
@@ -84,11 +88,6 @@ export default function InvoiceDetails() {
               )
             )
           ),
-          profiles:user_id (
-            id,
-            name,
-            email
-          ),
           invoice_work_details (
             id,
             work_details_id,
@@ -122,11 +121,30 @@ export default function InvoiceDetails() {
         `,
         )
         .eq("id", invoiceId)
+        .is("deleted_at", null)
         .single();
 
       if (fetchError) throw fetchError;
 
       setInvoice(data);
+
+      // Names come from the get_all_profiles RPC rather than an embedded
+      // profiles join — RLS silently nulls out a direct join to another
+      // user's profile row, which left "Created By" blank for anyone but
+      // the invoice's own creator (same bug already fixed on BASTPDetails).
+      const { data: allProfiles, error: profilesError } =
+        await supabase.rpc("get_all_profiles");
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+      }
+      const map: Record<number, { id: number; name: string; email: string }> =
+        {};
+      (allProfiles || []).forEach(
+        (profile: { id: number; name: string; email: string }) => {
+          map[profile.id] = profile;
+        },
+      );
+      setProfilesMap(map);
     } catch (err) {
       console.error("Error fetching invoice:", err);
       setError(err instanceof Error ? err.message : "Failed to load invoice");
@@ -195,12 +213,13 @@ export default function InvoiceDetails() {
   // View document with modal
   const handleViewDocument = async () => {
     if (!invoice?.bastp?.storage_path) {
-      alert("No BASTP document available");
+      setDocumentError("No BASTP document available");
       return;
     }
 
     try {
       setViewingDocument(true);
+      setDocumentError(null);
 
       const { data, error: signedUrlError } = await supabase.storage
         .from("bastp")
@@ -212,7 +231,7 @@ export default function InvoiceDetails() {
       setShowDocumentModal(true);
     } catch (err) {
       console.error("Error accessing document:", err);
-      alert("❌ Failed to view document. Please try again.");
+      setDocumentError("Failed to view document. Please try again.");
     } finally {
       setViewingDocument(false);
     }
@@ -301,6 +320,12 @@ export default function InvoiceDetails() {
           )}
         </div>
       </div>
+
+      {documentError && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-700 text-sm">{documentError}</p>
+        </div>
+      )}
 
       {/* Payment Status Banner */}
       <div
@@ -756,7 +781,7 @@ export default function InvoiceDetails() {
                     Grand Total (After Tax)
                   </h3>
                   <p className="text-xs text-gray-600 mt-1">
-                    Subtotal + PPN + PPh 23
+                    Subtotal + PPN - PPh 23
                   </p>
                 </div>
                 <div className="text-right">
@@ -870,9 +895,11 @@ export default function InvoiceDetails() {
             </h2>
             <div className="space-y-1">
               <p className="font-medium text-gray-900">
-                {invoice.profiles?.name}
+                {profilesMap[invoice.user_id]?.name || "Unknown"}
               </p>
-              <p className="text-sm text-gray-600">{invoice.profiles?.email}</p>
+              <p className="text-sm text-gray-600">
+                {profilesMap[invoice.user_id]?.email}
+              </p>
               <p className="text-xs text-gray-500 mt-2">
                 {formatDate(invoice.created_at)}
               </p>

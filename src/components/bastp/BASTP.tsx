@@ -168,6 +168,7 @@ export default function BASTP() {
             .from("invoice_details")
             .select("id")
             .eq("bastp_id", bastp.id)
+            .is("deleted_at", null)
             .limit(1);
 
           if (!invoiceError && invoices && invoices.length > 0) {

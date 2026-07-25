@@ -43,10 +43,15 @@ export default function ManageInvoice() {
     invoiceId?: string;
   }>();
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { profile, isReadOnly, canAccess } = useAuth();
 
   const isEditMode = !!invoiceId;
   const isCreateMode = !!bastpId;
+  // FEATURE_ACCESS.invoices = MASTER/FINANCE/MANAGER, but MANAGER is
+  // read-only everywhere — this page previously had no permission check at
+  // all, so a MANAGER (or anyone who knew a bastp/invoice id) could hit this
+  // route directly and write.
+  const canWrite = canAccess("invoices") && !isReadOnly;
 
   const [bastp, setBastp] = useState<BASTPWithDetails | null>(null);
   const [existingInvoice, setExistingInvoice] = useState<Invoice | null>(null);
@@ -82,6 +87,12 @@ export default function ManageInvoice() {
   const [generalServicePrices, setGeneralServicePrices] = useState<
     GeneralServicePrice[]
   >([]);
+
+  // Once an invoice is marked paid, pricing shouldn't silently drift away
+  // from the amount actually collected. Keyed off the live checkbox (not the
+  // originally-loaded value) so unchecking "Mark as Paid" first — to
+  // correct a mistake — deliberately unlocks pricing again.
+  const pricingLocked = isEditMode && formData.payment_status;
 
   useEffect(() => {
     if (isEditMode && invoiceId) {
@@ -180,6 +191,7 @@ export default function ManageInvoice() {
         `,
         )
         .eq("id", invoiceId)
+        .is("deleted_at", null)
         .single();
 
       if (fetchError) throw fetchError;
@@ -310,6 +322,7 @@ export default function ManageInvoice() {
       `,
         )
         .eq("id", bastpId)
+        .is("deleted_at", null)
         .single();
 
       if (fetchError) throw fetchError;
@@ -434,11 +447,14 @@ export default function ManageInvoice() {
   };
 
   const calculatePPN = () => {
-    return calculateTotalPriceBefore() * 0.11; // 11% PPN
+    // Rounded so the persisted total always reconciles with the displayed
+    // figures — unrounded floats here would let fractional Rupiah drift into
+    // the DB while the UI (minimumFractionDigits: 0) hides it.
+    return Math.round(calculateTotalPriceBefore() * 0.11); // 11% PPN
   };
 
   const calculatePPH23 = () => {
-    return calculateTotalPriceBefore() * 0.02; // 2% PPh 23
+    return Math.round(calculateTotalPriceBefore() * 0.02); // 2% PPh 23
   };
 
   const calculateTotalPriceAfter = () => {
@@ -448,8 +464,20 @@ export default function ManageInvoice() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!canWrite) {
+      setError("You don't have permission to save invoices.");
+      return;
+    }
+
     if (!profile) {
       setError("User not authenticated");
+      return;
+    }
+
+    if (pricingLocked) {
+      setError(
+        "This invoice is marked as paid — pricing is locked. Uncheck \"Mark as Paid\" to make changes.",
+      );
       return;
     }
 
@@ -475,6 +503,29 @@ export default function ManageInvoice() {
     try {
       setSaving(true);
       setError(null);
+
+      // Two saved invoices sharing a number would be confusing for finance
+      // reconciliation — blank numbers stay allowed (existing "Draft
+      // Invoice" convention on the details/print pages).
+      if (formData.invoice_number) {
+        let dupQuery = supabase
+          .from("invoice_details")
+          .select("id")
+          .eq("invoice_number", formData.invoice_number)
+          .is("deleted_at", null);
+        if (isEditMode && invoiceId) {
+          dupQuery = dupQuery.neq("id", invoiceId);
+        }
+        const { data: duplicates, error: dupError } = await dupQuery.limit(1);
+        if (dupError) throw dupError;
+        if (duplicates && duplicates.length > 0) {
+          setError(
+            `Invoice number "${formData.invoice_number}" is already used by another invoice.`,
+          );
+          setSaving(false);
+          return;
+        }
+      }
 
       if (isEditMode && invoiceId) {
         // UPDATE EXISTING INVOICE
@@ -528,19 +579,25 @@ export default function ManageInvoice() {
           if (insertError) throw insertError;
         }
 
-        // Update general services in BASTP
-        for (const service of generalServicePrices) {
-          const { error: serviceError } = await supabase
-            .from("general_services")
-            .update({
-              unit_price: service.unit_price,
-              payment_price: service.payment_price,
-            })
-            .eq("bastp_id", bastp?.id)
-            .eq("service_type_id", service.service_type_id);
-
-          if (serviceError) throw serviceError;
-        }
+        // Update general services in BASTP — batched instead of a
+        // sequential per-row loop, so a mid-loop failure can't leave some
+        // services priced from this save and others still stale.
+        const serviceUpdateResults = await Promise.all(
+          generalServicePrices.map((service) =>
+            supabase
+              .from("general_services")
+              .update({
+                unit_price: service.unit_price,
+                payment_price: service.payment_price,
+              })
+              .eq("bastp_id", bastp?.id)
+              .eq("service_type_id", service.service_type_id),
+          ),
+        );
+        const serviceUpdateError = serviceUpdateResults.find(
+          (r) => r.error,
+        )?.error;
+        if (serviceUpdateError) throw serviceUpdateError;
 
         // Log the activity for update
         await ActivityLogService.logActivity({
@@ -556,6 +613,33 @@ export default function ManageInvoice() {
         setTimeout(() => navigate(`/invoices/${invoiceId}`), 1500);
       } else if (isCreateMode && bastpId) {
         // CREATE NEW INVOICE
+        // Claim the BASTP before creating the invoice row, conditioned on it
+        // still being READY_FOR_INVOICE/not-yet-invoiced — if two people open
+        // this page for the same BASTP at once, only the first update here
+        // actually matches a row, so the second aborts instead of both
+        // succeeding and producing two invoices for one BASTP.
+        const { data: claimedBastp, error: claimError } = await supabase
+          .from("bastp")
+          .update({
+            is_invoiced: true,
+            invoiced_date: new Date().toISOString(),
+            status: "INVOICED",
+          })
+          .eq("id", bastpId)
+          .eq("status", "READY_FOR_INVOICE")
+          .eq("is_invoiced", false)
+          .select("id")
+          .maybeSingle();
+
+        if (claimError) throw claimError;
+        if (!claimedBastp) {
+          setError(
+            "This BASTP was already invoiced (possibly by someone else just now). Please refresh and check the Invoices list.",
+          );
+          setSaving(false);
+          return;
+        }
+
         const { data: invoiceData, error: invoiceError } = await supabase
           .from("invoice_details")
           .insert({
@@ -600,33 +684,24 @@ export default function ManageInvoice() {
           if (detailsError) throw detailsError;
         }
 
-        // Update general services in BASTP
-        for (const service of generalServicePrices) {
-          const { error: serviceError } = await supabase
-            .from("general_services")
-            .update({
-              unit_price: service.unit_price,
-              payment_price: service.payment_price,
-            })
-            .eq("bastp_id", bastpId)
-            .eq("service_type_id", service.service_type_id);
-
-          if (serviceError) throw serviceError;
-        }
-
-        // Update BASTP status to INVOICED — set directly here rather than
-        // relying solely on BASTP.tsx's polling check, which only runs
-        // when someone happens to have the BASTP list page open.
-        const { error: bastpUpdateError } = await supabase
-          .from("bastp")
-          .update({
-            is_invoiced: true,
-            invoiced_date: new Date().toISOString(),
-            status: "INVOICED",
-          })
-          .eq("id", bastpId);
-
-        if (bastpUpdateError) throw bastpUpdateError;
+        // Update general services in BASTP — batched (see the edit branch
+        // above for why a sequential loop isn't used here).
+        const serviceUpdateResults = await Promise.all(
+          generalServicePrices.map((service) =>
+            supabase
+              .from("general_services")
+              .update({
+                unit_price: service.unit_price,
+                payment_price: service.payment_price,
+              })
+              .eq("bastp_id", bastpId)
+              .eq("service_type_id", service.service_type_id),
+          ),
+        );
+        const serviceUpdateError = serviceUpdateResults.find(
+          (r) => r.error,
+        )?.error;
+        if (serviceUpdateError) throw serviceUpdateError;
 
         // Log the activity for create
         await ActivityLogService.logActivity({
@@ -650,6 +725,18 @@ export default function ManageInvoice() {
 
   const handleDelete = async () => {
     if (!existingInvoice || !invoiceId) return;
+
+    if (!canWrite) {
+      setError("You don't have permission to delete invoices.");
+      return;
+    }
+
+    if (existingInvoice.payment_status) {
+      const confirmedPaid = window.confirm(
+        "⚠️ This invoice is marked as PAID. Deleting it removes the payment record entirely and cannot be undone. Are you absolutely sure?",
+      );
+      if (!confirmedPaid) return;
+    }
 
     const confirmed = window.confirm(
       "Are you sure you want to delete this invoice? This action cannot be undone.",
@@ -684,6 +771,17 @@ export default function ManageInvoice() {
           .eq("id", existingInvoice.bastp_id);
 
         if (bastpError) throw bastpError;
+
+        // Reset the priced amounts on general_services too — they live
+        // directly on rows tied to the BASTP (not a per-invoice snapshot),
+        // so without this a BASTP that's back to READY_FOR_INVOICE would
+        // still show phantom charges from the invoice that was just deleted.
+        const { error: gsResetError } = await supabase
+          .from("general_services")
+          .update({ unit_price: 0, payment_price: 0 })
+          .eq("bastp_id", existingInvoice.bastp_id);
+
+        if (gsResetError) throw gsResetError;
       }
 
       // Log the activity for delete
@@ -762,6 +860,33 @@ export default function ManageInvoice() {
             Loading {isEditMode ? "invoice" : "BASTP"} details...
           </span>
         </div>
+      </div>
+    );
+  }
+
+  if (!canWrite) {
+    return (
+      <div className="p-8">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 flex items-start gap-3">
+          <Lock className="w-6 h-6 text-yellow-600 flex-shrink-0" />
+          <div>
+            <p className="text-yellow-900 font-medium">
+              You don't have permission to {isEditMode ? "edit" : "create"}{" "}
+              invoices.
+            </p>
+            <p className="text-sm text-yellow-700 mt-1">
+              {isReadOnly
+                ? "Your role has view-only access to invoices."
+                : "Your role doesn't have access to invoices."}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => navigate("/invoices")}
+          className="mt-4 flex items-center gap-2 text-blue-600 hover:text-blue-800"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Invoices
+        </button>
       </div>
     );
   }
@@ -1090,6 +1215,12 @@ export default function ManageInvoice() {
                   Enter unit price (per day) for each service. Payment price
                   will be calculated automatically (Unit Price × Total Days)
                 </p>
+                {pricingLocked && (
+                  <p className="text-sm text-yellow-700 mt-2 flex items-center gap-1">
+                    <Lock className="w-3.5 h-3.5" /> Pricing is locked because
+                    this invoice is marked as paid.
+                  </p>
+                )}
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -1169,7 +1300,8 @@ export default function ManageInvoice() {
                                     numericValue,
                                   );
                                 }}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right"
+                                disabled={pricingLocked}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right disabled:bg-gray-100 disabled:cursor-not-allowed"
                                 placeholder="0"
                               />
                             </td>
@@ -1208,6 +1340,12 @@ export default function ManageInvoice() {
               Enter unit price for each work detail. Payment price will be
               calculated automatically (Unit Price × Quantity)
             </p>
+            {pricingLocked && (
+              <p className="text-sm text-yellow-700 mt-2 flex items-center gap-1">
+                <Lock className="w-3.5 h-3.5" /> Pricing is locked because
+                this invoice is marked as paid.
+              </p>
+            )}
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -1305,7 +1443,8 @@ export default function ManageInvoice() {
                                 numericValue,
                               );
                             }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right"
+                            disabled={pricingLocked}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right disabled:bg-gray-100 disabled:cursor-not-allowed"
                             placeholder="0"
                           />
                         </td>
@@ -1448,7 +1587,14 @@ export default function ManageInvoice() {
             </button>
             <button
               type="submit"
-              disabled={saving || calculateTotalPriceBefore() === 0}
+              disabled={
+                saving || pricingLocked || calculateTotalPriceBefore() === 0
+              }
+              title={
+                pricingLocked
+                  ? 'Uncheck "Mark as Paid" to make changes'
+                  : undefined
+              }
               className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {saving ? (
