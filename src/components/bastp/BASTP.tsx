@@ -165,7 +165,7 @@ export default function BASTP() {
         // Check if there's an invoice with this bastp_id
         if (bastp.status === "READY_FOR_INVOICE") {
           const { data: invoices, error: invoiceError } = await supabase
-            .from("invoice")
+            .from("invoice_details")
             .select("id")
             .eq("bastp_id", bastp.id)
             .limit(1);
@@ -292,7 +292,7 @@ export default function BASTP() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="bg-white p-4 rounded-lg shadow border-l-4 border-gray-500">
           <p className="text-xs font-medium text-gray-600">Total</p>
           <p className="text-2xl font-bold text-gray-900">{statusCounts.ALL}</p>
@@ -313,6 +313,12 @@ export default function BASTP() {
           <p className="text-xs font-medium text-gray-600">Ready for Invoice</p>
           <p className="text-2xl font-bold text-gray-900">
             {statusCounts.READY_FOR_INVOICE}
+          </p>
+        </div>
+        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-emerald-500">
+          <p className="text-xs font-medium text-gray-600">Invoiced</p>
+          <p className="text-2xl font-bold text-gray-900">
+            {statusCounts.INVOICED}
           </p>
         </div>
       </div>

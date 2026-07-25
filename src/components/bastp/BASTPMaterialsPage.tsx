@@ -18,10 +18,11 @@ interface WorkDetail {
   material_count?: number;
 }
 
-interface BASTBInfo {
+interface BastpInfo {
   id: number;
   number: string;
   created_at: string;
+  status: string;
   vessel?: {
     id: number;
     name: string;
@@ -31,21 +32,26 @@ interface BASTBInfo {
 export default function BASTPMaterialsPage() {
   const { bastpId } = useParams<{ bastpId: string }>();
   const navigate = useNavigate();
-  const [bastp, setBastp] = useState<BASTBInfo | null>(null);
+  const [bastp, setBastp] = useState<BastpInfo | null>(null);
   const [workDetails, setWorkDetails] = useState<WorkDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedWorkDetail, setSelectedWorkDetail] =
     useState<WorkDetail | null>(null);
 
+  // Once a BASTP is ready for (or already) invoicing, its materials are
+  // financially committed and shouldn't change anymore.
+  const isLocked =
+    bastp?.status === "READY_FOR_INVOICE" || bastp?.status === "INVOICED";
+
   useEffect(() => {
     if (bastpId) {
-      fetchBASTBInfo();
+      fetchBastpInfo();
       fetchWorkDetails();
     }
   }, [bastpId]);
 
-  const fetchBASTBInfo = async () => {
+  const fetchBastpInfo = async () => {
     try {
       const { data, error: fetchError } = await supabase
         .from("bastp")
@@ -54,6 +60,7 @@ export default function BASTPMaterialsPage() {
           id,
           number,
           created_at,
+          status,
           vessel:vessel_id (
             id,
             name
@@ -61,6 +68,7 @@ export default function BASTPMaterialsPage() {
         `,
         )
         .eq("id", bastpId)
+        .is("deleted_at", null)
         .single();
 
       if (fetchError) throw fetchError;
@@ -109,24 +117,36 @@ export default function BASTPMaterialsPage() {
         }
       });
 
-      // Fetch material counts for each work detail
-      const workDetailsWithCounts = await Promise.all(
-        workDetailsArray.map(async (wd) => {
-          const { count, error: countError } = await supabase
-            .from("material_control")
-            .select("*", { count: "exact", head: true })
-            .eq("work_details_id", wd.id)
-            .eq("bastp_id", bastpId)
-            .is("deleted_at", null);
+      // Fetch material counts for all work details in one round trip and
+      // tally client-side, instead of firing one count query per row.
+      const countByWorkDetail = new Map<number, number>();
+      if (workDetailsArray.length > 0) {
+        const { data: materialRows, error: materialsError } = await supabase
+          .from("material_control")
+          .select("work_details_id")
+          .eq("bastp_id", bastpId)
+          .in(
+            "work_details_id",
+            workDetailsArray.map((wd) => wd.id),
+          )
+          .is("deleted_at", null);
 
-          if (countError) {
-            console.error("Error counting materials:", countError);
-            return { ...wd, material_count: 0 };
-          }
+        if (materialsError) {
+          console.error("Error counting materials:", materialsError);
+        }
 
-          return { ...wd, material_count: count || 0 };
-        }),
-      );
+        (materialRows || []).forEach((row) => {
+          countByWorkDetail.set(
+            row.work_details_id,
+            (countByWorkDetail.get(row.work_details_id) || 0) + 1,
+          );
+        });
+      }
+
+      const workDetailsWithCounts = workDetailsArray.map((wd) => ({
+        ...wd,
+        material_count: countByWorkDetail.get(wd.id) || 0,
+      }));
 
       setWorkDetails(workDetailsWithCounts);
     } catch (err) {
@@ -224,6 +244,12 @@ export default function BASTPMaterialsPage() {
               </p>
             </div>
           </div>
+          {isLocked && (
+            <p className="mt-4 text-sm text-yellow-800 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
+              This BASTP is {bastp.status === "INVOICED" ? "invoiced" : "ready for invoice"} —
+              materials are locked from further changes.
+            </p>
+          )}
         </div>
       )}
 
@@ -235,6 +261,7 @@ export default function BASTPMaterialsPage() {
             workDetailsId={selectedWorkDetail.id}
             workDetailsDescription={selectedWorkDetail.description}
             onClose={handleCloseMaterialControl}
+            locked={isLocked}
           />
         </div>
       )}

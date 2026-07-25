@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Fragment } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import type { BASTPWithDetails } from "../../types/bastp.types";
@@ -22,19 +22,37 @@ import {
   Wrench,
   Lightbulb,
   Package,
+  Undo2,
+  Clock,
+  Receipt,
 } from "lucide-react";
 
 export default function BASTPDetails() {
   const navigate = useNavigate();
-  const { isReadOnly } = useAuth();
+  const { isReadOnly, profile } = useAuth();
   const { bastpId } = useParams<{ bastpId: string }>();
 
   const [bastp, setBastp] = useState<BASTPWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewingDocument, setViewingDocument] = useState(false);
+  const [documentError, setDocumentError] = useState<string | null>(null);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [profilesMap, setProfilesMap] = useState<
+    Record<number, { id: number; name: string; email: string }>
+  >({});
+  const [invoiceId, setInvoiceId] = useState<number | null>(null);
+
+  // Once a BASTP is ready for (or already) invoicing, its composition and
+  // materials are financially committed — Edit/Material Control lock so
+  // nobody quietly changes what's being billed after the fact.
+  const isLocked =
+    bastp?.status === "READY_FOR_INVOICE" || bastp?.status === "INVOICED";
+  // FINANCE consumes BASTPs to create invoices — it shouldn't edit their
+  // composition, only MANAGER's isReadOnly was accounted for before.
+  const isFinanceReadOnly = profile?.role === "FINANCE";
+  const canEditBastp = !isReadOnly && !isFinanceReadOnly && !isLocked;
 
   // Fetch BASTP details
   const fetchBastpDetails = useCallback(async () => {
@@ -52,13 +70,9 @@ export default function BASTPDetails() {
       type,
       company
     ),
-    profiles:user_id (
-      id,
-      name,
-      email
-    ),
     bastp_work_details (
       id,
+      deleted_at,
       work_details:work_details_id (
         id,
         description,
@@ -70,6 +84,15 @@ export default function BASTPDetails() {
         location:location_id (
           id,
           location
+        ),
+        work_scope:work_scope_id (
+          id,
+          work_scope
+        ),
+        work_verification (
+          status,
+          created_at,
+          deleted_at
         ),
         work_order:work_order_id (
           id,
@@ -88,11 +111,6 @@ export default function BASTPDetails() {
           kapro:kapro_id (
             id,
             kapro_name
-          ),
-          profiles:user_id (
-            id,
-            name,
-            email
           )
         ),
         material_control (
@@ -142,7 +160,44 @@ export default function BASTPDetails() {
         .single();
 
       if (fetchError) throw fetchError;
-      setBastp(data);
+
+      // Names come from the get_all_profiles RPC rather than an embedded
+      // profiles join — RLS silently nulls out a direct join to another
+      // user's profile row, which left "Created By" blank everywhere.
+      const { data: allProfiles, error: profilesError } =
+        await supabase.rpc("get_all_profiles");
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+      }
+      const map: Record<number, { id: number; name: string; email: string }> =
+        {};
+      (allProfiles || []).forEach(
+        (profile: { id: number; name: string; email: string }) => {
+          map[profile.id] = profile;
+        },
+      );
+      setProfilesMap(map);
+
+      // Drop any soft-deleted link rows — bastp_work_details is currently
+      // hard-deleted on edit, but the column exists, so don't trust it stays
+      // that way.
+      const cleanedData = {
+        ...data,
+        bastp_work_details: (data.bastp_work_details || []).filter(
+          (bwd: { deleted_at: string | null }) => !bwd.deleted_at,
+        ),
+      };
+      setBastp(cleanedData);
+
+      if (data.status === "INVOICED") {
+        const { data: invoice } = await supabase
+          .from("invoice_details")
+          .select("id")
+          .eq("bastp_id", bastpId)
+          .is("deleted_at", null)
+          .maybeSingle();
+        setInvoiceId(invoice?.id ?? null);
+      }
     } catch (err) {
       console.error("Error fetching BASTP details:", err);
       setError(err instanceof Error ? err.message : "Failed to load BASTP");
@@ -235,12 +290,40 @@ export default function BASTPDetails() {
 
   const uniqueWorkOrders = bastp ? getUniqueWorkOrders() : [];
 
+  // Latest (non-deleted) review status for one work detail's own
+  // work_verification history — this array is already scoped to a single
+  // work detail via the relationship, so no need for the cross-work-detail
+  // grouping helper.
+  const getLatestReviewStatus = (
+    records:
+      | { status: "APPROVED" | "REJECTED"; created_at: string; deleted_at: string | null }[]
+      | undefined,
+  ) => {
+    return (records || [])
+      .filter((r) => !r.deleted_at)
+      .sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      )[0]?.status;
+  };
+
+  const reviewCounts = (bastp?.bastp_work_details || []).reduce(
+    (acc, bwd) => {
+      const status = getLatestReviewStatus(bwd.work_details?.work_verification);
+      if (status === "APPROVED") acc.approved += 1;
+      else if (status === "REJECTED") acc.rejected += 1;
+      else acc.pending += 1;
+      return acc;
+    },
+    { approved: 0, rejected: 0, pending: 0 },
+  );
+
   // Generate signed URL and open modal
   const handleViewDocument = async () => {
     if (!bastp?.storage_path) return;
 
     try {
       setViewingDocument(true);
+      setDocumentError(null);
 
       // Generate fresh signed URL (valid for 5 minutes)
       const { data, error } = await supabase.storage
@@ -254,7 +337,7 @@ export default function BASTPDetails() {
       setShowDocumentModal(true);
     } catch (err) {
       console.error("Error viewing document:", err);
-      alert("❌ Failed to view document. Please try again.");
+      setDocumentError("Failed to view document. Please try again.");
     } finally {
       setViewingDocument(false);
     }
@@ -316,7 +399,7 @@ export default function BASTPDetails() {
           <p className="text-gray-600 mt-2">{bastp.number}</p>
         </div>
         <div className="flex items-center gap-3">
-          {!isReadOnly && (
+          {canEditBastp ? (
             <>
               <button
                 onClick={() => navigate(`/bastp/edit/${bastp.id}`)}
@@ -331,6 +414,15 @@ export default function BASTPDetails() {
                 <Package className="w-4 h-4" /> Material Control
               </button>
             </>
+          ) : (
+            isLocked &&
+            !isReadOnly &&
+            !isFinanceReadOnly && (
+              <span className="flex items-center gap-2 text-sm text-gray-500 bg-gray-100 px-3 py-2 rounded-lg">
+                <Lock className="w-4 h-4" /> Locked — already{" "}
+                {bastp.status === "INVOICED" ? "invoiced" : "ready for invoice"}
+              </span>
+            )
           )}
           <button
             onClick={() => navigate("/bastp")}
@@ -376,8 +468,12 @@ export default function BASTPDetails() {
             <label className="block text-sm font-medium text-gray-500 mb-1">
               Created By
             </label>
-            <p className="text-gray-900">{bastp.profiles?.name}</p>
-            <p className="text-sm text-gray-600">{bastp.profiles?.email}</p>
+            <p className="text-gray-900">
+              {profilesMap[bastp.user_id]?.name || "Unknown"}
+            </p>
+            <p className="text-sm text-gray-600">
+              {profilesMap[bastp.user_id]?.email}
+            </p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-500 mb-1">
@@ -415,6 +511,14 @@ export default function BASTPDetails() {
                 Invoiced Date
               </label>
               <p className="text-gray-900">{formatDate(bastp.invoiced_date)}</p>
+              {invoiceId && (
+                <button
+                  onClick={() => navigate(`/invoices/${invoiceId}`)}
+                  className="mt-1 flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
+                >
+                  <Receipt className="w-3.5 h-3.5" /> View Invoice
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -452,6 +556,11 @@ export default function BASTPDetails() {
                 )}
               </button>
             </div>
+            {documentError && (
+              <p className="mt-3 text-sm text-red-700 flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5" /> {documentError}
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -552,16 +661,16 @@ export default function BASTPDetails() {
                     </div>
                   </div>
                 )}
-                {wo.profiles && (
+                {wo.user_id && profilesMap[wo.user_id] && (
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">
                       Created By
                     </label>
                     <div className="text-sm text-gray-900">
-                      {wo.profiles.name}
+                      {profilesMap[wo.user_id].name}
                     </div>
                     <div className="text-xs text-gray-500">
-                      {wo.profiles.email}
+                      {profilesMap[wo.user_id].email}
                     </div>
                   </div>
                 )}
@@ -586,11 +695,28 @@ export default function BASTPDetails() {
 
       {/* Work Details List */}
       <div className="bg-white rounded-lg shadow">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-            <Wrench className="w-5 h-5" /> Work Details (
-            {bastp.bastp_work_details?.length || 0})
-          </h2>
+        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+              <Wrench className="w-5 h-5" /> Work Details (
+              {bastp.bastp_work_details?.length || 0})
+            </h2>
+            {bastp.status === "DRAFT" && reviewCounts.pending + reviewCounts.rejected > 0 && (
+              <p className="text-sm text-gray-500 mt-1">
+                {reviewCounts.approved} of {bastp.bastp_work_details?.length || 0}{" "}
+                approved
+                {reviewCounts.rejected > 0 &&
+                  ` • ${reviewCounts.rejected} sent back for rework`}
+                {" — this is why the BASTP hasn't moved past Draft."}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={() => navigate("/work-verification")}
+            className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 whitespace-nowrap"
+          >
+            Review in Work Verification →
+          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -617,6 +743,9 @@ export default function BASTPDetails() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Schedule
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Verification
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -624,9 +753,12 @@ export default function BASTPDetails() {
                 const materials = (
                   bwd.work_details?.material_control || []
                 ).filter((m: any) => !m.deleted_at);
+                const reviewStatus = getLatestReviewStatus(
+                  bwd.work_details?.work_verification,
+                );
                 return (
-                  <>
-                    <tr key={bwd.id} className="hover:bg-gray-50">
+                  <Fragment key={bwd.id}>
+                    <tr className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {index + 1}
                       </td>
@@ -634,6 +766,11 @@ export default function BASTPDetails() {
                         <p className="text-sm font-medium text-gray-900">
                           {bwd.work_details?.description}
                         </p>
+                        {bwd.work_details?.work_scope && (
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {bwd.work_details.work_scope.work_scope}
+                          </p>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
@@ -671,11 +808,26 @@ export default function BASTPDetails() {
                           )}
                         </div>
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {reviewStatus === "APPROVED" ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                            <CheckCircle2 className="w-3 h-3" /> Approved
+                          </span>
+                        ) : reviewStatus === "REJECTED" ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                            <Undo2 className="w-3 h-3" /> Needs Rework
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
+                            <Clock className="w-3 h-3" /> Pending Review
+                          </span>
+                        )}
+                      </td>
                     </tr>
                     {/* Materials Row */}
                     {materials.length > 0 && (
                       <tr key={`${bwd.id}-materials`} className="bg-blue-50">
-                        <td className="px-6 py-3" colSpan={7}>
+                        <td className="px-6 py-3" colSpan={8}>
                           <div className="flex items-start gap-2">
                             <Package className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
                             <div className="flex-1">
@@ -765,7 +917,7 @@ export default function BASTPDetails() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>

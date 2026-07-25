@@ -614,12 +614,15 @@ export default function ManageInvoice() {
           if (serviceError) throw serviceError;
         }
 
-        // Update BASTP status to INVOICED
+        // Update BASTP status to INVOICED — set directly here rather than
+        // relying solely on BASTP.tsx's polling check, which only runs
+        // when someone happens to have the BASTP list page open.
         const { error: bastpUpdateError } = await supabase
           .from("bastp")
           .update({
             is_invoiced: true,
             invoiced_date: new Date().toISOString(),
+            status: "INVOICED",
           })
           .eq("id", bastpId);
 
@@ -676,6 +679,7 @@ export default function ManageInvoice() {
           .update({
             is_invoiced: false,
             invoiced_date: null,
+            status: "READY_FOR_INVOICE",
           })
           .eq("id", existingInvoice.bastp_id);
 

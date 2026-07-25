@@ -139,7 +139,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       current:
         location.pathname === "/bastp" ||
         location.pathname.startsWith("/bastp/"),
-      show: canAccess("workOrders") || canAccess("invoices"),
+      show: canAccess("bastp"),
     },
     {
       name: "Invoices",

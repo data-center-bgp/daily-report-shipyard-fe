@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase, type Vessel, type WorkDetails } from "../../lib/supabase";
 import type { BASTP } from "../../types/bastp.types";
+import { useAuth } from "../../hooks/useAuth";
 import {
   getLatestVerificationByWorkDetails,
   isApproved,
+  isOpenForRework,
 } from "../../utils/workVerificationStatus";
 import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import type {
@@ -25,7 +27,25 @@ import {
   FileEdit,
   Search,
   Loader,
+  Undo2,
+  Lock,
+  Ship,
+  FolderKanban,
 } from "lucide-react";
+
+interface ProjectOption {
+  id: number;
+  project_name: string;
+  vessel_id: number;
+}
+
+interface WorkOrderOption {
+  id: number;
+  shipyard_wo_number: string;
+  customer_wo_number?: string;
+  vessel_id: number;
+  project_id: number | null;
+}
 
 interface WorkDetailsWithProgress extends WorkDetails {
   current_progress?: number;
@@ -36,18 +56,25 @@ interface WorkDetailsWithProgress extends WorkDetails {
     shipyard_wo_number: string;
     customer_wo_number: string;
     vessel?: Vessel;
+    project?: { id: number; project_name: string };
   };
   location?: {
     id: number;
     location: string;
   };
   is_verified?: boolean;
+  isOpenForRework?: boolean;
 }
 
 export default function CreateBASTP() {
   const navigate = useNavigate();
   const { bastpId } = useParams<{ bastpId: string }>();
   const isEditMode = !!bastpId;
+  const { isReadOnly, profile } = useAuth();
+  // FINANCE consumes BASTPs to create invoices — it shouldn't create/edit
+  // their composition, only MANAGER's isReadOnly was accounted for before.
+  const isFinanceReadOnly = profile?.role === "FINANCE";
+  const canEditBastp = !isReadOnly && !isFinanceReadOnly;
 
   // Form states
   const [formData, setFormData] = useState({
@@ -59,6 +86,8 @@ export default function CreateBASTP() {
 
   // Data states
   const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [workOrders, setWorkOrders] = useState<WorkOrderOption[]>([]);
   const [availableWorkDetails, setAvailableWorkDetails] = useState<
     WorkDetailsWithProgress[]
   >([]);
@@ -66,6 +95,20 @@ export default function CreateBASTP() {
     WorkDetailsWithProgress[]
   >([]);
   const [existingBastp, setExistingBastp] = useState<BASTP | null>(null);
+  // The work-detail composition as loaded, so we can tell at submit time
+  // whether it actually changed and the BASTP needs to go back to DRAFT
+  // for re-verification.
+  const [initialWorkDetailIds, setInitialWorkDetailIds] = useState<
+    Set<number>
+  >(new Set());
+
+  // Once a BASTP is ready for (or already) invoicing, its composition and
+  // materials are financially committed and shouldn't change anymore —
+  // matches the same lock in BASTPDetails.tsx.
+  const isLocked =
+    isEditMode &&
+    (existingBastp?.status === "READY_FOR_INVOICE" ||
+      existingBastp?.status === "INVOICED");
 
   // UI states
   const [loading, setLoading] = useState(true);
@@ -73,6 +116,23 @@ export default function CreateBASTP() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [uploadingDocument, setUploadingDocument] = useState(false);
+
+  // Vessel is locked once work details are selected — the vessel and the
+  // project/work-order "find" fields below all share that same lock, since
+  // picking any of them can change which vessel the BASTP is scoped to.
+  const [vesselSearchTerm, setVesselSearchTerm] = useState("");
+  const [showVesselDropdown, setShowVesselDropdown] = useState(false);
+  const vesselDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [selectedProjectId, setSelectedProjectId] = useState<number>(0);
+  const [projectSearchTerm, setProjectSearchTerm] = useState("");
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const projectDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<number>(0);
+  const [workOrderSearchTerm, setWorkOrderSearchTerm] = useState("");
+  const [showWorkOrderDropdown, setShowWorkOrderDropdown] = useState(false);
+  const workOrderDropdownRef = useRef<HTMLDivElement>(null);
 
   // General services states
   const [serviceTypes, setServiceTypes] = useState<GeneralServiceType[]>([]);
@@ -95,6 +155,41 @@ export default function CreateBASTP() {
     } catch (err) {
       console.error("Error fetching vessels:", err);
       setError("Failed to load vessels");
+    }
+  }, []);
+
+  // Fetch projects (for the "find by project" search — each project belongs
+  // to exactly one vessel, so picking one can auto-select the vessel)
+  const fetchProjects = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("id, project_name, vessel_id")
+        .is("deleted_at", null)
+        .order("project_name", { ascending: true });
+
+      if (error) throw error;
+      setProjects(data || []);
+    } catch (err) {
+      console.error("Error fetching projects:", err);
+    }
+  }, []);
+
+  // Fetch work orders (for the "find by work order" search — same
+  // one-vessel-per-record reasoning as projects, plus a project_id to also
+  // resolve the project)
+  const fetchWorkOrders = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("work_order")
+        .select("id, shipyard_wo_number, customer_wo_number, vessel_id, project_id")
+        .is("deleted_at", null)
+        .order("shipyard_wo_number", { ascending: true });
+
+      if (error) throw error;
+      setWorkOrders(data || []);
+    } catch (err) {
+      console.error("Error fetching work orders:", err);
     }
   }, []);
 
@@ -182,6 +277,9 @@ export default function CreateBASTP() {
       const workDetailsFromBastp =
         data.bastp_work_details?.map((bwd: any) => bwd.work_details) || [];
       setSelectedWorkDetails(workDetailsFromBastp);
+      setInitialWorkDetailIds(
+        new Set(workDetailsFromBastp.map((wd: { id: number }) => wd.id)),
+      );
 
       // Set selected general services
       const servicesFromBastp =
@@ -222,6 +320,10 @@ export default function CreateBASTP() {
               name,
               type,
               company
+            ),
+            project:project_id (
+              id,
+              project_name
             )
           ),
           work_progress (
@@ -251,12 +353,21 @@ export default function CreateBASTP() {
           const latestRecord = getLatestProgressRecord(progressRecords);
           const latestProgress = latestRecord?.progress_percentage || 0;
           const latestProgressDate = latestRecord?.report_date;
+          const latestProgressCreatedAt = progressRecords.reduce(
+            (latest: string | undefined, p: { created_at: string }) =>
+              !latest ||
+              new Date(p.created_at).getTime() > new Date(latest).getTime()
+                ? p.created_at
+                : latest,
+            undefined,
+          );
 
           return {
             ...wd,
             current_progress: latestProgress,
             has_progress_data: true,
             latest_progress_date: latestProgressDate,
+            latest_progress_created_at: latestProgressCreatedAt,
           };
         })
         .filter((wd) => wd.current_progress === 100);
@@ -275,10 +386,14 @@ export default function CreateBASTP() {
         verifications || [],
       );
 
-      // Mark verified work details
+      // Mark verified / sent-back-for-rework work details
       const workWithVerification = completedWork.map((wd) => ({
         ...wd,
         is_verified: isApproved(latestVerificationByWorkDetails.get(wd.id)),
+        isOpenForRework: isOpenForRework(
+          latestVerificationByWorkDetails.get(wd.id),
+          wd.latest_progress_created_at,
+        ),
       }));
 
       // Filter out work details already in other BASTPs (except current one in edit mode)
@@ -319,8 +434,13 @@ export default function CreateBASTP() {
     const loadData = async () => {
       setLoading(true);
 
-      // Load vessels and service types in parallel
-      await Promise.all([fetchVessels(), fetchServiceTypes()]);
+      // Load vessels, projects, work orders, and service types in parallel
+      await Promise.all([
+        fetchVessels(),
+        fetchProjects(),
+        fetchWorkOrders(),
+        fetchServiceTypes(),
+      ]);
 
       // Then load BASTP data (which depends on service types being loaded)
       if (isEditMode) {
@@ -331,7 +451,25 @@ export default function CreateBASTP() {
     };
 
     loadData();
-  }, [fetchVessels, fetchServiceTypes, fetchExistingBastp, isEditMode]);
+  }, [
+    fetchVessels,
+    fetchProjects,
+    fetchWorkOrders,
+    fetchServiceTypes,
+    fetchExistingBastp,
+    isEditMode,
+  ]);
+
+  // Pre-fill the vessel search box once vessels are loaded and a vessel_id
+  // is already set (edit mode, or right after a project/work-order pick).
+  useEffect(() => {
+    if (formData.vessel_id && vessels.length > 0 && !vesselSearchTerm) {
+      const vessel = vessels.find((v) => v.id === formData.vessel_id);
+      if (vessel) {
+        setVesselSearchTerm(`${vessel.name} - ${vessel.type} (${vessel.company})`);
+      }
+    }
+  }, [formData.vessel_id, vessels, vesselSearchTerm]);
 
   // Fetch work details when vessel changes
   useEffect(() => {
@@ -445,6 +583,166 @@ export default function CreateBASTP() {
     setAvailableWorkDetails((prev) => [...prev, workDetail]);
   };
 
+  // Close the vessel/project/work-order search dropdowns on an outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        vesselDropdownRef.current &&
+        !vesselDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowVesselDropdown(false);
+      }
+      if (
+        projectDropdownRef.current &&
+        !projectDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowProjectDropdown(false);
+      }
+      if (
+        workOrderDropdownRef.current &&
+        !workOrderDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowWorkOrderDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredVesselsForSearch = vessels.filter((vessel) => {
+    const searchLower = vesselSearchTerm.toLowerCase();
+    return (
+      vessel.name?.toLowerCase().includes(searchLower) ||
+      vessel.type?.toLowerCase().includes(searchLower) ||
+      vessel.company?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  const handleVesselSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVesselSearchTerm(e.target.value);
+    setShowVesselDropdown(true);
+    if (formData.vessel_id) {
+      setFormData((prev) => ({ ...prev, vessel_id: 0 }));
+    }
+  };
+
+  const handleVesselSelectFromDropdown = (vessel: Vessel) => {
+    setFormData((prev) => ({ ...prev, vessel_id: vessel.id }));
+    setVesselSearchTerm(`${vessel.name} - ${vessel.type} (${vessel.company})`);
+    setShowVesselDropdown(false);
+
+    // A stale project/WO pick that belongs to a different vessel would be
+    // confusing left in place — clear it.
+    if (
+      selectedProjectId &&
+      projects.find((p) => p.id === selectedProjectId)?.vessel_id !== vessel.id
+    ) {
+      handleClearProjectSearch();
+    }
+    if (
+      selectedWorkOrderId &&
+      workOrders.find((w) => w.id === selectedWorkOrderId)?.vessel_id !==
+        vessel.id
+    ) {
+      handleClearWorkOrderSearch();
+    }
+  };
+
+  const handleClearVesselSearch = () => {
+    setVesselSearchTerm("");
+    setFormData((prev) => ({ ...prev, vessel_id: 0 }));
+    setShowVesselDropdown(false);
+    handleClearProjectSearch();
+    handleClearWorkOrderSearch();
+  };
+
+  const handleProjectSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setProjectSearchTerm(e.target.value);
+    setShowProjectDropdown(true);
+    if (selectedProjectId) setSelectedProjectId(0);
+  };
+
+  const handleProjectSelectFromDropdown = (project: ProjectOption) => {
+    setSelectedProjectId(project.id);
+    setProjectSearchTerm(project.project_name);
+    setShowProjectDropdown(false);
+
+    // A project belongs to exactly one vessel — auto-select it so users can
+    // reach the right BASTP scope by project instead of hunting through the
+    // vessel list, as long as the vessel isn't already locked by chosen
+    // work details.
+    if (
+      selectedWorkDetails.length === 0 &&
+      project.vessel_id !== formData.vessel_id
+    ) {
+      const vessel = vessels.find((v) => v.id === project.vessel_id);
+      setFormData((prev) => ({ ...prev, vessel_id: project.vessel_id }));
+      setVesselSearchTerm(
+        vessel ? `${vessel.name} - ${vessel.type} (${vessel.company})` : "",
+      );
+      if (selectedWorkOrderId) handleClearWorkOrderSearch();
+    }
+  };
+
+  const handleClearProjectSearch = () => {
+    setProjectSearchTerm("");
+    setSelectedProjectId(0);
+    setShowProjectDropdown(false);
+  };
+
+  const handleWorkOrderSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setWorkOrderSearchTerm(e.target.value);
+    setShowWorkOrderDropdown(true);
+    if (selectedWorkOrderId) setSelectedWorkOrderId(0);
+  };
+
+  const handleWorkOrderSelectFromDropdown = (workOrder: WorkOrderOption) => {
+    setSelectedWorkOrderId(workOrder.id);
+    setWorkOrderSearchTerm(workOrder.shipyard_wo_number || "");
+    setShowWorkOrderDropdown(false);
+
+    if (selectedWorkDetails.length === 0) {
+      if (workOrder.vessel_id !== formData.vessel_id) {
+        const vessel = vessels.find((v) => v.id === workOrder.vessel_id);
+        setFormData((prev) => ({ ...prev, vessel_id: workOrder.vessel_id }));
+        setVesselSearchTerm(
+          vessel ? `${vessel.name} - ${vessel.type} (${vessel.company})` : "",
+        );
+      }
+      if (workOrder.project_id && workOrder.project_id !== selectedProjectId) {
+        const project = projects.find((p) => p.id === workOrder.project_id);
+        setSelectedProjectId(workOrder.project_id);
+        setProjectSearchTerm(project?.project_name || "");
+      }
+    }
+  };
+
+  const handleClearWorkOrderSearch = () => {
+    setWorkOrderSearchTerm("");
+    setSelectedWorkOrderId(0);
+    setShowWorkOrderDropdown(false);
+  };
+
+  // Project/work-order "find" dropdowns are scoped to the selected vessel
+  // once one is set, so they only ever offer choices that are actually
+  // reachable — otherwise they show everything, to help locate the vessel.
+  const filteredProjectsForSearch = projects
+    .filter((p) => !formData.vessel_id || p.vessel_id === formData.vessel_id)
+    .filter((p) =>
+      p.project_name.toLowerCase().includes(projectSearchTerm.toLowerCase()),
+    );
+
+  const filteredWorkOrdersForSearch = workOrders
+    .filter((wo) => !formData.vessel_id || wo.vessel_id === formData.vessel_id)
+    .filter((wo) => !selectedProjectId || wo.project_id === selectedProjectId)
+    .filter((wo) => {
+      const searchLower = workOrderSearchTerm.toLowerCase();
+      return (
+        wo.shipyard_wo_number?.toLowerCase().includes(searchLower) ||
+        wo.customer_wo_number?.toLowerCase().includes(searchLower)
+      );
+    });
+
   // Handle document upload
   const handleDocumentUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -551,16 +849,24 @@ export default function CreateBASTP() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
 
-      const { data: profile } = await supabase
+      const { data: userProfile } = await supabase
         .from("profiles")
         .select("id")
         .eq("auth_user_id", user.id)
         .single();
 
-      if (!profile) throw new Error("User profile not found");
+      if (!userProfile) throw new Error("User profile not found");
 
       if (isEditMode && bastpId) {
         // ========== UPDATE MODE ==========
+        // If the work-detail composition changed, the BASTP needs to go
+        // back through review — don't let it stay VERIFIED (or beyond) for
+        // items nobody has approved yet.
+        const currentIds = new Set(selectedWorkDetails.map((wd) => wd.id));
+        const compositionChanged =
+          currentIds.size !== initialWorkDetailIds.size ||
+          [...currentIds].some((id) => !initialWorkDetailIds.has(id));
+
         const { error: updateError } = await supabase
           .from("bastp")
           .update({
@@ -568,6 +874,8 @@ export default function CreateBASTP() {
             date: formData.date,
             delivery_date: formData.delivery_date,
             vessel_id: formData.vessel_id,
+            total_work_details: selectedWorkDetails.length,
+            ...(compositionChanged ? { status: "DRAFT" } : {}),
             updated_at: new Date().toISOString(),
           })
           .eq("id", bastpId);
@@ -638,7 +946,7 @@ export default function CreateBASTP() {
             date: formData.date,
             delivery_date: formData.delivery_date,
             vessel_id: formData.vessel_id,
-            user_id: profile.id,
+            user_id: userProfile.id,
             status: "DRAFT",
             is_invoiced: false,
             total_work_details: selectedWorkDetails.length,
@@ -699,8 +1007,15 @@ export default function CreateBASTP() {
     }
   };
 
-  // Filter available work details
+  // Filter available work details — vessel is already applied server-side by
+  // fetchAvailableWorkDetails; project/work-order/text narrow it further.
   const filteredAvailableWork = availableWorkDetails.filter((wd) => {
+    if (selectedProjectId && wd.work_order?.project?.id !== selectedProjectId) {
+      return false;
+    }
+    if (selectedWorkOrderId && wd.work_order?.id !== selectedWorkOrderId) {
+      return false;
+    }
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
     return (
@@ -717,6 +1032,62 @@ export default function CreateBASTP() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           <span className="ml-3 text-gray-600">Loading...</span>
         </div>
+      </div>
+    );
+  }
+
+  if (!canEditBastp) {
+    return (
+      <div className="p-8">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 flex items-start gap-3">
+          <Lock className="w-6 h-6 text-yellow-600 flex-shrink-0" />
+          <div>
+            <p className="text-yellow-900 font-medium">
+              You don't have permission to {isEditMode ? "edit" : "create"}{" "}
+              BASTPs.
+            </p>
+            <p className="text-sm text-yellow-700 mt-1">
+              {isFinanceReadOnly
+                ? "Finance has view access to BASTPs for invoicing, but can't change their composition."
+                : "Your role only has view access here."}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => navigate("/bastp")}
+          className="mt-4 flex items-center gap-2 text-blue-600 hover:text-blue-800"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to BASTP List
+        </button>
+      </div>
+    );
+  }
+
+  if (isLocked) {
+    return (
+      <div className="p-8">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 flex items-start gap-3">
+          <Lock className="w-6 h-6 text-yellow-600 flex-shrink-0" />
+          <div>
+            <p className="text-yellow-900 font-medium">
+              This BASTP is locked from further edits.
+            </p>
+            <p className="text-sm text-yellow-700 mt-1">
+              It's already{" "}
+              {existingBastp?.status === "INVOICED"
+                ? "invoiced"
+                : "ready for invoicing"}
+              , so its composition and materials are financially committed
+              and can't be changed here.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => navigate(`/bastp/${bastpId}`)}
+          className="mt-4 flex items-center gap-2 text-blue-600 hover:text-blue-800"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to BASTP Details
+        </button>
       </div>
     );
   }
@@ -775,34 +1146,171 @@ export default function CreateBASTP() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Vessel *
+            <div className="relative" ref={projectDropdownRef}>
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                <FolderKanban className="w-4 h-4" /> Find by Project
               </label>
-              <select
-                value={formData.vessel_id}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    vessel_id: Number(e.target.value),
-                  })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                required
-                disabled={isEditMode && selectedWorkDetails.length > 0}
-              >
-                <option value={0}>Select Vessel</option>
-                {vessels.map((vessel) => (
-                  <option key={vessel.id} value={vessel.id}>
-                    {vessel.name} - {vessel.type} ({vessel.company})
-                  </option>
-                ))}
-              </select>
-              {isEditMode && selectedWorkDetails.length > 0 && (
+              <div className="relative">
+                <input
+                  type="text"
+                  value={projectSearchTerm}
+                  onChange={handleProjectSearch}
+                  onFocus={() =>
+                    selectedWorkDetails.length === 0 &&
+                    setShowProjectDropdown(true)
+                  }
+                  placeholder="Search project (optional)..."
+                  disabled={selectedWorkDetails.length > 0}
+                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                />
+                {projectSearchTerm && selectedWorkDetails.length === 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearProjectSearch}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              {showProjectDropdown &&
+                selectedWorkDetails.length === 0 &&
+                filteredProjectsForSearch.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {filteredProjectsForSearch.map((project) => (
+                      <div
+                        key={project.id}
+                        onClick={() => handleProjectSelectFromDropdown(project)}
+                        className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                          selectedProjectId === project.id ? "bg-blue-100" : ""
+                        }`}
+                      >
+                        <div className="font-medium text-gray-900 text-sm">
+                          {project.project_name}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              <p className="text-xs text-gray-500 mt-1">
+                Optional — picking a project auto-selects its vessel
+              </p>
+            </div>
+
+            <div className="relative" ref={vesselDropdownRef}>
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                <Ship className="w-4 h-4" /> Vessel *
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={vesselSearchTerm}
+                  onChange={handleVesselSearch}
+                  onFocus={() =>
+                    selectedWorkDetails.length === 0 &&
+                    setShowVesselDropdown(true)
+                  }
+                  placeholder="Search vessel..."
+                  disabled={selectedWorkDetails.length > 0}
+                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                />
+                {vesselSearchTerm && selectedWorkDetails.length === 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearVesselSearch}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              {showVesselDropdown &&
+                selectedWorkDetails.length === 0 &&
+                filteredVesselsForSearch.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {filteredVesselsForSearch.map((vessel) => (
+                      <div
+                        key={vessel.id}
+                        onClick={() => handleVesselSelectFromDropdown(vessel)}
+                        className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                          formData.vessel_id === vessel.id ? "bg-blue-100" : ""
+                        }`}
+                      >
+                        <div className="font-medium text-gray-900 text-sm">
+                          {vessel.name}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          {vessel.type} • {vessel.company}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              {selectedWorkDetails.length > 0 && (
                 <p className="text-xs text-gray-500 mt-1">
-                  Cannot change vessel after adding work details
+                  Cannot change vessel after adding work details — remove them
+                  first
                 </p>
               )}
+            </div>
+
+            <div className="relative" ref={workOrderDropdownRef}>
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                <FileText className="w-4 h-4" /> Find by Work Order
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={workOrderSearchTerm}
+                  onChange={handleWorkOrderSearch}
+                  onFocus={() =>
+                    selectedWorkDetails.length === 0 &&
+                    setShowWorkOrderDropdown(true)
+                  }
+                  placeholder="Search WO number (optional)..."
+                  disabled={selectedWorkDetails.length > 0}
+                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                />
+                {workOrderSearchTerm && selectedWorkDetails.length === 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearWorkOrderSearch}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              {showWorkOrderDropdown &&
+                selectedWorkDetails.length === 0 &&
+                filteredWorkOrdersForSearch.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {filteredWorkOrdersForSearch.map((workOrder) => (
+                      <div
+                        key={workOrder.id}
+                        onClick={() =>
+                          handleWorkOrderSelectFromDropdown(workOrder)
+                        }
+                        className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                          selectedWorkOrderId === workOrder.id
+                            ? "bg-blue-100"
+                            : ""
+                        }`}
+                      >
+                        <div className="font-medium text-gray-900 text-sm">
+                          {workOrder.shipyard_wo_number}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          {workOrder.customer_wo_number}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              <p className="text-xs text-gray-500 mt-1">
+                Optional — picking a work order auto-selects its vessel and
+                project, and narrows the work details below
+              </p>
             </div>
 
             <div>
@@ -1000,7 +1508,19 @@ export default function CreateBASTP() {
               <p className="text-sm text-blue-900 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4" /> Selected{" "}
                 {selectedServices.length} service(s) • Total Days:{" "}
-                {selectedServices.reduce((sum, s) => sum + s.total_days, 0)}
+                {calculateTotalDays(
+                  selectedServices.reduce(
+                    (min, s) => (s.start_date < min ? s.start_date : min),
+                    selectedServices[0].start_date,
+                  ),
+                  selectedServices.reduce(
+                    (max, s) => (s.close_date > max ? s.close_date : max),
+                    selectedServices[0].close_date,
+                  ),
+                )}{" "}
+                <span className="text-blue-700">
+                  (earliest start to latest close, across all services)
+                </span>
               </p>
             </div>
           )}
@@ -1131,6 +1651,11 @@ export default function CreateBASTP() {
                             {wd.is_verified && (
                               <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
                                 <CheckCircle2 className="w-3 h-3" /> Verified
+                              </span>
+                            )}
+                            {wd.isOpenForRework && (
+                              <span className="inline-flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">
+                                <Undo2 className="w-3 h-3" /> Needs Rework
                               </span>
                             )}
                           </div>

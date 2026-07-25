@@ -64,6 +64,11 @@ export interface BASTPWithDetails extends BASTP {
           customer_wo_number: string;
         };
         material_control?: MaterialControl[];
+        work_verification?: Array<{
+          status: "APPROVED" | "REJECTED";
+          created_at: string;
+          deleted_at: string | null;
+        }>;
       };
     }
   >;
