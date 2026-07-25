@@ -383,9 +383,10 @@ export default function AddWorkProgress({
           return {
             id: item.id,
             description: item.description,
-            location: Array.isArray(item.location)
-              ? item.location[0]
-              : item.location,
+            location:
+              (Array.isArray(item.location)
+                ? item.location[0]
+                : item.location) ?? undefined,
             pic: item.pic,
             current_progress,
             isOpenForRework: isOpenForRework(

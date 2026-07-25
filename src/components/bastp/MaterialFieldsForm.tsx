@@ -27,7 +27,7 @@ interface MaterialFieldsFormProps {
   onMaterialSearchFocus: () => void;
   onMaterialSelect: (material: MaterialList) => void;
   onClearMaterialSearch: () => void;
-  materialDropdownRef?: RefObject<HTMLDivElement> | null;
+  materialDropdownRef?: RefObject<HTMLDivElement | null> | null;
 
   // Density dropdown
   isDensityDropdownOpen: boolean;

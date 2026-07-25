@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { supabase, type Vessel, type WorkDetails } from "../../lib/supabase";
+import {
+  supabase,
+  type Vessel,
+  type WorkDetails,
+  type WorkProgress,
+} from "../../lib/supabase";
 import type { BASTP } from "../../types/bastp.types";
 import { useAuth } from "../../hooks/useAuth";
 import {
@@ -345,7 +350,7 @@ export default function CreateBASTP() {
       // Process to get only 100% completed work
       const completedWork = (workDetailsData || [])
         .map((wd) => {
-          const progressRecords = wd.work_progress || [];
+          const progressRecords: WorkProgress[] = wd.work_progress || [];
           if (progressRecords.length === 0) {
             return { ...wd, current_progress: 0, has_progress_data: false };
           }

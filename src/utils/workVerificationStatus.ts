@@ -59,9 +59,15 @@ export function isApproved(
  * hasn't logged a new progress report since — i.e. the rejection is still
  * the most recent event. Once a newer progress report lands, the item goes
  * back into the normal "awaiting review" state automatically.
+ *
+ * Only needs status + created_at (not the full VerificationStatusFields) so
+ * callers who already scoped their query to one work_details_id — and so
+ * never selected that column — don't need to fake it.
  */
 export function isOpenForRework(
-  latestVerification: VerificationStatusFields | undefined,
+  latestVerification:
+    | { status: VerificationStatus; created_at: string }
+    | undefined,
   latestProgressCreatedAt: string | null | undefined,
 ): boolean {
   if (!latestVerification || latestVerification.status !== "REJECTED") {
