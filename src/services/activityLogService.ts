@@ -92,11 +92,18 @@ export class ActivityLogService {
   }
 
   /**
-   * Get user's IP address (optional, using external service)
+   * Get user's IP address (optional, using external service).
+   * Bounded by a short timeout so a slow/blocked third-party endpoint never
+   * stalls the write it's logging — every logActivity() caller awaits this.
    */
   private static async getIpAddress(): Promise<string | undefined> {
     try {
-      const response = await fetch("https://api.ipify.org?format=json");
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000);
+      const response = await fetch("https://api.ipify.org?format=json", {
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
       const data = await response.json();
       return data.ip;
     } catch {
@@ -160,7 +167,10 @@ export class ActivityLogService {
       query = query.gte("created_at", filters.startDate);
     }
     if (filters?.endDate) {
-      query = query.lte("created_at", filters.endDate);
+      // filters.endDate is a bare "YYYY-MM-DD" from a <input type="date">;
+      // comparing it directly against a timestamptz casts it to midnight and
+      // excludes the entire selected day, so push it to the end of that day.
+      query = query.lte("created_at", `${filters.endDate}T23:59:59.999`);
     }
 
     const { data, error, count } = await query;
@@ -171,33 +181,5 @@ export class ActivityLogService {
     }
 
     return { data: data || [], count: count || 0 };
-  }
-
-  /**
-   * Get activity logs for current user
-   */
-  static async getMyActivityLogs(
-    page: number = 1,
-    pageSize: number = 50,
-  ): Promise<{ data: ActivityLog[]; count: number }> {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { data: [], count: 0 };
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("auth_user_id", user.id)
-      .single();
-
-    if (!profile) {
-      return { data: [], count: 0 };
-    }
-
-    return this.getAllActivityLogs(page, pageSize, { userId: profile.id });
   }
 }

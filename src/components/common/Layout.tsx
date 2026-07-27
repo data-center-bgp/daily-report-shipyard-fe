@@ -158,7 +158,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       current:
         location.pathname === "/activity-logs" ||
         location.pathname.startsWith("/activity-logs/"),
-      show: canAccess("exportData"),
+      show: canAccess("activityLogs"),
     },
     {
       name: "Export Data",

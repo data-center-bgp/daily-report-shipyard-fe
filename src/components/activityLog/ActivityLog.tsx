@@ -8,6 +8,32 @@ interface ActivityLogListProps {
   showFilters?: boolean;
 }
 
+/** Page numbers to render, with `null` standing in for an ellipsis gap. */
+function buildPageList(current: number, total: number): (number | null)[] {
+  const maxWithoutCollapsing = 7;
+  if (total <= maxWithoutCollapsing) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+
+  const siblings = 1; // pages shown on each side of the current page
+  const first = 1;
+  const last = total;
+
+  const start = Math.max(first, current - siblings);
+  const end = Math.min(last, current + siblings);
+
+  const pages: (number | null)[] = [];
+  pages.push(first);
+  if (start > first + 1) pages.push(null);
+  for (let p = Math.max(start, first + 1); p <= Math.min(end, last - 1); p++) {
+    pages.push(p);
+  }
+  if (end < last - 1) pages.push(null);
+  if (last > first) pages.push(last);
+
+  return pages;
+}
+
 export default function ActivityLogList({
   tableName,
   recordId,
@@ -66,7 +92,7 @@ export default function ActivityLogList({
 
     if (log.description) {
       // Use custom description if available
-      return `${log.user_name} ${log.description}`;
+      return `${log.user_name}: ${log.description}`;
     }
 
     // Generate default description
@@ -86,12 +112,14 @@ export default function ActivityLogList({
     setLoading(true);
     try {
       if (tableName && recordId) {
-        // Get logs for specific record
+        // getActivityLogs returns the record's full history unpaginated —
+        // slice client-side so page/pageSize actually change what's shown.
         const data = await ActivityLogService.getActivityLogs(
           tableName,
           recordId,
         );
-        setLogs(data);
+        const start = (page - 1) * pageSize;
+        setLogs(data.slice(start, start + pageSize));
         setTotalCount(data.length);
       } else {
         // Get all logs with pagination
@@ -321,7 +349,7 @@ export default function ActivityLogList({
               Showing {(page - 1) * pageSize + 1} to{" "}
               {Math.min(page * pageSize, totalCount)} of {totalCount} results
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
@@ -329,6 +357,29 @@ export default function ActivityLogList({
               >
                 Previous
               </button>
+              {buildPageList(page, totalPages).map((p, i) =>
+                p === null ? (
+                  <span
+                    key={`ellipsis-${i}`}
+                    className="px-2 text-sm text-gray-400 select-none"
+                  >
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    aria-current={p === page ? "page" : undefined}
+                    className={`px-3 py-1 text-sm rounded-md border ${
+                      p === page
+                        ? "bg-blue-600 border-blue-600 text-white"
+                        : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ),
+              )}
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}

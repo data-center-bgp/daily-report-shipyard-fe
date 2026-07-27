@@ -146,7 +146,3 @@ export interface ActivityLog {
   user_agent?: string;
   description?: string;
 }
-
-export interface ActivityLogWithProfile extends ActivityLog {
-  profile?: Profile;
-}
