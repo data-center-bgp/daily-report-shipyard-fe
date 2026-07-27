@@ -14,7 +14,6 @@ import {
   ScrollText,
   Download,
   Upload,
-  Ship,
   Menu,
   LogOut,
   ChevronLeft,
@@ -23,11 +22,91 @@ import {
   Users,
   ClipboardList,
   ClipboardCheck,
+  type LucideIcon,
 } from "lucide-react";
 
 interface LayoutProps {
   children: React.ReactNode;
   onLogout: () => void;
+}
+
+interface NavItem {
+  name: string;
+  href: string;
+  icon: LucideIcon;
+  current: boolean;
+  show: boolean;
+}
+
+interface NavGroup {
+  title: string | null;
+  items: NavItem[];
+}
+
+// ─── Sidebar navigation list — shared between the desktop and mobile
+// drawers so grouping/styling can't drift out of sync between the two.
+function SidebarNav({
+  groups,
+  collapsed,
+  onNavigate,
+}: {
+  groups: NavGroup[];
+  collapsed: boolean;
+  onNavigate: (href: string) => void;
+}) {
+  return (
+    <>
+      {groups.map((group, groupIndex) => (
+        <div
+          key={group.title ?? `group-${groupIndex}`}
+          className={groupIndex > 0 ? "mt-6" : ""}
+        >
+          {group.title && !collapsed && (
+            <p className="px-3 mb-2 text-xs font-semibold text-blue-300/70 uppercase tracking-wider">
+              {group.title}
+            </p>
+          )}
+          {group.title && collapsed && groupIndex > 0 && (
+            <div className="border-t border-blue-700/50 mx-2 mb-3" />
+          )}
+          <div className="space-y-1">
+            {group.items.map((item) => {
+              const IconComponent = item.icon;
+              return (
+                <div key={item.name} className="relative group">
+                  <button
+                    onClick={() => onNavigate(item.href)}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center transition-all duration-200 ${
+                      collapsed ? "justify-center" : "space-x-3"
+                    } ${
+                      item.current
+                        ? "bg-white text-blue-800 shadow-lg shadow-black/10"
+                        : "text-blue-100 hover:bg-white/10 hover:text-white hover:translate-x-0.5"
+                    }`}
+                  >
+                    <IconComponent className="w-5 h-5 flex-shrink-0" />
+                    {!collapsed && (
+                      <span className="font-medium truncate">
+                        {item.name}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Tooltip for collapsed state */}
+                  {collapsed && (
+                    <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white px-2 py-1 rounded text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 pointer-events-none">
+                      {item.name}
+                      <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 rotate-45"></div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </>
+  );
 }
 
 export default function Layout({ children, onLogout }: LayoutProps) {
@@ -61,146 +140,190 @@ export default function Layout({ children, onLogout }: LayoutProps) {
     localStorage.setItem("sidebar-collapsed", JSON.stringify(newState));
   };
 
-  const navigation = [
+  const navGroups: NavGroup[] = [
     {
-      name: "Dashboard",
-      href: "/",
-      icon: LayoutDashboard,
-      current: location.pathname === "/",
-      show: true,
+      title: null,
+      items: [
+        {
+          name: "Dashboard",
+          href: "/",
+          icon: LayoutDashboard,
+          current: location.pathname === "/",
+          show: true,
+        },
+      ],
     },
     {
-      name: "Projects",
-      href: "/projects",
-      icon: FolderKanban,
-      current: location.pathname.startsWith("/projects"),
-      show: canAccess("workOrders"),
+      title: "Operations",
+      items: [
+        {
+          name: "Projects",
+          href: "/projects",
+          icon: FolderKanban,
+          current: location.pathname.startsWith("/projects"),
+          show: canAccess("workOrders"),
+        },
+        {
+          name: "Work Orders",
+          href: "/work-orders",
+          icon: FileText,
+          current:
+            location.pathname === "/work-orders" ||
+            location.pathname.startsWith("/vessel/") ||
+            location.pathname.startsWith("/work-order/") ||
+            location.pathname.startsWith("/add-work-order") ||
+            location.pathname.startsWith("/edit-work-order"),
+          show: canAccess("workOrders"),
+        },
+        {
+          name: "Work Details",
+          href: "/work-details",
+          icon: Wrench,
+          current:
+            location.pathname === "/work-details" ||
+            location.pathname.startsWith("/work-details/") ||
+            location.pathname.includes("/add-work-details") ||
+            location.pathname.includes("/edit-work-details"),
+          show: canAccess("workDetails"),
+        },
+        {
+          name: "Work Progress",
+          href: "/work-progress",
+          icon: TrendingUp,
+          current:
+            location.pathname === "/work-progress" ||
+            location.pathname.startsWith("/work-progress/") ||
+            location.pathname.includes("/add-progress") ||
+            location.pathname.includes("/edit-progress"),
+          show: canAccess("progress"),
+        },
+      ],
     },
     {
-      name: "Work Orders",
-      href: "/work-orders",
-      icon: FileText,
-      current:
-        location.pathname === "/work-orders" ||
-        location.pathname.startsWith("/vessel/") ||
-        location.pathname.startsWith("/work-order/") ||
-        location.pathname.startsWith("/add-work-order") ||
-        location.pathname.startsWith("/edit-work-order"),
-      show: canAccess("workOrders"),
+      title: "Approvals & Review",
+      items: [
+        {
+          name: "Readiness Queue",
+          href: "/readiness-queue",
+          icon: ClipboardCheck,
+          current: location.pathname === "/readiness-queue",
+          show: canAccess("readinessQueue"),
+        },
+        {
+          name: "Additional WO Approvals",
+          href: "/additional-wo-approvals",
+          icon: ClipboardList,
+          current: location.pathname === "/additional-wo-approvals",
+          show: canAccess("additionalWoApprovals"),
+        },
+        {
+          name: "Work Verification",
+          href: "/work-verification",
+          icon: CheckCircle,
+          current:
+            location.pathname === "/work-verification" ||
+            location.pathname.startsWith("/work-verification/"),
+          show: canAccess("verification"),
+        },
+      ],
     },
     {
-      name: "Work Details",
-      href: "/work-details",
-      icon: Wrench,
-      current:
-        location.pathname === "/work-details" ||
-        location.pathname.startsWith("/work-details/") ||
-        location.pathname.includes("/add-work-details") ||
-        location.pathname.includes("/edit-work-details"),
-      show: canAccess("workDetails"),
+      title: "Finance & Documents",
+      items: [
+        {
+          name: "BASTP",
+          href: "/bastp",
+          icon: FileCheck,
+          current:
+            location.pathname === "/bastp" ||
+            location.pathname.startsWith("/bastp/"),
+          show: canAccess("bastp"),
+        },
+        {
+          name: "Invoices",
+          href: "/invoices",
+          icon: Receipt,
+          current:
+            location.pathname === "/invoices" ||
+            location.pathname.startsWith("/invoices/") ||
+            location.pathname.includes("/invoice"),
+          show: canAccess("invoices"),
+        },
+      ],
     },
     {
-      name: "Work Progress",
-      href: "/work-progress",
-      icon: TrendingUp,
-      current:
-        location.pathname === "/work-progress" ||
-        location.pathname.startsWith("/work-progress/") ||
-        location.pathname.includes("/add-progress") ||
-        location.pathname.includes("/edit-progress"),
-      show: canAccess("progress"),
+      title: "Data Tools",
+      items: [
+        {
+          name: "Export Data",
+          href: "/export-data",
+          icon: Download,
+          current: location.pathname === "/export-data",
+          show: canAccess("exportData"),
+        },
+        {
+          name: "Import Data",
+          href: "/import-data",
+          icon: Upload,
+          current: location.pathname === "/import-data",
+          show: canAccess("exportData"),
+        },
+      ],
     },
     {
-      name: "Readiness Queue",
-      href: "/readiness-queue",
-      icon: ClipboardCheck,
-      current: location.pathname === "/readiness-queue",
-      show: canAccess("readinessQueue"),
-    },
-    {
-      name: "Additional WO Approvals",
-      href: "/additional-wo-approvals",
-      icon: ClipboardList,
-      current: location.pathname === "/additional-wo-approvals",
-      show: canAccess("additionalWoApprovals"),
-    },
-    {
-      name: "Work Verification",
-      href: "/work-verification",
-      icon: CheckCircle,
-      current:
-        location.pathname === "/work-verification" ||
-        location.pathname.startsWith("/work-verification/"),
-      show: canAccess("verification"),
-    },
-    {
-      name: "BASTP",
-      href: "/bastp",
-      icon: FileCheck,
-      current:
-        location.pathname === "/bastp" ||
-        location.pathname.startsWith("/bastp/"),
-      show: canAccess("bastp"),
-    },
-    {
-      name: "Invoices",
-      href: "/invoices",
-      icon: Receipt,
-      current:
-        location.pathname === "/invoices" ||
-        location.pathname.startsWith("/invoices/") ||
-        location.pathname.includes("/invoice"),
-      show: canAccess("invoices"),
-    },
-    {
-      name: "Activity Logs",
-      href: "/activity-logs",
-      icon: ScrollText,
-      current:
-        location.pathname === "/activity-logs" ||
-        location.pathname.startsWith("/activity-logs/"),
-      show: canAccess("activityLogs"),
-    },
-    {
-      name: "Export Data",
-      href: "/export-data",
-      icon: Download,
-      current: location.pathname === "/export-data",
-      show: canAccess("exportData"),
-    },
-    {
-      name: "Import Data",
-      href: "/import-data",
-      icon: Upload,
-      current: location.pathname === "/import-data",
-      show: canAccess("exportData"),
-    },
-    {
-      name: "User Management",
-      href: "/user-management",
-      icon: Users,
-      current: location.pathname === "/user-management",
-      show: canAccess("userManagement"),
+      title: "Administration",
+      items: [
+        {
+          name: "Activity Logs",
+          href: "/activity-logs",
+          icon: ScrollText,
+          current:
+            location.pathname === "/activity-logs" ||
+            location.pathname.startsWith("/activity-logs/"),
+          show: canAccess("activityLogs"),
+        },
+        {
+          name: "User Management",
+          href: "/user-management",
+          icon: Users,
+          current: location.pathname === "/user-management",
+          show: canAccess("userManagement"),
+        },
+      ],
     },
   ];
 
-  const visibleNavigation = navigation.filter((item) => item.show);
+  const visibleGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.show),
+    }))
+    .filter((group) => group.items.length > 0);
+
+  const handleNavigate = (href: string) => navigate(href);
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar for desktop */}
       <div className="hidden lg:flex lg:flex-shrink-0 lg:fixed lg:inset-y-0 lg:z-30">
         <div
-          className={`flex flex-col h-screen bg-gradient-to-b from-blue-900 via-blue-800 to-blue-900 shadow-xl transition-all duration-300 ease-in-out ${
+          className={`relative flex flex-col h-screen overflow-hidden bg-gradient-to-b from-blue-950 via-blue-900 to-slate-950 shadow-xl transition-all duration-300 ease-in-out ${
             sidebarCollapsed ? "w-16" : "w-64"
           }`}
         >
+          {/* Decorative glow + texture, matching the login page */}
+          <div className="pointer-events-none absolute -top-16 -left-16 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl" />
+          <div className="pointer-events-none absolute bottom-24 -right-16 w-64 h-64 bg-indigo-400/15 rounded-full blur-3xl" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.06)_1px,transparent_0)] bg-[size:22px_22px]" />
+
           {/* Logo/Header */}
-          <div className="flex-shrink-0 flex items-center justify-between h-16 px-4 bg-blue-800 border-b border-blue-700">
+          <div className="relative z-10 flex-shrink-0 flex items-center justify-between h-16 px-4 bg-blue-950/60 border-b border-white/10">
             <div className="flex items-center space-x-3 min-w-0">
-              <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
-                <Ship className="w-5 h-5 text-blue-800" />
-              </div>
+              <img
+                src="/bgp-icon.jpg"
+                alt="Barokah Galangan Perkasa"
+                className="w-8 h-8 rounded-lg object-cover flex-shrink-0 ring-1 ring-white/20"
+              />
               {!sidebarCollapsed && (
                 <h1 className="text-lg font-bold text-white transition-opacity duration-200 truncate">
                   Shipyard System
@@ -211,7 +334,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
             {/* Collapse Toggle Button */}
             <button
               onClick={toggleSidebar}
-              className="flex-shrink-0 w-8 h-8 bg-blue-700 hover:bg-blue-600 rounded-lg flex items-center justify-center text-white transition-all duration-200 hover:scale-105"
+              className="flex-shrink-0 w-8 h-8 bg-white/10 hover:bg-white/20 rounded-lg flex items-center justify-center text-white transition-all duration-200 hover:scale-105"
               title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               {sidebarCollapsed ? (
@@ -223,47 +346,20 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-blue-700 scrollbar-track-blue-900">
-            {visibleNavigation.map((item) => {
-              const IconComponent = item.icon;
-              return (
-                <div key={item.name} className="relative group">
-                  <button
-                    onClick={() => navigate(item.href)}
-                    className={`w-full text-left px-3 py-3 rounded-xl flex items-center transition-all duration-200 ${
-                      sidebarCollapsed ? "justify-center" : "space-x-3"
-                    } ${
-                      item.current
-                        ? "bg-white text-blue-800 shadow-lg transform scale-105"
-                        : "text-blue-100 hover:bg-blue-700 hover:text-white hover:transform hover:scale-105"
-                    }`}
-                  >
-                    <IconComponent className="w-5 h-5 flex-shrink-0" />
-                    {!sidebarCollapsed && (
-                      <span className="font-medium transition-opacity duration-200 truncate">
-                        {item.name}
-                      </span>
-                    )}
-                  </button>
-
-                  {/* Tooltip for collapsed state */}
-                  {sidebarCollapsed && (
-                    <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white px-2 py-1 rounded text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 pointer-events-none">
-                      {item.name}
-                      <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 rotate-45"></div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <nav className="relative z-10 flex-1 px-3 py-6 overflow-y-auto sidebar-scroll">
+            <SidebarNav
+              groups={visibleGroups}
+              collapsed={sidebarCollapsed}
+              onNavigate={handleNavigate}
+            />
           </nav>
 
           {/* User Info & Logout */}
-          <div className="flex-shrink-0 p-3 border-t border-blue-700 bg-blue-800">
+          <div className="relative z-10 flex-shrink-0 p-3 border-t border-white/10 bg-blue-950/60">
             {!sidebarCollapsed ? (
               <>
                 <div className="flex items-center space-x-3 mb-4">
-                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center ring-2 ring-blue-400 flex-shrink-0">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center ring-2 ring-blue-400/50 flex-shrink-0">
                     {profile?.name ? (
                       <span className="text-white text-sm font-bold">
                         {profile.name.charAt(0).toUpperCase()}
@@ -289,7 +385,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
             ) : (
               <div className="flex flex-col items-center space-y-3">
                 <div className="relative group">
-                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center ring-2 ring-blue-400 cursor-pointer">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center ring-2 ring-blue-400/50 cursor-pointer">
                     {profile?.name ? (
                       <span className="text-white text-sm font-bold">
                         {profile.name.charAt(0).toUpperCase()}
@@ -329,13 +425,18 @@ export default function Layout({ children, onLogout }: LayoutProps) {
             className="fixed inset-0 bg-gray-600 bg-opacity-75"
             onClick={() => setSidebarOpen(false)}
           />
-          <div className="relative flex flex-col max-w-xs w-full h-full bg-gradient-to-b from-blue-900 via-blue-800 to-blue-900 shadow-2xl">
+          <div className="relative flex flex-col max-w-xs w-full h-full overflow-hidden bg-gradient-to-b from-blue-950 via-blue-900 to-slate-950 shadow-2xl">
+            <div className="pointer-events-none absolute -top-16 -left-16 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl" />
+            <div className="pointer-events-none absolute bottom-24 -right-16 w-64 h-64 bg-indigo-400/15 rounded-full blur-3xl" />
+
             {/* Mobile sidebar header */}
-            <div className="flex-shrink-0 flex items-center justify-between h-16 px-6 bg-blue-800 border-b border-blue-700">
+            <div className="relative z-10 flex-shrink-0 flex items-center justify-between h-16 px-6 bg-blue-950/60 border-b border-white/10">
               <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-                  <Ship className="w-5 h-5 text-blue-800" />
-                </div>
+                <img
+                  src="/bgp-icon.jpg"
+                  alt="Barokah Galangan Perkasa"
+                  className="w-8 h-8 rounded-lg object-cover ring-1 ring-white/20"
+                />
                 <h1 className="text-xl font-bold text-white">
                   Shipyard System
                 </h1>
@@ -349,33 +450,21 @@ export default function Layout({ children, onLogout }: LayoutProps) {
             </div>
 
             {/* Mobile navigation */}
-            <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-              {visibleNavigation.map((item) => {
-                const IconComponent = item.icon;
-                return (
-                  <button
-                    key={item.name}
-                    onClick={() => {
-                      navigate(item.href);
-                      setSidebarOpen(false);
-                    }}
-                    className={`w-full text-left px-4 py-3 rounded-xl flex items-center space-x-3 transition-all duration-200 ${
-                      item.current
-                        ? "bg-white text-blue-800 shadow-lg"
-                        : "text-blue-100 hover:bg-blue-700 hover:text-white"
-                    }`}
-                  >
-                    <IconComponent className="w-5 h-5" />
-                    <span className="font-medium">{item.name}</span>
-                  </button>
-                );
-              })}
+            <nav className="relative z-10 flex-1 px-4 py-6 overflow-y-auto sidebar-scroll">
+              <SidebarNav
+                groups={visibleGroups}
+                collapsed={false}
+                onNavigate={(href) => {
+                  handleNavigate(href);
+                  setSidebarOpen(false);
+                }}
+              />
             </nav>
 
             {/* Mobile user info */}
-            <div className="flex-shrink-0 p-4 border-t border-blue-700 bg-blue-800">
+            <div className="relative z-10 flex-shrink-0 p-4 border-t border-white/10 bg-blue-950/60">
               <div className="flex items-center space-x-3 mb-4">
-                <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center ring-2 ring-blue-400">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center ring-2 ring-blue-400/50">
                   {profile?.name ? (
                     <span className="text-white text-sm font-bold">
                       {profile.name.charAt(0).toUpperCase()}
@@ -418,9 +507,11 @@ export default function Layout({ children, onLogout }: LayoutProps) {
               <Menu className="w-6 h-6" />
             </button>
             <div className="flex items-center space-x-2">
-              <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center">
-                <Ship className="w-4 h-4 text-white" />
-              </div>
+              <img
+                src="/bgp-icon.jpg"
+                alt="Barokah Galangan Perkasa"
+                className="w-6 h-6 rounded object-cover"
+              />
               <h1 className="text-lg font-medium text-gray-900">
                 Shipyard System
               </h1>
