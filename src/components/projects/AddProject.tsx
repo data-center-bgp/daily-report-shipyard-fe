@@ -9,7 +9,7 @@ import { suggestProjectName } from "../../utils/projectNaming";
 
 export default function AddProject() {
   const navigate = useNavigate();
-  const { isReadOnly } = useAuth();
+  const { isOperationsReadOnly } = useAuth();
 
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [loadingVessels, setLoadingVessels] = useState(true);
@@ -33,11 +33,11 @@ export default function AddProject() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isReadOnly) {
+    if (isOperationsReadOnly) {
       alert("You don't have permission to create projects");
       navigate("/projects");
     }
-  }, [isReadOnly, navigate]);
+  }, [isOperationsReadOnly, navigate]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

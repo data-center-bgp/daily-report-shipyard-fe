@@ -59,7 +59,7 @@ export default function ProjectsList() {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const { isReadOnly } = useAuth();
+  const { isOperationsReadOnly } = useAuth();
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -161,7 +161,7 @@ export default function ProjectsList() {
           >
             <RefreshCw className="w-4 h-4" /> Refresh
           </button>
-          {!isReadOnly && (
+          {!isOperationsReadOnly && (
             <button
               onClick={() => navigate("/projects/add")}
               className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
@@ -259,7 +259,7 @@ export default function ProjectsList() {
               <p className="text-gray-500 text-lg mb-2">
                 {searchTerm ? "No projects match your search" : "No projects yet"}
               </p>
-              {!searchTerm && !isReadOnly && (
+              {!searchTerm && !isOperationsReadOnly && (
                 <button
                   onClick={() => navigate("/projects/add")}
                   className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"

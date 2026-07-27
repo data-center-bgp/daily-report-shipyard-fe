@@ -22,7 +22,7 @@ import {
 
 export default function BASTP() {
   const navigate = useNavigate();
-  const { isReadOnly } = useAuth();
+  const { isBastpReadOnly } = useAuth();
   const [bastps, setBastps] = useState<BASTPWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -272,7 +272,7 @@ export default function BASTP() {
           </p>
         </div>
 
-        {!isReadOnly && (
+        {!isBastpReadOnly && (
           <button
             onClick={() => navigate("/bastp/create")}
             className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-3 rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
@@ -478,7 +478,7 @@ export default function BASTP() {
                       >
                         View
                       </button>
-                      {!isReadOnly && (
+                      {!isBastpReadOnly && (
                         <button
                           onClick={() => navigate(`/bastp/edit/${bastp.id}`)}
                           className="text-indigo-600 hover:text-indigo-900"
@@ -496,7 +496,7 @@ export default function BASTP() {
           <div className="text-center py-12">
             <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-500 text-lg">No BASTPs found</p>
-            {!isReadOnly && (
+            {!isBastpReadOnly && (
               <button
                 onClick={() => navigate("/bastp/create")}
                 className="mt-4 text-blue-600 hover:text-blue-800"

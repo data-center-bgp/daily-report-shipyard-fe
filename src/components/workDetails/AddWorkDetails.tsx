@@ -51,13 +51,19 @@ export default function AddWorkDetails() {
 
   // Check user role - Only check for PPIC
   const isPPIC = profile?.role === "PPIC";
+  // MASTER and ADMIN_SHIPPING both get the full create form. ADMIN_SHIPPING
+  // exists to create Projects/Work Orders/Work Details only — it can never
+  // reach an edit page (see EditWorkDetails.tsx/EditWorkOrder.tsx), so full
+  // access here is safe.
+  const isFullAccessCreator =
+    profile?.role === "MASTER" || profile?.role === "ADMIN_SHIPPING";
 
-  // Redirect if not PPIC or MASTER (anyone who is not PPIC needs to be MASTER)
+  // Redirect if not PPIC or a full-access creator
   useEffect(() => {
-    if (profile && !isPPIC && profile.role !== "MASTER") {
+    if (profile && !isPPIC && !isFullAccessCreator) {
       navigate("/work-details");
     }
-  }, [profile, isPPIC, navigate]);
+  }, [profile, isPPIC, isFullAccessCreator, navigate]);
 
   // Form state - array of work details
   const [workDetailsList, setWorkDetailsList] = useState<WorkDetailFormData[]>([
@@ -473,13 +479,14 @@ export default function AddWorkDetails() {
     }
   };
 
-  // Access control - Only PPIC or MASTER can add
-  if (!isPPIC && profile?.role !== "MASTER") {
+  // Access control - Only PPIC or a full-access creator can add
+  if (!isPPIC && !isFullAccessCreator) {
     return (
       <div className="p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-700">
-            Only PPIC and MASTER users can add new work details.
+            Only PPIC, MASTER, and ADMIN_SHIPPING users can add new work
+            details.
           </p>
         </div>
       </div>
@@ -497,10 +504,10 @@ export default function AddWorkDetails() {
             </h1>
             <p className="text-gray-600 mt-2">
               Create one or multiple work details for one work order
-              {profile?.role === "MASTER" && (
+              {isFullAccessCreator && (
                 <span className="text-purple-600 font-medium">
                   {" "}
-                  (MASTER - Full Access)
+                  (Full Access)
                 </span>
               )}
             </p>
@@ -510,10 +517,10 @@ export default function AddWorkDetails() {
                 scope fields
               </p>
             )}
-            {!isPPIC && profile?.role === "MASTER" && (
+            {!isPPIC && isFullAccessCreator && (
               <p className="text-sm text-purple-600 mt-1 flex items-center gap-1">
-                <Ship className="w-4 h-4" /> MASTER Mode: Full access to create
-                work details
+                <Ship className="w-4 h-4" /> Full access to create work
+                details
               </p>
             )}
           </div>
@@ -536,7 +543,7 @@ export default function AddWorkDetails() {
             {isPPIC &&
               "Fill in the PPIC-managed fields. PRODUCTION team will complete the rest."}
             {!isPPIC &&
-              profile?.role === "MASTER" &&
+              isFullAccessCreator &&
               "Fill in all work details fields. PRODUCTION team can later add execution details."}
           </p>
         </div>

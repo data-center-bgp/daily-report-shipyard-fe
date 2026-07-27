@@ -75,11 +75,12 @@ export default function CreateBASTP() {
   const navigate = useNavigate();
   const { bastpId } = useParams<{ bastpId: string }>();
   const isEditMode = !!bastpId;
-  const { isReadOnly, profile } = useAuth();
+  const { isBastpReadOnly, profile } = useAuth();
   // FINANCE consumes BASTPs to create invoices — it shouldn't create/edit
-  // their composition, only MANAGER's isReadOnly was accounted for before.
+  // their composition. Kept only for the message text below; the actual gate
+  // is isBastpReadOnly (MANAGER + FINANCE + OP_HEAD).
   const isFinanceReadOnly = profile?.role === "FINANCE";
-  const canEditBastp = !isReadOnly && !isFinanceReadOnly;
+  const canEditBastp = !isBastpReadOnly;
 
   // Form states
   const [formData, setFormData] = useState({

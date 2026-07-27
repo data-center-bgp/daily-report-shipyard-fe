@@ -73,7 +73,10 @@ interface WorkOrderWithProgress extends Omit<
 export default function VesselWorkOrders() {
   const { vesselId } = useParams<{ vesselId: string }>();
   const navigate = useNavigate();
-  const { isReadOnly } = useAuth();
+  const { isOperationsReadOnly, isShippingCreateOnly } = useAuth();
+  // ADMIN_SHIPPING can create work orders/details here but never edit/delete
+  // one, and has no Progress access at all.
+  const canEditHere = !isOperationsReadOnly && !isShippingCreateOnly;
 
   const [vessel, setVessel] = useState<VesselData | null>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrderWithProgress[]>([]);
@@ -285,7 +288,7 @@ export default function VesselWorkOrders() {
   };
 
   const handleAddWorkOrder = () => {
-    if (isReadOnly) {
+    if (isOperationsReadOnly) {
       alert("You don't have permission to add work orders");
       return;
     }
@@ -299,7 +302,7 @@ export default function VesselWorkOrders() {
   };
 
   const handleDeleteWorkOrder = (workOrder: WorkOrderWithProgress) => {
-    if (isReadOnly) {
+    if (!canEditHere) {
       alert("You don't have permission to delete work orders");
       return;
     }
@@ -581,14 +584,19 @@ export default function VesselWorkOrders() {
           </div>
 
           {/* Read-Only Badge */}
-          {isReadOnly && (
+          {isOperationsReadOnly && (
             <span className="px-3 py-1.5 bg-yellow-100 text-yellow-800 text-sm font-medium rounded-full border border-yellow-200 flex items-center gap-1.5">
               <Lock className="w-4 h-4" /> Read Only Access
             </span>
           )}
+          {isShippingCreateOnly && (
+            <span className="px-3 py-1.5 bg-blue-100 text-blue-800 text-sm font-medium rounded-full border border-blue-200 flex items-center gap-1.5">
+              <Lock className="w-4 h-4" /> Create Only
+            </span>
+          )}
 
           {/* Add Work Order Button - Hide for MANAGER */}
-          {!isReadOnly && (
+          {!isOperationsReadOnly && (
             <button
               onClick={handleAddWorkOrder}
               className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 font-medium shadow-md"
@@ -599,7 +607,7 @@ export default function VesselWorkOrders() {
         </div>
 
         {/* Read-Only Info Banner */}
-        {isReadOnly && (
+        {isOperationsReadOnly && (
           <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
               <Info className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
@@ -608,6 +616,22 @@ export default function VesselWorkOrders() {
                 <p className="text-sm text-yellow-700 mt-1">
                   You can view work orders but cannot create, edit, or delete
                   them.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Create-Only Info Banner (ADMIN_SHIPPING) */}
+        {isShippingCreateOnly && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-blue-900">Create-Only Mode</p>
+                <p className="text-sm text-blue-700 mt-1">
+                  You can create work orders and work details, but cannot
+                  edit or delete them once created.
                 </p>
               </div>
             </div>
@@ -628,7 +652,7 @@ export default function VesselWorkOrders() {
               {filteredWorkOrders.length} work order
               {filteredWorkOrders.length !== 1 ? "s" : ""}
               {searchTerm && ` (filtered from ${workOrders.length})`}
-              {isReadOnly && " • Viewing only"}
+              {isOperationsReadOnly && " • Viewing only"}
             </p>
           </div>
         </div>
@@ -905,23 +929,23 @@ export default function VesselWorkOrders() {
                           <button
                             onClick={() => handleEditWorkOrder(wo)}
                             className={`${
-                              isReadOnly
+                              !canEditHere
                                 ? "text-blue-600 hover:text-blue-900"
                                 : "text-green-600 hover:text-green-900"
                             } transition-colors p-1 rounded hover:bg-gray-50`}
                             title={
-                              isReadOnly ? "View Work Order" : "Edit Work Order"
+                              !canEditHere ? "View Work Order" : "Edit Work Order"
                             }
                           >
-                            {isReadOnly ? (
+                            {!canEditHere ? (
                               <Eye className="w-4 h-4" />
                             ) : (
                               <Edit className="w-4 h-4" />
                             )}
                           </button>
 
-                          {/* Hide Delete button for MANAGER */}
-                          {!isReadOnly && (
+                          {/* Hide Delete button for MANAGER/HSSE/OP_HEAD/ADMIN_SHIPPING */}
+                          {canEditHere && (
                             <button
                               onClick={() => handleDeleteWorkOrder(wo)}
                               className="text-red-600 hover:text-red-900 transition-colors p-1 rounded hover:bg-red-50"
@@ -945,7 +969,7 @@ export default function VesselWorkOrders() {
                                   <Wrench className="w-4 h-4" /> Work Details
                                   for {wo.shipyard_wo_number}
                                 </h4>
-                                {!isReadOnly && (
+                                {!isOperationsReadOnly && (
                                   <button
                                     onClick={() =>
                                       navigate(`/work-details/add/${wo.id}`)
@@ -1149,7 +1173,7 @@ export default function VesselWorkOrders() {
 
                                       {/* Work Detail Actions */}
                                       <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
-                                        {!isReadOnly && (
+                                        {canEditHere && (
                                           <button
                                             onClick={() =>
                                               navigate(
@@ -1162,7 +1186,7 @@ export default function VesselWorkOrders() {
                                             Edit Details
                                           </button>
                                         )}
-                                        {!isReadOnly && (
+                                        {canEditHere && (
                                           <button
                                             onClick={() =>
                                               navigate(
@@ -1184,7 +1208,7 @@ export default function VesselWorkOrders() {
                                           className="text-xs font-medium text-gray-700 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1"
                                         >
                                           <Eye className="w-3.5 h-3.5" />{" "}
-                                          {isReadOnly
+                                          {!canEditHere
                                             ? "View Progress"
                                             : "View / Edit Progress"}
                                         </button>
@@ -1215,7 +1239,7 @@ export default function VesselWorkOrders() {
                                 <div className="text-center py-8 text-gray-500">
                                   <ClipboardList className="w-16 h-16 text-gray-400 mx-auto mb-2" />
                                   <p>No work details added yet</p>
-                                  {!isReadOnly && (
+                                  {!isOperationsReadOnly && (
                                     <button
                                       onClick={() =>
                                         navigate(`/work-order/${wo.id}`)
@@ -1261,7 +1285,7 @@ export default function VesselWorkOrders() {
                 <p className="text-gray-400 text-sm mb-4">
                   This vessel doesn't have any work orders yet.
                 </p>
-                {!isReadOnly && (
+                {!isOperationsReadOnly && (
                   <button
                     onClick={handleAddWorkOrder}
                     className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"

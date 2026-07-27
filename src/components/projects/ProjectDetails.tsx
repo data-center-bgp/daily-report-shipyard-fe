@@ -80,7 +80,7 @@ export default function ProjectDetails() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { isReadOnly } = useAuth();
+  const { isOperationsReadOnly } = useAuth();
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrderRow[]>([]);
@@ -302,7 +302,7 @@ export default function ProjectDetails() {
             </p>
           )}
         </div>
-        {!isReadOnly && (
+        {!isOperationsReadOnly && (
           <div className="flex gap-3">
             <button
               onClick={openAssignModal}

@@ -11,6 +11,7 @@ import {
   getLatestProgressRecord,
 } from "../../utils/progressPercentage";
 import { isOpenForRework } from "../../utils/workVerificationStatus";
+import { useAuth } from "../../hooks/useAuth";
 import {
   FileText,
   Ship,
@@ -93,6 +94,14 @@ export default function AddWorkProgress({
 }: AddWorkProgressProps) {
   const navigate = useNavigate();
   const params = useParams();
+  const { isOperationsReadOnly } = useAuth();
+
+  useEffect(() => {
+    if (isOperationsReadOnly) {
+      alert("You don't have permission to add progress reports.");
+      navigate("/work-progress");
+    }
+  }, [isOperationsReadOnly, navigate]);
 
   const effectiveWorkDetailsId =
     workDetailsId ||

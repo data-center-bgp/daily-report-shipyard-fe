@@ -79,7 +79,7 @@ export default function WorkProgressTable({
 }: WorkProgressTableProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isReadOnly } = useAuth();
+  const { isOperationsReadOnly } = useAuth();
   // The /work-details/:workDetailsId/progress route renders this component
   // with no props, so fall back to the URL param when one isn't passed in.
   const params = useParams<{ workDetailsId?: string }>();
@@ -863,7 +863,7 @@ export default function WorkProgressTable({
   const handleAddProgressFromCurrent = async (
     progressItem: WorkProgressWithDetails,
   ) => {
-    if (isReadOnly) {
+    if (isOperationsReadOnly) {
       alert("❌ You don't have permission to add progress reports.");
       return;
     }
@@ -981,7 +981,7 @@ export default function WorkProgressTable({
   };
 
   const handleAddProgressFromNoResults = () => {
-    if (isReadOnly) {
+    if (isOperationsReadOnly) {
       alert("❌ You don't have permission to add progress reports.");
       return;
     }
@@ -1796,7 +1796,7 @@ export default function WorkProgressTable({
                 Clear Filters
               </button>
             )}
-            {!isReadOnly && (
+            {!isOperationsReadOnly && (
               <button
                 onClick={handleAddProgressFromNoResults}
                 className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
@@ -1817,7 +1817,7 @@ export default function WorkProgressTable({
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Progress
-                  {!isReadOnly && (
+                  {!isOperationsReadOnly && (
                     <div className="text-xs text-gray-400 font-normal mt-1">
                       (Click to add new)
                     </div>
@@ -1844,7 +1844,7 @@ export default function WorkProgressTable({
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Created
                 </th>
-                {!isReadOnly && (
+                {!isOperationsReadOnly && (
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
                     Actions
                   </th>
@@ -1869,7 +1869,7 @@ export default function WorkProgressTable({
                         onAddProgress={handleAddProgressFromCurrent}
                         getProgressColor={getProgressColor}
                         getProgressIcon={getProgressIcon}
-                        isReadOnly={isReadOnly}
+                        isOperationsReadOnly={isOperationsReadOnly}
                       />
                     </td>
                     <td className="px-6 py-4">
@@ -1908,7 +1908,7 @@ export default function WorkProgressTable({
                     <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
                       {formatDateTime(item.created_at)}
                     </td>
-                    {!isReadOnly && (
+                    {!isOperationsReadOnly && (
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         <button
                           onClick={() =>
@@ -1950,7 +1950,7 @@ export default function WorkProgressTable({
                 Track detailed progress reports for work activities
               </p>
             </div>
-            {!isReadOnly && (
+            {!isOperationsReadOnly && (
               <button
                 onClick={() => navigate("/add-work-progress")}
                 className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
@@ -1996,7 +1996,7 @@ function ProgressCell({
   onAddProgress,
   getProgressColor,
   getProgressIcon,
-  isReadOnly,
+  isOperationsReadOnly,
 }: {
   item: WorkProgressWithDetails;
   isCompleted: boolean;
@@ -2004,9 +2004,9 @@ function ProgressCell({
   onAddProgress: (item: WorkProgressWithDetails) => void;
   getProgressColor: (progress: number) => string;
   getProgressIcon: (progress: number) => React.ReactElement;
-  isReadOnly: boolean;
+  isOperationsReadOnly: boolean;
 }) {
-  if (isCompleted || isReadOnly) {
+  if (isCompleted || isOperationsReadOnly) {
     return (
       <div className="w-full text-left p-2 rounded-lg bg-gray-50 border border-gray-200 cursor-not-allowed opacity-75">
         <div className="flex items-center">

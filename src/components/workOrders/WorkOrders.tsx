@@ -3,7 +3,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { Lock, Info } from "lucide-react";
 
 export default function WorkOrders() {
-  const { isReadOnly } = useAuth();
+  const { isOperationsReadOnly } = useAuth();
 
   return (
     <div className="p-8">
@@ -13,14 +13,14 @@ export default function WorkOrders() {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Work Orders</h1>
             <p className="text-gray-600">
-              {isReadOnly
+              {isOperationsReadOnly
                 ? "View all work orders (Read-only access)"
                 : "Manage all work orders"}
             </p>
           </div>
 
           {/* Read-Only Badge */}
-          {isReadOnly && (
+          {isOperationsReadOnly && (
             <div className="flex items-center gap-2">
               <span className="px-3 py-1.5 bg-yellow-100 text-yellow-800 text-sm font-medium rounded-full border border-yellow-200 flex items-center gap-1.5">
                 <Lock className="w-4 h-4" /> Read Only Access
@@ -30,7 +30,7 @@ export default function WorkOrders() {
         </div>
 
         {/* Read-Only Info Banner */}
-        {isReadOnly && (
+        {isOperationsReadOnly && (
           <div className="mt-4 bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
               <Info className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />

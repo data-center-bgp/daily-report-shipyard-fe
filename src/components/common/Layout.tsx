@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
+  Users,
   ClipboardList,
   ClipboardCheck,
 } from "lucide-react";
@@ -173,6 +174,13 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       icon: Upload,
       current: location.pathname === "/import-data",
       show: canAccess("exportData"),
+    },
+    {
+      name: "User Management",
+      href: "/user-management",
+      icon: Users,
+      current: location.pathname === "/user-management",
+      show: canAccess("userManagement"),
     },
   ];
 

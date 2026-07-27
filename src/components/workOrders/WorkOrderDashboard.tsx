@@ -70,7 +70,7 @@ export default function WorkOrderDashboard() {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const { isReadOnly } = useAuth();
+  const { isOperationsReadOnly } = useAuth();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -450,7 +450,7 @@ export default function WorkOrderDashboard() {
           >
             <RefreshCw className="w-4 h-4" /> Refresh
           </button>
-          {!isReadOnly && (
+          {!isOperationsReadOnly && (
             <button
               onClick={handleAddWorkOrder}
               className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"

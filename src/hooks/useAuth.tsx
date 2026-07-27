@@ -27,7 +27,8 @@ export interface UserProfile {
     | "ADMIN"
     | "FINANCE"
     | "MANAGER"
-    | "HSSE";
+    | "HSSE"
+    | "ADMIN_SHIPPING";
   auth_user_id: string;
 }
 
@@ -44,6 +45,17 @@ interface AuthContextType {
   hasRole: (roles: string | string[]) => boolean;
   canAccess: (feature: string) => boolean;
   isReadOnly: boolean; // NEW: Simple read-only flag
+  // MANAGER (isReadOnly) everywhere, PLUS HSSE and OP_HEAD on Projects/Work
+  // Orders/Work Details/Progress specifically. Kept separate from isReadOnly
+  // because HSSE (Readiness Form) and OP_HEAD (Work Verification, Additional
+  // WO Approvals) each still have full write access to their own feature.
+  isOperationsReadOnly: boolean;
+  // MANAGER (isReadOnly) everywhere, PLUS FINANCE and OP_HEAD on BASTP
+  // composition/materials specifically — both can view but never edit.
+  isBastpReadOnly: boolean;
+  // ADMIN_SHIPPING only — can create Projects/Work Orders/Work Details but
+  // never edit or delete one. Does not affect Add/Create visibility.
+  isShippingCreateOnly: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -66,7 +78,11 @@ const FEATURE_ACCESS = {
     "FINANCE",
     "MANAGER",
     "HSSE",
+    "ADMIN_SHIPPING",
   ],
+  // ADMIN_SHIPPING creates Projects/Work Orders/Work Details only — it
+  // never gets Progress, and everywhere it does appear it can create but
+  // never edit/delete (see isShippingCreateOnly).
   workOrders: [
     "MASTER",
     "PPIC",
@@ -75,6 +91,7 @@ const FEATURE_ACCESS = {
     "ADMIN",
     "MANAGER",
     "HSSE",
+    "ADMIN_SHIPPING",
   ],
   workDetails: [
     "MASTER",
@@ -83,8 +100,18 @@ const FEATURE_ACCESS = {
     "OP_HEAD",
     "ADMIN",
     "MANAGER",
+    "HSSE",
+    "ADMIN_SHIPPING",
   ],
-  progress: ["MASTER", "PPIC", "PRODUCTION", "OP_HEAD", "ADMIN", "MANAGER"],
+  progress: [
+    "MASTER",
+    "PPIC",
+    "PRODUCTION",
+    "OP_HEAD",
+    "ADMIN",
+    "MANAGER",
+    "HSSE",
+  ],
   // Verification is OP_HEAD's job specifically (the fleet/vessel
   // coordinator) — MASTER/MANAGER keep read-only visibility like everywhere
   // else, but PPIC/PRODUCTION/ADMIN no longer see or act on this page.
@@ -128,6 +155,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // NEW: Compute read-only status
   const isReadOnly = profile?.role === "MANAGER";
+  // HSSE and OP_HEAD can view Projects/Work Orders/Work Details/Progress, but
+  // should never write there. OP_HEAD's actual write privileges (Work
+  // Verification, Additional WO Approvals) live in those pages' own role
+  // checks and don't consume this flag, so they're unaffected. HSSE's write
+  // privilege (the Readiness Form) is the same story.
+  const isOperationsReadOnly =
+    isReadOnly || profile?.role === "HSSE" || profile?.role === "OP_HEAD";
+  // BASTP composition/materials: FINANCE and OP_HEAD can view (BASTP is on
+  // OP_HEAD's "monitor up to BASTP" path) but never edit, on top of
+  // MANAGER's blanket isReadOnly. Kept separate from isOperationsReadOnly
+  // since FINANCE has no access to Projects/Work Orders/Details/Progress at
+  // all, so lumping it into that flag would be meaningless there.
+  const isBastpReadOnly =
+    isReadOnly || profile?.role === "FINANCE" || profile?.role === "OP_HEAD";
+  // ADMIN_SHIPPING exists to CREATE Projects/Work Orders/Work Details — it
+  // must never edit or delete one afterward. Distinct from
+  // isOperationsReadOnly (which also hides the Add/Create entry points,
+  // wrong for this role) — this flag only gates edit/delete surfaces.
+  const isShippingCreateOnly = profile?.role === "ADMIN_SHIPPING";
 
   const fetchProfile = useCallback(
     async (userId: string, retryCount = 0): Promise<UserProfile | null> => {
@@ -347,6 +393,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         hasRole,
         canAccess,
         isReadOnly, // NEW: Expose read-only flag
+        isOperationsReadOnly,
+        isBastpReadOnly,
+        isShippingCreateOnly,
       }}
     >
       {children}

@@ -57,7 +57,7 @@ interface KaproInfo {
 export default function EditWorkProgress() {
   const navigate = useNavigate();
   const { progressId } = useParams<{ progressId: string }>();
-  const { isReadOnly } = useAuth();
+  const { isOperationsReadOnly } = useAuth();
   const location = useLocation();
 
   const [loading, setLoading] = useState(true);
@@ -189,7 +189,7 @@ export default function EditWorkProgress() {
 
   // Also update the useEffect to add logging:
   useEffect(() => {
-    if (isReadOnly) {
+    if (isOperationsReadOnly) {
       navigate("/work-progress");
       return;
     }
@@ -199,7 +199,7 @@ export default function EditWorkProgress() {
     } else {
       setLoading(false);
     }
-  }, [progressId, isReadOnly, navigate, fetchProgressData]);
+  }, [progressId, isOperationsReadOnly, navigate, fetchProgressData]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,

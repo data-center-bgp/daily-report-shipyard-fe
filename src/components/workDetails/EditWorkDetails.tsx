@@ -75,12 +75,22 @@ export default function EditWorkDetails() {
   const navigate = useNavigate();
   const { workDetailsId } = useParams<{ workDetailsId: string }>();
   const location = useLocation();
-  const { profile } = useAuth();
+  const { profile, isOperationsReadOnly, isShippingCreateOnly } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Check user role - Only check for PPIC or PRODUCTION
   const isPPIC = profile?.role === "PPIC";
   const isProduction = profile?.role === "PRODUCTION";
+
+  // HSSE/MANAGER/OP_HEAD can view Work Details in the list, and
+  // ADMIN_SHIPPING can create one, but none of them may ever reach this edit
+  // form by URL — everyone else falls into the "full access" branch below,
+  // which none of these roles must get.
+  useEffect(() => {
+    if (profile && (isOperationsReadOnly || isShippingCreateOnly)) {
+      navigate("/work-details");
+    }
+  }, [profile, isOperationsReadOnly, isShippingCreateOnly, navigate]);
 
   // Form state
   const [formData, setFormData] = useState({

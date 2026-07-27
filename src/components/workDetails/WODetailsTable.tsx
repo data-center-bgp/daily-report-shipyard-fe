@@ -113,7 +113,9 @@ export default function WODetailsTable({
   onRefresh,
   embedded = false,
 }: WorkDetailsTableProps) {
-  const { profile, isReadOnly } = useAuth();
+  const { profile, isOperationsReadOnly, isShippingCreateOnly } = useAuth();
+  // ADMIN_SHIPPING can create work details but never edit/delete one.
+  const canEditWorkDetails = !isOperationsReadOnly && !isShippingCreateOnly;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -1215,7 +1217,7 @@ export default function WODetailsTable({
         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
           Progress
         </th>
-        {!isReadOnly && (
+        {canEditWorkDetails && (
           <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
             Actions
           </th>
@@ -1359,7 +1361,7 @@ export default function WODetailsTable({
             </div>
           </td>
 
-          {!isReadOnly && (
+          {canEditWorkDetails && (
             <td className="px-6 py-4 whitespace-nowrap text-center">
               <div className="flex justify-center gap-2">
                 <button
@@ -1385,7 +1387,7 @@ export default function WODetailsTable({
 
         {isExpanded && (
           <tr className="bg-gray-50 animate-in fade-in slide-in-from-top-2 duration-300">
-            <td colSpan={isReadOnly ? 8 : 9} className="px-0 py-0">
+            <td colSpan={canEditWorkDetails ? 9 : 8} className="px-0 py-0">
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-t border-b border-blue-200">
                 <div className="px-6 py-4 transition-all duration-300 ease-in-out">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1560,7 +1562,7 @@ export default function WODetailsTable({
                       <BarChart3 className="w-4 h-4" /> View Progress (
                       {detail.progress_count || 0})
                     </button>
-                    {!isReadOnly && (
+                    {canEditWorkDetails && (
                       <button
                         onClick={() => handleAddProgress(detail.id)}
                         className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm"
@@ -1975,7 +1977,7 @@ export default function WODetailsTable({
                 ? "No work details found for the selected project/vessel."
                 : "Create work details to track and manage work tasks."}
       </p>
-      {!workDetailsSearchTerm && !isReadOnly && (
+      {!workDetailsSearchTerm && !isOperationsReadOnly && (
         <button
           onClick={handleAddWorkDetails}
           className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 inline-flex items-center gap-2 shadow-md"
@@ -2026,8 +2028,10 @@ export default function WODetailsTable({
             >
               <RefreshCw className="w-4 h-4" /> Refresh
             </button>
-            {!isReadOnly &&
-              (profile?.role === "PPIC" || profile?.role === "MASTER") && (
+            {!isOperationsReadOnly &&
+              (profile?.role === "PPIC" ||
+                profile?.role === "MASTER" ||
+                profile?.role === "ADMIN_SHIPPING") && (
                 <button
                   onClick={handleAddWorkDetails}
                   className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-2 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center gap-2 shadow-md"
@@ -2174,8 +2178,10 @@ export default function WODetailsTable({
               </select>
 
               {embedded &&
-                !isReadOnly &&
-                (profile?.role === "PPIC" || profile?.role === "MASTER") && (
+                !isOperationsReadOnly &&
+                (profile?.role === "PPIC" ||
+                  profile?.role === "MASTER" ||
+                  profile?.role === "ADMIN_SHIPPING") && (
                   <button
                     onClick={handleAddWorkDetails}
                     className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center gap-2 shadow-sm text-sm"

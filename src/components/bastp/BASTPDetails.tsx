@@ -29,7 +29,7 @@ import {
 
 export default function BASTPDetails() {
   const navigate = useNavigate();
-  const { isReadOnly, profile } = useAuth();
+  const { isBastpReadOnly } = useAuth();
   const { bastpId } = useParams<{ bastpId: string }>();
 
   const [bastp, setBastp] = useState<BASTPWithDetails | null>(null);
@@ -49,10 +49,9 @@ export default function BASTPDetails() {
   // nobody quietly changes what's being billed after the fact.
   const isLocked =
     bastp?.status === "READY_FOR_INVOICE" || bastp?.status === "INVOICED";
-  // FINANCE consumes BASTPs to create invoices — it shouldn't edit their
-  // composition, only MANAGER's isReadOnly was accounted for before.
-  const isFinanceReadOnly = profile?.role === "FINANCE";
-  const canEditBastp = !isReadOnly && !isFinanceReadOnly && !isLocked;
+  // FINANCE and OP_HEAD consume/monitor BASTPs but shouldn't edit their
+  // composition — see isBastpReadOnly (MANAGER + FINANCE + OP_HEAD).
+  const canEditBastp = !isBastpReadOnly && !isLocked;
 
   // Fetch BASTP details
   const fetchBastpDetails = useCallback(async () => {
@@ -416,8 +415,7 @@ export default function BASTPDetails() {
             </>
           ) : (
             isLocked &&
-            !isReadOnly &&
-            !isFinanceReadOnly && (
+            !isBastpReadOnly && (
               <span className="flex items-center gap-2 text-sm text-gray-500 bg-gray-100 px-3 py-2 rounded-lg">
                 <Lock className="w-4 h-4" /> Locked — already{" "}
                 {bastp.status === "INVOICED" ? "invoiced" : "ready for invoice"}

@@ -28,7 +28,7 @@ interface ProjectOption {
 export default function AddWorkOrder() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isReadOnly } = useAuth();
+  const { isOperationsReadOnly } = useAuth();
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [kapros, setKapros] = useState<Kapro[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -179,11 +179,11 @@ export default function AddWorkOrder() {
   }, []);
 
   useEffect(() => {
-    if (isReadOnly) {
+    if (isOperationsReadOnly) {
       alert("You don't have permission to create work orders");
       navigate("/work-orders");
     }
-  }, [isReadOnly, navigate]);
+  }, [isOperationsReadOnly, navigate]);
 
   // Get current user on component mount
   useEffect(() => {

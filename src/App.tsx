@@ -41,6 +41,7 @@ import CreateBASTP from "./components/bastp/CreateBASTP";
 import BASTPDetails from "./components/bastp/BASTPDetails";
 import BASTPMaterialsPage from "./components/bastp/BASTPMaterialsPage";
 import ActivityLogPage from "./components/activityLog/ActivityLogPage";
+import UserManagementPage from "./components/userManagement/UserManagementPage";
 
 function AppRoutes() {
   const { user, loading, signOut } = useAuth();
@@ -156,6 +157,9 @@ function AppRoutes() {
 
         {/* Activity Log Routes */}
         <Route path="/activity-logs" element={<ActivityLogPage />} />
+
+        {/* User Management Routes */}
+        <Route path="/user-management" element={<UserManagementPage />} />
 
         {/* Import/Export Routes */}
         <Route path="/export-data" element={<ExportData />} />
