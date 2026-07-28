@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { uploadProgressEvidence } from "../../utils/progressEvidenceHandler";
 import { ActivityLogService } from "../../services/activityLogService";
@@ -94,14 +94,20 @@ export default function AddWorkProgress({
 }: AddWorkProgressProps) {
   const navigate = useNavigate();
   const params = useParams();
-  const { isOperationsReadOnly } = useAuth();
+  const location = useLocation();
+  const { profile } = useAuth();
+  // Adding a progress report is PRODUCTION's job specifically — MASTER keeps
+  // the usual superuser override. Everyone else (including PPIC, who can
+  // still view progress) is redirected away.
+  const canWriteProgress =
+    profile?.role === "MASTER" || profile?.role === "PRODUCTION";
 
   useEffect(() => {
-    if (isOperationsReadOnly) {
+    if (profile && !canWriteProgress) {
       alert("You don't have permission to add progress reports.");
       navigate("/work-progress");
     }
-  }, [isOperationsReadOnly, navigate]);
+  }, [profile, canWriteProgress, navigate]);
 
   const effectiveWorkDetailsId =
     workDetailsId ||
@@ -670,8 +676,14 @@ export default function AddWorkProgress({
         description: `Created work progress report (${progressValue}%) for work details ID ${selectedWorkDetailsId}`,
       });
 
-      // Navigate to appropriate page
-      if (effectiveWorkDetailsId) {
+      // Navigate to appropriate page. A vessel's work-orders page (or any
+      // other non-table origin) takes priority via returnTo, so saving
+      // progress from there lands back on that same page instead of the
+      // generic progress list.
+      const returnTo = location.state?.returnTo;
+      if (returnTo) {
+        navigate(returnTo);
+      } else if (effectiveWorkDetailsId) {
         navigate(`/work-details/${effectiveWorkDetailsId}/progress`);
       } else {
         navigate("/work-progress");

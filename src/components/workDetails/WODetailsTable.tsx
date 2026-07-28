@@ -9,6 +9,7 @@ import {
 import { openPermitFile } from "../../utils/urlHandler";
 import { useAuth } from "../../hooks/useAuth";
 import { isOpenForRework } from "../../utils/workVerificationStatus";
+import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import { ActivityLogService } from "../../services/activityLogService";
 import {
   Ship,
@@ -116,6 +117,11 @@ export default function WODetailsTable({
   const { profile, isOperationsReadOnly, isShippingCreateOnly } = useAuth();
   // ADMIN_SHIPPING can create work details but never edit/delete one.
   const canEditWorkDetails = !isOperationsReadOnly && !isShippingCreateOnly;
+  // Adding a progress report is PRODUCTION's job specifically (MASTER keeps
+  // the usual superuser override) — narrower than canEditWorkDetails, which
+  // also covers PPIC editing its own work-detail planning fields.
+  const canWriteProgress =
+    profile?.role === "MASTER" || profile?.role === "PRODUCTION";
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -433,7 +439,11 @@ export default function WODetailsTable({
 
       // Process work details with progress data
       const workDetailsWithProgress = (data || []).map((detail) => {
-        const progressRecords = detail.work_progress || [];
+        const progressRecords: Array<{
+          progress_percentage: number;
+          report_date: string;
+          created_at: string;
+        }> = detail.work_progress || [];
         const isOpenForReworkFlag = deriveIsOpenForRework(
           progressRecords,
           detail.work_verification,
@@ -449,16 +459,16 @@ export default function WODetailsTable({
           };
         }
 
-        const sortedProgress = [...progressRecords].sort(
-          (a, b) =>
-            new Date(b.report_date).getTime() -
-            new Date(a.report_date).getTime(),
-        );
+        // Latest by report_date, tie-broken by created_at — sorting on
+        // report_date alone left same-day entries in whatever order the
+        // query happened to return them, which could show an earlier
+        // same-day report (e.g. 10%) instead of a later one (e.g. 100%).
+        const latest = getLatestProgressRecord(progressRecords);
 
         return {
           ...detail,
-          current_progress: sortedProgress[0]?.progress_percentage || 0,
-          latest_progress_date: sortedProgress[0]?.report_date,
+          current_progress: latest?.progress_percentage || 0,
+          latest_progress_date: latest?.report_date,
           progress_count: progressRecords.length,
           isOpenForRework: isOpenForReworkFlag,
         };
@@ -1096,7 +1106,11 @@ export default function WODetailsTable({
 
         // Process work details with progress data
         const workDetailsWithProgress = (data || []).map((detail) => {
-          const progressRecords = detail.work_progress || [];
+          const progressRecords: Array<{
+            progress_percentage: number;
+            report_date: string;
+            created_at: string;
+          }> = detail.work_progress || [];
           const isOpenForReworkFlag = deriveIsOpenForRework(
             progressRecords,
             detail.work_verification,
@@ -1112,16 +1126,16 @@ export default function WODetailsTable({
             };
           }
 
-          const sortedProgress = [...progressRecords].sort(
-            (a, b) =>
-              new Date(b.report_date).getTime() -
-              new Date(a.report_date).getTime(),
-          );
+          // Latest by report_date, tie-broken by created_at — sorting on
+          // report_date alone left same-day entries in whatever order the
+          // query happened to return them, which could show an earlier
+          // same-day report (e.g. 10%) instead of a later one (e.g. 100%).
+          const latest = getLatestProgressRecord(progressRecords);
 
           return {
             ...detail,
-            current_progress: sortedProgress[0]?.progress_percentage || 0,
-            latest_progress_date: sortedProgress[0]?.report_date,
+            current_progress: latest?.progress_percentage || 0,
+            latest_progress_date: latest?.report_date,
             progress_count: progressRecords.length,
             isOpenForRework: isOpenForReworkFlag,
           };
@@ -1562,7 +1576,7 @@ export default function WODetailsTable({
                       <BarChart3 className="w-4 h-4" /> View Progress (
                       {detail.progress_count || 0})
                     </button>
-                    {canEditWorkDetails && (
+                    {canWriteProgress && (
                       <button
                         onClick={() => handleAddProgress(detail.id)}
                         className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm"

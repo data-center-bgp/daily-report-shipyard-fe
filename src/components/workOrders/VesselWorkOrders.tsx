@@ -7,6 +7,7 @@ import {
 } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import { ActivityLogService } from "../../services/activityLogService";
+import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -73,10 +74,15 @@ interface WorkOrderWithProgress extends Omit<
 export default function VesselWorkOrders() {
   const { vesselId } = useParams<{ vesselId: string }>();
   const navigate = useNavigate();
-  const { isOperationsReadOnly, isShippingCreateOnly } = useAuth();
+  const { isOperationsReadOnly, isShippingCreateOnly, profile } = useAuth();
   // ADMIN_SHIPPING can create work orders/details here but never edit/delete
   // one, and has no Progress access at all.
   const canEditHere = !isOperationsReadOnly && !isShippingCreateOnly;
+  // Adding a progress report is PRODUCTION's job specifically (MASTER keeps
+  // the usual superuser override) — narrower than canEditHere, which also
+  // covers PPIC editing its own work-detail planning fields.
+  const canWriteProgress =
+    profile?.role === "MASTER" || profile?.role === "PRODUCTION";
 
   const [vessel, setVessel] = useState<VesselData | null>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrderWithProgress[]>([]);
@@ -180,16 +186,15 @@ export default function VesselWorkOrders() {
                 };
               }
 
-              // Sort progress records by date (newest first)
-              const sortedProgress = progressRecords.sort(
-                (a, b) =>
-                  new Date(b.report_date).getTime() -
-                  new Date(a.report_date).getTime(),
-              );
+              // Latest by report_date, tie-broken by created_at — sorting on
+              // report_date alone left same-day entries in whatever order
+              // the query happened to return them, which could show an
+              // earlier same-day report (e.g. 10%) instead of a later one
+              // (e.g. 100%) for the same work detail.
+              const latest = getLatestProgressRecord(progressRecords);
 
-              const latestProgress =
-                sortedProgress[0]?.progress_percentage || 0;
-              const latestProgressDate = sortedProgress[0]?.report_date;
+              const latestProgress = latest?.progress_percentage || 0;
+              const latestProgressDate = latest?.report_date;
 
               return {
                 ...detail,
@@ -1191,11 +1196,16 @@ export default function VesselWorkOrders() {
                                             Edit Details
                                           </button>
                                         )}
-                                        {canEditHere && (
+                                        {canWriteProgress && (
                                           <button
                                             onClick={() =>
                                               navigate(
                                                 `/add-work-progress/${detail.id}`,
+                                                {
+                                                  state: {
+                                                    returnTo: `/vessel/${vesselId}/work-orders`,
+                                                  },
+                                                },
                                               )
                                             }
                                             className="text-xs font-medium text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1"
@@ -1208,14 +1218,19 @@ export default function VesselWorkOrders() {
                                           onClick={() =>
                                             navigate(
                                               `/work-details/${detail.id}/progress`,
+                                              {
+                                                state: {
+                                                  returnTo: `/vessel/${vesselId}/work-orders`,
+                                                },
+                                              },
                                             )
                                           }
                                           className="text-xs font-medium text-gray-700 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1"
                                         >
                                           <Eye className="w-3.5 h-3.5" />{" "}
-                                          {!canEditHere
-                                            ? "View Progress"
-                                            : "View / Edit Progress"}
+                                          {canWriteProgress
+                                            ? "View / Edit Progress"
+                                            : "View Progress"}
                                         </button>
                                       </div>
                                     </div>

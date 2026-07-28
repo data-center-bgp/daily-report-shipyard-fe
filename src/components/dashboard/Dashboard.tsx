@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
+import { getLatestProgressRecord } from "../../utils/progressPercentage";
 
 interface DashboardStats {
   totalWorkOrders: number;
@@ -361,14 +362,13 @@ export default function Dashboard() {
               };
             }
 
-            const sortedProgress = progressRecords.sort(
-              (a, b) =>
-                new Date(b.report_date).getTime() -
-                new Date(a.report_date).getTime()
-            );
+            // Latest by report_date, tie-broken by created_at — see
+            // WODetailsTable for why report_date alone isn't enough for
+            // same-day entries.
+            const latest = getLatestProgressRecord(progressRecords);
 
-            const latestProgress = sortedProgress[0]?.progress_percentage || 0;
-            const latestProgressDate = sortedProgress[0]?.report_date;
+            const latestProgress = latest?.progress_percentage || 0;
+            const latestProgressDate = latest?.report_date;
 
             return {
               ...detail,

@@ -7,6 +7,7 @@ import {
   formatDateRange,
   exceedsDeadline,
 } from "../../utils/deadlineUtils";
+import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import {
   ArrowLeft,
   FolderKanban,
@@ -46,7 +47,11 @@ interface WorkOrderRow {
   work_details: {
     planned_start_date: string | null;
     target_close_date: string | null;
-    work_progress: { progress_percentage: number; report_date: string }[];
+    work_progress: {
+      progress_percentage: number;
+      report_date: string;
+      created_at: string;
+    }[];
   }[];
 }
 
@@ -68,9 +73,9 @@ function overallProgress(wo: WorkOrderRow): number {
   const totals = wo.work_details.map((wd) => {
     const progress = wd.work_progress || [];
     if (!progress.length) return 0;
-    const latest = [...progress].sort(
-      (a, b) => new Date(b.report_date).getTime() - new Date(a.report_date).getTime(),
-    )[0];
+    // Latest by report_date, tie-broken by created_at — see WODetailsTable
+    // for why report_date alone isn't enough for same-day entries.
+    const latest = getLatestProgressRecord(progress);
     return latest?.progress_percentage || 0;
   });
   return Math.round(totals.reduce((sum, p) => sum + p, 0) / totals.length);
@@ -131,7 +136,7 @@ export default function ProjectDetails() {
           work_details (
             planned_start_date,
             target_close_date,
-            work_progress ( progress_percentage, report_date )
+            work_progress ( progress_percentage, report_date, created_at )
           )
         `,
         )

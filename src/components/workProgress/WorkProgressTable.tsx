@@ -79,7 +79,12 @@ export default function WorkProgressTable({
 }: WorkProgressTableProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isOperationsReadOnly } = useAuth();
+  const { profile } = useAuth();
+  // Viewing progress is open to everyone progress-accessible (incl. PPIC),
+  // but adding/editing/deleting a report is PRODUCTION's job specifically —
+  // MASTER keeps the usual superuser override, same as elsewhere in the app.
+  const canWriteProgress =
+    profile?.role === "MASTER" || profile?.role === "PRODUCTION";
   // The /work-details/:workDetailsId/progress route renders this component
   // with no props, so fall back to the URL param when one isn't passed in.
   const params = useParams<{ workDetailsId?: string }>();
@@ -863,11 +868,14 @@ export default function WorkProgressTable({
   const handleAddProgressFromCurrent = async (
     progressItem: WorkProgressWithDetails,
   ) => {
-    if (isOperationsReadOnly) {
+    if (!canWriteProgress) {
       alert("❌ You don't have permission to add progress reports.");
       return;
     }
     const workDetailsId = progressItem.work_details.id;
+    // Captured before the `location` identifier below gets shadowed by the
+    // work detail's own location field.
+    const returnTo = location.state?.returnTo;
 
     if (!canAddProgress(workDetailsId)) {
       alert(
@@ -946,6 +954,7 @@ export default function WorkProgressTable({
           workDetails: transformedData,
           currentProgress: progressItem.progress_percentage,
           lastReportDate: progressItem.report_date,
+          returnTo,
           prefillData: {
             vesselId: transformedData.work_order.vessel.id,
             vesselName: transformedData.work_order.vessel.name,
@@ -981,11 +990,13 @@ export default function WorkProgressTable({
   };
 
   const handleAddProgressFromNoResults = () => {
-    if (isOperationsReadOnly) {
+    if (!canWriteProgress) {
       alert("❌ You don't have permission to add progress reports.");
       return;
     }
-    navigate("/add-work-progress");
+    navigate("/add-work-progress", {
+      state: { returnTo: location.state?.returnTo },
+    });
   };
 
   // ==================== UTILITY FUNCTIONS ====================
@@ -1796,7 +1807,7 @@ export default function WorkProgressTable({
                 Clear Filters
               </button>
             )}
-            {!isOperationsReadOnly && (
+            {canWriteProgress && (
               <button
                 onClick={handleAddProgressFromNoResults}
                 className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
@@ -1817,7 +1828,7 @@ export default function WorkProgressTable({
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Progress
-                  {!isOperationsReadOnly && (
+                  {canWriteProgress && (
                     <div className="text-xs text-gray-400 font-normal mt-1">
                       (Click to add new)
                     </div>
@@ -1844,7 +1855,7 @@ export default function WorkProgressTable({
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Created
                 </th>
-                {!isOperationsReadOnly && (
+                {canWriteProgress && (
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
                     Actions
                   </th>
@@ -1869,7 +1880,7 @@ export default function WorkProgressTable({
                         onAddProgress={handleAddProgressFromCurrent}
                         getProgressColor={getProgressColor}
                         getProgressIcon={getProgressIcon}
-                        isOperationsReadOnly={isOperationsReadOnly}
+                        isOperationsReadOnly={!canWriteProgress}
                       />
                     </td>
                     <td className="px-6 py-4">
@@ -1908,12 +1919,15 @@ export default function WorkProgressTable({
                     <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
                       {formatDateTime(item.created_at)}
                     </td>
-                    {!isOperationsReadOnly && (
+                    {canWriteProgress && (
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         <button
                           onClick={() =>
                             navigate(`/work-progress/edit/${item.id}`, {
-                              state: { returnFilters: buildReturnFilters() },
+                              state: {
+                                returnFilters: buildReturnFilters(),
+                                returnTo: location.state?.returnTo,
+                              },
                             })
                           }
                           className="text-blue-600 hover:text-blue-800 text-sm font-medium inline-flex items-center gap-1 hover:underline"
@@ -1950,9 +1964,13 @@ export default function WorkProgressTable({
                 Track detailed progress reports for work activities
               </p>
             </div>
-            {!isOperationsReadOnly && (
+            {canWriteProgress && (
               <button
-                onClick={() => navigate("/add-work-progress")}
+                onClick={() =>
+                  navigate("/add-work-progress", {
+                    state: { returnTo: location.state?.returnTo },
+                  })
+                }
                 className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" /> Add Progress Report

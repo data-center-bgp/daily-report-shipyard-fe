@@ -57,8 +57,13 @@ interface KaproInfo {
 export default function EditWorkProgress() {
   const navigate = useNavigate();
   const { progressId } = useParams<{ progressId: string }>();
-  const { isOperationsReadOnly } = useAuth();
+  const { profile } = useAuth();
   const location = useLocation();
+  // Editing a progress report is PRODUCTION's job specifically — MASTER
+  // keeps the usual superuser override. Everyone else (including PPIC, who
+  // can still view progress) is redirected away.
+  const canWriteProgress =
+    profile?.role === "MASTER" || profile?.role === "PRODUCTION";
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -189,7 +194,7 @@ export default function EditWorkProgress() {
 
   // Also update the useEffect to add logging:
   useEffect(() => {
-    if (isOperationsReadOnly) {
+    if (profile && !canWriteProgress) {
       navigate("/work-progress");
       return;
     }
@@ -199,7 +204,7 @@ export default function EditWorkProgress() {
     } else {
       setLoading(false);
     }
-  }, [progressId, isOperationsReadOnly, navigate, fetchProgressData]);
+  }, [progressId, profile, canWriteProgress, navigate, fetchProgressData]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -246,9 +251,17 @@ export default function EditWorkProgress() {
     e.target.select();
   };
 
-  // Returns to the Work Progress table, forwarding along whatever filters
+  // Returns wherever this edit was opened from. A vessel's work-orders page
+  // (or any other non-table origin) takes priority via returnTo; otherwise
+  // fall back to the Work Progress table, forwarding along whatever filters
   // it handed us when we were opened so the list doesn't reset.
   const goBackToWorkProgress = () => {
+    const returnTo = location.state?.returnTo;
+    if (returnTo) {
+      navigate(returnTo);
+      return;
+    }
+
     const returnFilters = location.state?.returnFilters;
     if (returnFilters) {
       navigate("/work-progress", { state: { returnFilters } });
