@@ -86,7 +86,6 @@ export default function CreateBASTP() {
   const [formData, setFormData] = useState({
     number: "",
     date: new Date().toISOString().split("T")[0],
-    delivery_date: "",
     vessel_id: 0,
   });
 
@@ -275,7 +274,6 @@ export default function CreateBASTP() {
       setFormData({
         number: data.number,
         date: data.date,
-        delivery_date: data.delivery_date,
         vessel_id: data.vessel_id,
       });
 
@@ -888,7 +886,6 @@ export default function CreateBASTP() {
           .update({
             number: formData.number,
             date: formData.date,
-            delivery_date: formData.delivery_date,
             vessel_id: formData.vessel_id,
             total_work_details: selectedWorkDetails.length,
             ...(compositionChanged ? { status: "DRAFT" } : {}),
@@ -960,7 +957,6 @@ export default function CreateBASTP() {
           .insert({
             number: formData.number,
             date: formData.date,
-            delivery_date: formData.delivery_date,
             vessel_id: formData.vessel_id,
             user_id: userProfile.id,
             status: "DRAFT",
@@ -1344,20 +1340,6 @@ export default function CreateBASTP() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Delivery Date *
-              </label>
-              <input
-                type="date"
-                value={formData.delivery_date}
-                onChange={(e) =>
-                  setFormData({ ...formData, delivery_date: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
           </div>
         </div>
 

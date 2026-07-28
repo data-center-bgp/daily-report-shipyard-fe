@@ -75,7 +75,6 @@ export default function InvoiceDetails() {
             id,
             number,
             date,
-            delivery_date,
             status,
             storage_path,
             bastp_upload_date,
@@ -568,12 +567,6 @@ export default function InvoiceDetails() {
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                   {invoice.bastp?.status?.replace(/_/g, " ")}
                 </span>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Delivery Date</p>
-                <p className="font-medium text-gray-900">
-                  {formatDate(invoice.bastp?.delivery_date)}
-                </p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Vessel Name</p>

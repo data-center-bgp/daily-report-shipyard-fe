@@ -14,7 +14,6 @@ export interface BASTP {
   deleted_at: string | null;
   number: string;
   date: string;
-  delivery_date: string;
   bastp_upload_date?: string | null;
   document_url?: string | null;
   storage_path?: string | null;

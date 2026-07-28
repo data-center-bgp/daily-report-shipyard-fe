@@ -128,7 +128,6 @@ export default function ManageInvoice() {
             id,
             number,
             date,
-            delivery_date,
             status,
             storage_path,
             bastp_upload_date,
@@ -412,7 +411,6 @@ export default function ManageInvoice() {
       setFormData((prev) => ({
         ...prev,
         company: data.vessel?.company || "",
-        delivery_date: data.delivery_date || "",
         // Defaults from the BASTP's approval (READY_FOR_INVOICE) date instead
         // of requiring manual entry — still editable below if it needs
         // correcting. Older BASTPs promoted before this field existed have

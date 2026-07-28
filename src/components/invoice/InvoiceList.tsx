@@ -57,7 +57,6 @@ export default function InvoiceList() {
             id,
             number,
             date,
-            delivery_date,
             status,
             storage_path,
             bastp_upload_date,
@@ -660,11 +659,6 @@ export default function InvoiceList() {
                                 {formatDate(bastp.date)}
                               </span>
                             </div>
-                            {bastp.delivery_date && (
-                              <div className="text-xs text-gray-500">
-                                Delivery: {formatDate(bastp.delivery_date)}
-                              </div>
-                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4">

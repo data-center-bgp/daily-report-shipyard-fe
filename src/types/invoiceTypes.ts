@@ -60,7 +60,6 @@ export interface Invoice {
     id: number;
     number: string;
     date: string;
-    delivery_date?: string | null;
     status: string;
     storage_path?: string | null;
     bastp_upload_date?: string | null;

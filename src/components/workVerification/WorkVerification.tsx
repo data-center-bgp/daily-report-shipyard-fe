@@ -77,7 +77,6 @@ interface BASTPs {
   id: number;
   number: string;
   date: string;
-  delivery_date: string;
   status: string;
   vessel_id: number;
   vessel?: {
@@ -391,7 +390,6 @@ export default function WorkVerification() {
     id,
     number,
     date,
-    delivery_date,
     status,
     vessel:vessel_id (
       id,

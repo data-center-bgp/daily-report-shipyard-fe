@@ -479,12 +479,6 @@ export default function BASTPDetails() {
             </label>
             <p className="text-gray-900">{formatDate(bastp.date)}</p>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-500 mb-1">
-              Delivery Date
-            </label>
-            <p className="text-gray-900">{formatDate(bastp.delivery_date)}</p>
-          </div>
           {bastp.bastp_upload_date && (
             <div>
               <label className="block text-sm font-medium text-gray-500 mb-1">
