@@ -287,15 +287,25 @@ export default function CreateBASTP() {
         new Set(workDetailsFromBastp.map((wd: { id: number }) => wd.id)),
       );
 
-      // Set selected general services
-      const servicesFromBastp =
-        data.general_services?.map((gs: any) => ({
+      // Set selected general services. Some BASTPs have leftover duplicate
+      // rows for the same service_type_id (pre-existing data issue) — if
+      // loaded as-is, the edit form's delete-then-reinsert-on-save would
+      // perpetuate them forever, and downstream invoice pricing would count
+      // that service's price twice. Keep only the first row per service type.
+      const seenServiceTypes = new Set<number>();
+      const servicesFromBastp = (data.general_services || [])
+        .filter((gs: any) => {
+          if (seenServiceTypes.has(gs.service_type_id)) return false;
+          seenServiceTypes.add(gs.service_type_id);
+          return true;
+        })
+        .map((gs: any) => ({
           service_type_id: gs.service_type_id,
           start_date: gs.start_date || new Date().toISOString().split("T")[0],
           close_date: gs.close_date || new Date().toISOString().split("T")[0],
           total_days: gs.total_days,
           remarks: gs.remarks || "",
-        })) || [];
+        }));
       setSelectedServices(servicesFromBastp);
     } catch (err) {
       console.error("Error fetching BASTP:", err);

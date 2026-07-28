@@ -24,6 +24,7 @@ export interface BASTP {
   verification_notes?: string | null;
   is_invoiced: boolean;
   invoiced_date?: string | null;
+  ready_for_invoice_date?: string | null;
   total_work_details: number;
   vessel_id: number;
   user_id: number;

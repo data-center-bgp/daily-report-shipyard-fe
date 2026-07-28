@@ -78,6 +78,7 @@ export default function ManageInvoice() {
     payment_status: false,
     payment_date: "",
     remarks: "",
+    ppn_applicable: true,
   });
 
   const [workDetailPrices, setWorkDetailPrices] = useState<WorkDetailPrice[]>(
@@ -93,6 +94,13 @@ export default function ManageInvoice() {
   // originally-loaded value) so unchecking "Mark as Paid" first — to
   // correct a mistake — deliberately unlocks pricing again.
   const pricingLocked = isEditMode && formData.payment_status;
+  // Submitting should only be blocked when re-saving an invoice that was
+  // ALREADY paid when the page loaded (guards against silently re-pricing a
+  // settled invoice). Gating this on the live checkbox instead — as
+  // pricingLocked does — made the unpaid -> paid transition itself
+  // unsavable, since checking the box disabled Save before it could persist.
+  const wasPaidOnLoad = isEditMode && existingInvoice?.payment_status === true;
+  const blockResubmitAsPaid = wasPaidOnLoad && formData.payment_status;
 
   useEffect(() => {
     if (isEditMode && invoiceId) {
@@ -196,6 +204,21 @@ export default function ManageInvoice() {
 
       if (fetchError) throw fetchError;
 
+      // Some BASTPs have leftover duplicate general_services rows for the
+      // same service_type_id (pre-existing data issue) — without this, the
+      // price table renders that service twice and a single price entry
+      // gets counted twice toward the invoice total.
+      if (data.bastp?.general_services) {
+        const seen = new Set<number>();
+        data.bastp.general_services = data.bastp.general_services.filter(
+          (gs: any) => {
+            if (seen.has(gs.service_type_id)) return false;
+            seen.add(gs.service_type_id);
+            return true;
+          },
+        );
+      }
+
       setExistingInvoice(data);
       setBastp(data.bastp);
 
@@ -212,6 +235,7 @@ export default function ManageInvoice() {
         payment_status: data.payment_status,
         payment_date: data.payment_date || "",
         remarks: data.remarks || "",
+        ppn_applicable: data.ppn_applicable ?? true,
       });
 
       // Populate work detail prices
@@ -340,6 +364,17 @@ export default function ManageInvoice() {
         return;
       }
 
+      // Dedupe leftover duplicate general_services rows for the same
+      // service_type_id (see fetchExistingInvoice for why).
+      if (data.general_services) {
+        const seen = new Set<number>();
+        data.general_services = data.general_services.filter((gs: any) => {
+          if (seen.has(gs.service_type_id)) return false;
+          seen.add(gs.service_type_id);
+          return true;
+        });
+      }
+
       setBastp(data);
       if (!data.bastp_work_details || data.bastp_work_details.length === 0) {
         setError("This BASTP has no work details to invoice");
@@ -376,6 +411,13 @@ export default function ManageInvoice() {
         ...prev,
         company: data.vessel?.company || "",
         delivery_date: data.delivery_date || "",
+        // Defaults from the BASTP's approval (READY_FOR_INVOICE) date instead
+        // of requiring manual entry — still editable below if it needs
+        // correcting. Older BASTPs promoted before this field existed have
+        // no recorded date, so it falls back to manual entry as before.
+        bastp_collection_date: data.ready_for_invoice_date
+          ? data.ready_for_invoice_date.split("T")[0]
+          : prev.bastp_collection_date,
       }));
     } catch (err) {
       console.error("Error fetching BASTP:", err);
@@ -447,6 +489,9 @@ export default function ManageInvoice() {
   };
 
   const calculatePPN = () => {
+    // PPN is optional per invoice (unlike PPh 23, which always applies) —
+    // unchecking "Apply PPN" zeroes it out entirely.
+    if (!formData.ppn_applicable) return 0;
     // Rounded so the persisted total always reconciles with the displayed
     // figures — unrounded floats here would let fractional Rupiah drift into
     // the DB while the UI (minimumFractionDigits: 0) hides it.
@@ -474,7 +519,7 @@ export default function ManageInvoice() {
       return;
     }
 
-    if (pricingLocked) {
+    if (blockResubmitAsPaid) {
       setError(
         "This invoice is marked as paid — pricing is locked. Uncheck \"Mark as Paid\" to make changes.",
       );
@@ -545,6 +590,7 @@ export default function ManageInvoice() {
             remarks: formData.remarks || null,
             total_price_before: total_price_before,
             ppn: ppn,
+            ppn_applicable: formData.ppn_applicable,
             pph_23: pph_23,
             total_price_after: total_price_after,
             updated_at: new Date().toISOString(),
@@ -658,6 +704,7 @@ export default function ManageInvoice() {
             remarks: formData.remarks || null,
             total_price_before: total_price_before,
             ppn: ppn,
+            ppn_applicable: formData.ppn_applicable,
             pph_23: pph_23,
             total_price_after: total_price_after,
           })
@@ -1530,8 +1577,28 @@ export default function ManageInvoice() {
 
             {/* Tax Breakdown */}
             <div className="bg-white/50 rounded-lg p-4 space-y-2">
+              <label className="flex items-center gap-2 pb-1">
+                <input
+                  type="checkbox"
+                  checked={formData.ppn_applicable}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      ppn_applicable: e.target.checked,
+                    })
+                  }
+                  disabled={pricingLocked}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  Apply PPN (11%)
+                </span>
+              </label>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-700">PPN (11% of Subtotal)</span>
+                <span className="text-gray-700">
+                  PPN (11% of Subtotal)
+                  {!formData.ppn_applicable && " — Not Applied"}
+                </span>
                 <span className="font-medium text-green-900">
                   + {formatCurrency(calculatePPN())}
                 </span>
@@ -1588,10 +1655,12 @@ export default function ManageInvoice() {
             <button
               type="submit"
               disabled={
-                saving || pricingLocked || calculateTotalPriceBefore() === 0
+                saving ||
+                blockResubmitAsPaid ||
+                calculateTotalPriceBefore() === 0
               }
               title={
-                pricingLocked
+                blockResubmitAsPaid
                   ? 'Uncheck "Mark as Paid" to make changes'
                   : undefined
               }

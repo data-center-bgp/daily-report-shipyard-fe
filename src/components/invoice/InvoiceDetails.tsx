@@ -5,6 +5,7 @@ import type { Invoice } from "../../types/invoiceTypes";
 import { useReactToPrint } from "react-to-print";
 import InvoicePrint from "./InvoicePrint";
 import { useAuth } from "../../hooks/useAuth";
+import { ActivityLogService } from "../../services/activityLogService";
 import {
   ArrowLeft,
   FileText,
@@ -26,7 +27,8 @@ import {
 export default function InvoiceDetails() {
   const { invoiceId } = useParams<{ invoiceId: string }>();
   const navigate = useNavigate();
-  const { isReadOnly } = useAuth();
+  const { isReadOnly, canAccess } = useAuth();
+  const canWrite = canAccess("invoices") && !isReadOnly;
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,6 +36,15 @@ export default function InvoiceDetails() {
   const [profilesMap, setProfilesMap] = useState<
     Record<number, { id: number; name: string; email: string }>
   >({});
+
+  // Quick payment-status update (no need to open the edit form just to mark
+  // an invoice paid).
+  const [showMarkPaidForm, setShowMarkPaidForm] = useState(false);
+  const [markPaidDate, setMarkPaidDate] = useState(
+    () => new Date().toISOString().split("T")[0],
+  );
+  const [updatingPayment, setUpdatingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   // Document viewer states
   const [viewingDocument, setViewingDocument] = useState(false);
@@ -168,6 +179,98 @@ export default function InvoiceDetails() {
       currency: "IDR",
       minimumFractionDigits: 0,
     }).format(amount);
+  };
+
+  const handleConfirmMarkAsPaid = async () => {
+    if (!invoice) return;
+    if (!markPaidDate) {
+      setPaymentError("Please select a payment date");
+      return;
+    }
+
+    try {
+      setUpdatingPayment(true);
+      setPaymentError(null);
+
+      const { error: updateError } = await supabase
+        .from("invoice_details")
+        .update({
+          payment_status: true,
+          payment_date: markPaidDate,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", invoice.id);
+
+      if (updateError) throw updateError;
+
+      await ActivityLogService.logActivity({
+        action: "update",
+        tableName: "invoice_details",
+        recordId: invoice.id,
+        oldData: { payment_status: false, payment_date: invoice.payment_date },
+        newData: { payment_status: true, payment_date: markPaidDate },
+        description: `Marked invoice ${invoice.invoice_number || invoice.id} as paid`,
+      });
+
+      setInvoice({
+        ...invoice,
+        payment_status: true,
+        payment_date: markPaidDate,
+      });
+      setShowMarkPaidForm(false);
+    } catch (err) {
+      console.error("Error marking invoice as paid:", err);
+      setPaymentError(
+        err instanceof Error ? err.message : "Failed to update payment status",
+      );
+    } finally {
+      setUpdatingPayment(false);
+    }
+  };
+
+  const handleMarkAsUnpaid = async () => {
+    if (!invoice) return;
+    if (
+      !window.confirm(
+        "Mark this invoice as unpaid again? This clears the recorded payment date.",
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setUpdatingPayment(true);
+      setPaymentError(null);
+
+      const { error: updateError } = await supabase
+        .from("invoice_details")
+        .update({
+          payment_status: false,
+          payment_date: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", invoice.id);
+
+      if (updateError) throw updateError;
+
+      await ActivityLogService.logActivity({
+        action: "update",
+        tableName: "invoice_details",
+        recordId: invoice.id,
+        oldData: { payment_status: true, payment_date: invoice.payment_date },
+        newData: { payment_status: false, payment_date: null },
+        description: `Reverted invoice ${invoice.invoice_number || invoice.id} to unpaid`,
+      });
+
+      setInvoice({ ...invoice, payment_status: false, payment_date: null });
+    } catch (err) {
+      console.error("Error reverting invoice to unpaid:", err);
+      setPaymentError(
+        err instanceof Error ? err.message : "Failed to update payment status",
+      );
+    } finally {
+      setUpdatingPayment(false);
+    }
   };
 
   // Calculate subtotals
@@ -352,17 +455,14 @@ export default function InvoiceDetails() {
                   ? "Payment Received"
                   : "Payment Pending"}
               </h3>
-              {invoice.payment_date && (
-                <p
-                  className={`text-sm ${
-                    invoice.payment_status
-                      ? "text-green-700"
-                      : "text-yellow-700"
-                  }`}
-                >
-                  {invoice.payment_status
-                    ? `Paid on ${formatDate(invoice.payment_date)}`
-                    : `Expected payment by ${formatDate(invoice.due_date)}`}
+              {invoice.payment_status && invoice.payment_date && (
+                <p className="text-sm text-green-700">
+                  Paid on {formatDate(invoice.payment_date)}
+                </p>
+              )}
+              {!invoice.payment_status && invoice.due_date && (
+                <p className="text-sm text-yellow-700">
+                  Expected payment by {formatDate(invoice.due_date)}
                 </p>
               )}
             </div>
@@ -374,6 +474,64 @@ export default function InvoiceDetails() {
             </p>
           </div>
         </div>
+
+        {canWrite && (
+          <div className="mt-4 pt-4 border-t border-black/10">
+            {paymentError && (
+              <p className="text-sm text-red-700 mb-3">{paymentError}</p>
+            )}
+            {invoice.payment_status ? (
+              <button
+                onClick={handleMarkAsUnpaid}
+                disabled={updatingPayment}
+                className="text-sm font-medium text-green-800 hover:text-green-950 underline disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Mark as unpaid (correct a mistake)
+              </button>
+            ) : showMarkPaidForm ? (
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Payment Date
+                  </label>
+                  <input
+                    type="date"
+                    value={markPaidDate}
+                    onChange={(e) => setMarkPaidDate(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
+                <button
+                  onClick={handleConfirmMarkAsPaid}
+                  disabled={updatingPayment}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {updatingPayment && (
+                    <Loader className="w-4 h-4 animate-spin" />
+                  )}
+                  Confirm Paid
+                </button>
+                <button
+                  onClick={() => {
+                    setShowMarkPaidForm(false);
+                    setPaymentError(null);
+                  }}
+                  disabled={updatingPayment}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowMarkPaidForm(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+              >
+                <CheckCircle2 className="w-4 h-4" /> Mark as Paid
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -761,7 +919,10 @@ export default function InvoiceDetails() {
               {/* Tax Breakdown */}
               <div className="bg-white/50 rounded-lg p-4 space-y-2">
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-700">PPN (11% of Subtotal)</span>
+                  <span className="text-gray-700">
+                    PPN (11% of Subtotal)
+                    {invoice.ppn_applicable === false && " — Not Applied"}
+                  </span>
                   <span className="font-medium text-gray-900">
                     {formatCurrency(invoice.ppn || 0)}
                   </span>

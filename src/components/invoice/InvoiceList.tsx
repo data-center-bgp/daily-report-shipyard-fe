@@ -28,11 +28,8 @@ export default function InvoiceList() {
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "unpaid">(
-    "all",
-  );
-  const [viewMode, setViewMode] = useState<"invoices" | "ready-bastp">(
-    "invoices",
+  const [viewMode, setViewMode] = useState<"ready-bastp" | "unpaid" | "paid">(
+    "unpaid",
   );
 
   // Pagination
@@ -161,18 +158,15 @@ export default function InvoiceList() {
   // even though matches exist on page 1.
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter]);
+  }, [searchTerm, viewMode]);
 
   // Filtering
   const filteredInvoices = useMemo(() => {
-    let filtered = invoices;
-
-    // Status filter
-    if (statusFilter === "paid") {
-      filtered = filtered.filter((inv) => inv.payment_status === true);
-    } else if (statusFilter === "unpaid") {
-      filtered = filtered.filter((inv) => inv.payment_status === false);
-    }
+    // Each tab IS a status filter — "Paid" and "Unpaid" are mutually
+    // exclusive sections rather than one combined list with a dropdown.
+    let filtered = invoices.filter((inv) =>
+      viewMode === "paid" ? inv.payment_status === true : inv.payment_status === false,
+    );
 
     // Search filter
     if (searchTerm) {
@@ -188,7 +182,7 @@ export default function InvoiceList() {
     }
 
     return filtered;
-  }, [invoices, statusFilter, searchTerm]);
+  }, [invoices, viewMode, searchTerm]);
 
   const filteredBASTPs = useMemo(() => {
     if (!searchTerm) return readyBASTPs;
@@ -345,16 +339,6 @@ export default function InvoiceList() {
       <div className="bg-white rounded-lg shadow">
         <div className="border-b border-gray-200">
           <nav className="flex -mb-px">
-            <button
-              onClick={() => setViewMode("invoices")}
-              className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                viewMode === "invoices"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              <DollarSign className="w-4 h-4" /> Invoices ({stats.total})
-            </button>
             {!isReadOnly && (
               <button
                 onClick={() => setViewMode("ready-bastp")}
@@ -368,37 +352,42 @@ export default function InvoiceList() {
                 {stats.ready})
               </button>
             )}
+            <button
+              onClick={() => setViewMode("unpaid")}
+              className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                viewMode === "unpaid"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              <DollarSign className="w-4 h-4" /> Unpaid ({stats.unpaid})
+            </button>
+            <button
+              onClick={() => setViewMode("paid")}
+              className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                viewMode === "paid"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              <CheckCircle2 className="w-4 h-4" /> Paid ({stats.paid})
+            </button>
           </nav>
         </div>
 
         {/* Filters */}
         <div className="p-4 border-b border-gray-200">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
-              <input
-                type="text"
-                placeholder="Search by invoice number, BASTP, vessel..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            {viewMode === "invoices" && (
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="all">All Status</option>
-                <option value="paid">Paid</option>
-                <option value="unpaid">Unpaid</option>
-              </select>
-            )}
-          </div>
+          <input
+            type="text"
+            placeholder="Search by invoice number, BASTP, vessel..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
         </div>
 
         {/* Content */}
-        {viewMode === "invoices" ? (
+        {viewMode === "unpaid" || viewMode === "paid" ? (
           <div className="overflow-x-auto">
             {paginatedInvoices.length > 0 ? (
               <>
@@ -582,7 +571,9 @@ export default function InvoiceList() {
             ) : (
               <div className="text-center py-12">
                 <DollarSign className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 text-lg mb-4">No invoices found</p>
+                <p className="text-gray-500 text-lg mb-4">
+                  No {viewMode} invoices found
+                </p>
               </div>
             )}
           </div>

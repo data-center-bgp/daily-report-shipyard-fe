@@ -52,6 +52,7 @@ export interface Invoice {
   remarks?: string | null;
   total_price_before?: number;
   ppn?: number;
+  ppn_applicable?: boolean;
   pph_23?: number;
   total_price_after?: number;
   bastp?: {

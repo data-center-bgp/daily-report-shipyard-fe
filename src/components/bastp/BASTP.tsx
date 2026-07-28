@@ -156,7 +156,10 @@ export default function BASTP() {
         if (bastp.storage_path && bastp.status === "VERIFIED") {
           await supabase
             .from("bastp")
-            .update({ status: "READY_FOR_INVOICE" })
+            .update({
+              status: "READY_FOR_INVOICE",
+              ready_for_invoice_date: new Date().toISOString(),
+            })
             .eq("id", bastp.id);
           fetchBASTPs();
         }

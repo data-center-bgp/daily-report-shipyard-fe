@@ -394,7 +394,9 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
                       </tr>
                       <tr>
                         <td className="border border-gray-300 px-2 py-1.5 text-right">
-                          PPN (11%):
+                          {invoice.ppn_applicable === false
+                            ? "PPN (Not Applied):"
+                            : "PPN (11%):"}
                         </td>
                         <td className="border border-gray-300 px-2 py-1.5 text-right font-medium">
                           + {formatCurrency(invoice.ppn || 0)}
