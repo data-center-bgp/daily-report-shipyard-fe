@@ -52,6 +52,7 @@ interface WorkDetailsData {
   work_scope_id: number;
   quantity: number;
   uom: string;
+  ppic_price?: number | null;
   is_additional_wo_details: boolean;
   spk_number?: string;
   spkk_number?: string;
@@ -71,6 +72,31 @@ interface WorkDetailsData {
   ptw_number?: string;
 }
 
+// Matches the month-name strings already stored in period_close_target
+// ("January".."December") so deriving it from target_close_date doesn't
+// introduce a new format.
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+// Parsed from the "YYYY-MM-DD" string directly (not `new Date(...)`) so a
+// negative-UTC-offset browser can't shift it into the wrong month.
+const getMonthNameFromDate = (dateStr: string): string => {
+  const month = parseInt(dateStr.split("-")[1], 10);
+  return MONTH_NAMES[month - 1] || "";
+};
+
 export default function EditWorkDetails() {
   const navigate = useNavigate();
   const { workDetailsId } = useParams<{ workDetailsId: string }>();
@@ -81,6 +107,10 @@ export default function EditWorkDetails() {
   // Check user role - Only check for PPIC or PRODUCTION
   const isPPIC = profile?.role === "PPIC";
   const isProduction = profile?.role === "PRODUCTION";
+  // ppic_price is a Finance-comparison field — only MASTER and PPIC may see
+  // or set it. PRODUCTION keeps its own assigned fields untouched.
+  const isMaster = profile?.role === "MASTER";
+  const canEditPpicPrice = isPPIC || isMaster;
 
   // HSSE/MANAGER/OP_HEAD can view Work Details in the list, and
   // ADMIN_SHIPPING can create one, but none of them may ever reach this edit
@@ -107,6 +137,7 @@ export default function EditWorkDetails() {
     work_scope_id: 0,
     quantity: "",
     uom: "",
+    ppic_price: "",
     is_additional_wo_details: false,
     spk_number: "",
     spkk_number: "",
@@ -330,6 +361,7 @@ export default function EditWorkDetails() {
         work_scope_id: data.work_scope_id || 0,
         quantity: data.quantity?.toString() || "",
         uom: data.uom || "",
+        ppic_price: data.ppic_price?.toString() || "",
         is_additional_wo_details: data.is_additional_wo_details || false,
         spk_number: data.spk_number || "",
         spkk_number: data.spkk_number || "",
@@ -414,7 +446,16 @@ export default function EditWorkDetails() {
     >,
   ) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => {
+      const updated = { ...prev, [name]: value };
+      // Suggest the period from the target close date instead of making
+      // PPIC pick it separately — only when it hasn't been set yet, so an
+      // intentional manual choice never gets silently overwritten.
+      if (name === "target_close_date" && value && !prev.period_close_target) {
+        updated.period_close_target = getMonthNameFromDate(value);
+      }
+      return updated;
+    });
   };
 
   const validateForm = () => {
@@ -547,6 +588,15 @@ export default function EditWorkDetails() {
         updated_at: new Date().toISOString(),
       };
 
+      // Only MASTER and PPIC may set this — it isn't rendered for
+      // PRODUCTION at all (see the form below), so there's nothing to save
+      // for that role here.
+      if (canEditPpicPrice) {
+        updateData.ppic_price = formData.ppic_price
+          ? parseFloat(formData.ppic_price)
+          : null;
+      }
+
       if (isPPIC) {
         // PPIC can update their fields only
         updateData = {
@@ -603,9 +653,15 @@ export default function EditWorkDetails() {
         });
       }
 
+      const returnTo = location.state?.returnTo;
       const returnFilters = location.state?.returnFilters;
 
-      if (returnFilters) {
+      if (returnTo) {
+        // Came from somewhere other than the Work Details table (e.g. a
+        // vessel's work orders page) — go back there instead of defaulting
+        // to /work-details, which would drop the work order/vessel context.
+        navigate(returnTo);
+      } else if (returnFilters) {
         // Pass the filters back to the table
         navigate("/work-details", {
           state: { returnFilters },
@@ -625,9 +681,12 @@ export default function EditWorkDetails() {
   };
 
   const handleCancel = () => {
+    const returnTo = location.state?.returnTo;
     const returnFilters = location.state?.returnFilters;
 
-    if (returnFilters) {
+    if (returnTo) {
+      navigate(returnTo);
+    } else if (returnFilters) {
       navigate("/work-details", {
         state: { returnFilters },
       });
@@ -959,6 +1018,29 @@ export default function EditWorkDetails() {
                   </select>
                 </div>
 
+                {/* PPIC Price — MASTER and PPIC only; not PRODUCTION's field */}
+                {canEditPpicPrice && (
+                  <div>
+                    <label
+                      htmlFor="ppic_price"
+                      className="block text-sm font-medium text-gray-700 mb-2"
+                    >
+                      Price (IDR) <span className="text-blue-600">(PPIC)</span>
+                    </label>
+                    <input
+                      type="number"
+                      id="ppic_price"
+                      name="ppic_price"
+                      value={formData.ppic_price}
+                      onChange={handleInputChange}
+                      min="0"
+                      step="1"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Optional — for Finance's reference"
+                    />
+                  </div>
+                )}
+
                 {/* Planned Start Date */}
                 <div>
                   <label
@@ -1030,6 +1112,10 @@ export default function EditWorkDetails() {
                     <option value="November">November</option>
                     <option value="December">December</option>
                   </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Auto-filled from Target Close Date's month — change it
+                    here if needed
+                  </p>
                 </div>
 
                 {/* Is Additional */}

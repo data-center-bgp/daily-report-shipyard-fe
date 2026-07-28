@@ -73,6 +73,7 @@ export interface WorkDetails {
   spkk_number?: string;
   notes?: string;
   ptw_number?: string;
+  ppic_price?: number | null;
 }
 
 export interface WorkProgress {

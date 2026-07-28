@@ -1178,6 +1178,11 @@ export default function VesselWorkOrders() {
                                             onClick={() =>
                                               navigate(
                                                 `/edit-work-details/${detail.id}`,
+                                                {
+                                                  state: {
+                                                    returnTo: `/vessel/${vesselId}/work-orders`,
+                                                  },
+                                                },
                                               )
                                             }
                                             className="text-xs font-medium text-green-700 hover:text-green-900 bg-green-50 hover:bg-green-100 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1"

@@ -109,6 +109,7 @@ export default function InvoiceDetails() {
               description,
               quantity,
               uom,
+              ppic_price,
               pic,
               planned_start_date,
               target_close_date,
@@ -843,6 +844,12 @@ export default function InvoiceDetails() {
                         <div className="text-sm text-gray-900">
                           {formatCurrency(item.unit_price)}
                         </div>
+                        {item.work_details?.ppic_price != null && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            PPIC price:{" "}
+                            {formatCurrency(item.work_details.ppic_price)}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-right">
                         <div className="text-sm font-bold text-blue-900">

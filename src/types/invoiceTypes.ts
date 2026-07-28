@@ -11,6 +11,7 @@ export interface InvoiceWorkDetails {
     description: string;
     quantity: number;
     uom: string;
+    ppic_price?: number | null;
     pic?: string | null;
     planned_start_date?: string | null;
     target_close_date?: string | null;

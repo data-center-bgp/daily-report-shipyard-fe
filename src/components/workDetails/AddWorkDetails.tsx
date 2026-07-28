@@ -37,11 +37,37 @@ interface WorkDetailFormData {
   work_scope_id: number;
   quantity: string;
   uom: string;
+  ppic_price: string;
   is_additional_wo_details: boolean;
   planned_start_date: string;
   target_close_date: string;
   period_close_target: string;
 }
+
+// Matches the month-name strings already stored in period_close_target
+// ("January".."December") so deriving it from target_close_date doesn't
+// introduce a new format.
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+// Parsed from the "YYYY-MM-DD" string directly (not `new Date(...)`) so a
+// negative-UTC-offset browser can't shift it into the wrong month.
+const getMonthNameFromDate = (dateStr: string): string => {
+  const month = parseInt(dateStr.split("-")[1], 10);
+  return MONTH_NAMES[month - 1] || "";
+};
 
 export default function AddWorkDetails() {
   const navigate = useNavigate();
@@ -57,6 +83,11 @@ export default function AddWorkDetails() {
   // access here is safe.
   const isFullAccessCreator =
     profile?.role === "MASTER" || profile?.role === "ADMIN_SHIPPING";
+  // ADMIN_SHIPPING creates the work detail shell only — PPIC fills in
+  // scheduling (planned start / target close date) afterward via
+  // EditWorkDetails.tsx, so those two fields aren't required from
+  // ADMIN_SHIPPING at creation time. MASTER is unaffected.
+  const isAdminShipping = profile?.role === "ADMIN_SHIPPING";
 
   // Redirect if not PPIC or a full-access creator
   useEffect(() => {
@@ -74,6 +105,7 @@ export default function AddWorkDetails() {
       work_scope_id: 0,
       quantity: "",
       uom: "",
+      ppic_price: "",
       is_additional_wo_details: false,
       planned_start_date: "",
       target_close_date: "",
@@ -271,6 +303,7 @@ export default function AddWorkDetails() {
         work_scope_id: 0,
         quantity: "",
         uom: "",
+        ppic_price: "",
         is_additional_wo_details: false,
         planned_start_date: "",
         target_close_date: "",
@@ -297,9 +330,22 @@ export default function AddWorkDetails() {
     value: string | number | boolean,
   ) => {
     setWorkDetailsList((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item,
-      ),
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const updated = { ...item, [field]: value };
+        // Suggest the period from the target close date instead of making
+        // PPIC pick it separately — only when it hasn't been set yet, so an
+        // intentional manual choice never gets silently overwritten.
+        if (
+          field === "target_close_date" &&
+          typeof value === "string" &&
+          value &&
+          !item.period_close_target
+        ) {
+          updated.period_close_target = getMonthNameFromDate(value);
+        }
+        return updated;
+      }),
     );
   };
 
@@ -344,13 +390,13 @@ export default function AddWorkDetails() {
       if (!item.uom.trim()) {
         errors.push(`Row ${index + 1}: UOM is required`);
       }
-      if (!item.planned_start_date) {
+      if (!isAdminShipping && !item.planned_start_date) {
         errors.push(`Row ${index + 1}: Planned start date is required`);
       }
-      if (!item.target_close_date) {
+      if (!isAdminShipping && !item.target_close_date) {
         errors.push(`Row ${index + 1}: Target close date is required`);
       }
-      if (!item.period_close_target.trim()) {
+      if (!isAdminShipping && !item.period_close_target.trim()) {
         errors.push(`Row ${index + 1}: Period close target is required`);
       }
 
@@ -405,10 +451,14 @@ export default function AddWorkDetails() {
         work_scope_id: item.work_scope_id,
         quantity: parseFloat(item.quantity),
         uom: item.uom.trim(),
+        ppic_price: item.ppic_price ? parseFloat(item.ppic_price) : null,
         is_additional_wo_details: item.is_additional_wo_details,
-        planned_start_date: item.planned_start_date,
-        target_close_date: item.target_close_date,
-        period_close_target: item.period_close_target.trim(),
+        // ADMIN_SHIPPING can leave these blank — PPIC fills them in later via
+        // EditWorkDetails.tsx — so an empty string here must become null
+        // rather than fail the date column's insert.
+        planned_start_date: item.planned_start_date || null,
+        target_close_date: item.target_close_date || null,
+        period_close_target: item.period_close_target.trim() || null,
         user_id: userProfile.id,
         // Production fields initialized
         pic: "",
@@ -787,10 +837,32 @@ export default function AddWorkDetails() {
                       </select>
                     </div>
 
+                    {/* PPIC Price */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Price (IDR)
+                      </label>
+                      <input
+                        type="number"
+                        value={item.ppic_price}
+                        onChange={(e) =>
+                          handleWorkDetailChange(
+                            item.id,
+                            "ppic_price",
+                            e.target.value,
+                          )
+                        }
+                        min="0"
+                        step="1"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Optional — for Finance's reference"
+                      />
+                    </div>
+
                     {/* Planned Start Date */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Planned Start Date *
+                        Planned Start Date {!isAdminShipping && "*"}
                       </label>
                       <input
                         type="date"
@@ -804,12 +876,17 @@ export default function AddWorkDetails() {
                         }
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       />
+                      {isAdminShipping && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Optional — PPIC will fill this in later
+                        </p>
+                      )}
                     </div>
 
                     {/* Target Close Date */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Target Close Date *
+                        Target Close Date {!isAdminShipping && "*"}
                       </label>
                       <input
                         type="date"
@@ -823,12 +900,17 @@ export default function AddWorkDetails() {
                         }
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       />
+                      {isAdminShipping && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Optional — PPIC will fill this in later
+                        </p>
+                      )}
                     </div>
 
                     {/* Period Close Target */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Period Close Target *
+                        Period Close Target {!isAdminShipping && "*"}
                       </label>
                       <select
                         value={item.period_close_target}
@@ -855,6 +937,16 @@ export default function AddWorkDetails() {
                         <option value="November">November</option>
                         <option value="December">December</option>
                       </select>
+                      {isAdminShipping ? (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Optional — PPIC will fill this in later
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Auto-filled from Target Close Date's month — change
+                          it here if needed
+                        </p>
+                      )}
                     </div>
 
                     {/* Is Additional */}

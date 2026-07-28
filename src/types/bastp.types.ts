@@ -48,6 +48,7 @@ export interface BASTPWithDetails extends BASTP {
         description: string;
         quantity: number;
         uom: string;
+        ppic_price?: number | null;
         planned_start_date?: string;
         target_close_date?: string;
         pic?: string;

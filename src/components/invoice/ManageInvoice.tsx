@@ -146,6 +146,7 @@ export default function ManageInvoice() {
                 description,
                 quantity,
                 uom,
+                ppic_price,
                 pic,
                 location:location_id (
                   id,
@@ -316,6 +317,7 @@ export default function ManageInvoice() {
             description,
             quantity,
             uom,
+            ppic_price,
             pic,
             location:location_id (
               id,
@@ -1494,6 +1496,12 @@ export default function ManageInvoice() {
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right disabled:bg-gray-100 disabled:cursor-not-allowed"
                             placeholder="0"
                           />
+                          {item.work_details?.ppic_price != null && (
+                            <div className="text-xs text-gray-500 mt-1 text-right">
+                              PPIC price:{" "}
+                              {formatCurrency(item.work_details.ppic_price)}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-4 text-right">
                           <div className="text-sm font-bold text-blue-900">
