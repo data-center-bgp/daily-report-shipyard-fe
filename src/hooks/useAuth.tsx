@@ -127,8 +127,13 @@ const FEATURE_ACCESS = {
   ],
   vessels: ["MASTER", "PPIC", "PRODUCTION", "OP_HEAD", "ADMIN", "MANAGER"],
   invoices: ["MASTER", "FINANCE", "MANAGER"],
-  userManagement: ["MASTER"],
-  systemSettings: ["MASTER"],
+  // MANAGER gets the same view access as MASTER everywhere (see isReadOnly),
+  // including here — UserManagementPage.tsx gates the actual write controls
+  // (role change, deactivate/reactivate) behind isReadOnly separately, so
+  // this only grants MANAGER visibility into the user list, not the ability
+  // to change anything.
+  userManagement: ["MASTER", "MANAGER"],
+  systemSettings: ["MASTER", "MANAGER"],
   reports: [
     "MASTER",
     "PPIC",
@@ -141,7 +146,7 @@ const FEATURE_ACCESS = {
   exportData: ["MASTER", "PPIC", "PRODUCTION", "OP_HEAD", "ADMIN", "MANAGER"],
   activityLogs: ["MASTER", "MANAGER"],
   additionalWoApprovals: ["MASTER", "OP_HEAD", "MANAGER"],
-  readinessQueue: ["MASTER", "HSSE"],
+  readinessQueue: ["MASTER", "HSSE", "MANAGER"],
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

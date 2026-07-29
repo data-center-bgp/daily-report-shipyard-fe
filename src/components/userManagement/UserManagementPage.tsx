@@ -34,7 +34,7 @@ interface AdminProfileRow {
 }
 
 export default function UserManagementPage() {
-  const { canAccess, profile } = useAuth();
+  const { canAccess, profile, isReadOnly } = useAuth();
 
   const [users, setUsers] = useState<AdminProfileRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +46,11 @@ export default function UserManagementPage() {
   const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "all">("active");
 
   const canManage = canAccess("userManagement");
+  // MANAGER can view this page (canManage) but never change a role or
+  // activation status — those stay MASTER-only, matching the RPCs
+  // (admin_update_user_role/admin_set_user_active) that also enforce this
+  // server-side.
+  const canEditUsers = canManage && !isReadOnly;
 
   useEffect(() => {
     if (canManage) loadUsers();
@@ -143,7 +148,7 @@ export default function UserManagementPage() {
               You don't have permission to manage users.
             </p>
             <p className="text-sm text-yellow-700 mt-1">
-              This page is restricted to the Master role.
+              This page is restricted to the Master and Manager roles.
             </p>
           </div>
         </div>
@@ -274,14 +279,20 @@ export default function UserManagementPage() {
                         <td className="px-4 py-3">
                           <select
                             value={u.role}
-                            disabled={isSaving || (isSelf && u.role === "MASTER")}
+                            disabled={
+                              !canEditUsers ||
+                              isSaving ||
+                              (isSelf && u.role === "MASTER")
+                            }
                             onChange={(e) =>
                               handleRoleChange(u, e.target.value as UserProfile["role"])
                             }
                             title={
-                              isSelf && u.role === "MASTER"
-                                ? "You cannot change your own role away from Master"
-                                : undefined
+                              !canEditUsers
+                                ? "View only — role changes require the Master role"
+                                : isSelf && u.role === "MASTER"
+                                  ? "You cannot change your own role away from Master"
+                                  : undefined
                             }
                             className="px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
@@ -309,26 +320,37 @@ export default function UserManagementPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <button
-                            onClick={() => handleToggleActive(u)}
-                            disabled={isSaving || isSelf}
-                            title={
-                              isSelf ? "You cannot deactivate your own account" : undefined
-                            }
-                            className={`px-3 py-1 text-xs font-medium rounded-md border disabled:opacity-50 disabled:cursor-not-allowed ${
-                              isActive
-                                ? "border-red-300 text-red-700 hover:bg-red-50"
-                                : "border-green-300 text-green-700 hover:bg-green-50"
-                            }`}
-                          >
-                            {isSaving ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : isActive ? (
-                              "Deactivate"
-                            ) : (
-                              "Reactivate"
-                            )}
-                          </button>
+                          {canEditUsers ? (
+                            <button
+                              onClick={() => handleToggleActive(u)}
+                              disabled={isSaving || isSelf}
+                              title={
+                                isSelf
+                                  ? "You cannot deactivate your own account"
+                                  : undefined
+                              }
+                              className={`px-3 py-1 text-xs font-medium rounded-md border disabled:opacity-50 disabled:cursor-not-allowed ${
+                                isActive
+                                  ? "border-red-300 text-red-700 hover:bg-red-50"
+                                  : "border-green-300 text-green-700 hover:bg-green-50"
+                              }`}
+                            >
+                              {isSaving ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : isActive ? (
+                                "Deactivate"
+                              ) : (
+                                "Reactivate"
+                              )}
+                            </button>
+                          ) : (
+                            <span
+                              className="text-xs text-gray-400"
+                              title="View only — activation changes require the Master role"
+                            >
+                              —
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );
