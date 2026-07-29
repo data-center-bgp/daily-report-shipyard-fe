@@ -7,11 +7,14 @@ import {
   type Vessel,
 } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import { ActivityLogService } from "../../services/activityLogService";
 import {
   getLatestVerificationByWorkDetails,
   isApproved,
   isOpenForRework,
   hasRejectionHistory,
+  isPastAutoVerifyDeadline,
+  AUTO_VERIFY_NOTE,
   type VerificationRecord,
 } from "../../utils/workVerificationStatus";
 import { getLatestProgressRecord } from "../../utils/progressPercentage";
@@ -433,6 +436,88 @@ export default function WorkVerification() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Auto-approve completed work details the Operation Head hasn't reviewed
+  // within 2 days, so they don't block BASTP/invoicing indefinitely. There's
+  // no backend job runner in this app, so this only runs while an
+  // OP_HEAD/MASTER session has this queue open — same limitation as the
+  // BASTP DRAFT->VERIFIED auto-promotion elsewhere in the app.
+  const autoVerifyStaleWorkDetails = useCallback(
+    async (staleItems: WorkDetailsWithProgress[]) => {
+      let verifiedCount = 0;
+      for (const wd of staleItems) {
+        // Re-check immediately before inserting — a manual review may have
+        // landed between when this queue loaded and now.
+        const { data: raceCheck, error: raceError } = await supabase
+          .from("work_verification")
+          .select("id")
+          .eq("work_details_id", wd.id)
+          .is("deleted_at", null)
+          .limit(1);
+
+        if (raceError) {
+          console.error("Auto-verify race check failed:", raceError);
+          continue;
+        }
+        if (raceCheck && raceCheck.length > 0) continue;
+
+        const { data: inserted, error: insertError } = await supabase
+          .from("work_verification")
+          .insert({
+            work_details_id: wd.id,
+            verification_date: new Date().toISOString().split("T")[0],
+            user_id: null,
+            status: "APPROVED",
+            is_auto_verified: true,
+            verification_notes: AUTO_VERIFY_NOTE,
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error("Auto-verify insert failed:", insertError);
+          continue;
+        }
+
+        if (inserted) {
+          verifiedCount++;
+          await ActivityLogService.logActivity({
+            action: "create",
+            tableName: "work_verification",
+            recordId: inserted.id,
+            newData: inserted,
+            description: `Automatically verified (2-day Operation Head review deadline passed): ${wd.description.substring(0, 50)}${wd.description.length > 50 ? "..." : ""}`,
+          });
+        }
+      }
+      return verifiedCount;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!canReview || loading || completedWorkDetails.length === 0) return;
+
+    const latestReview = getLatestVerificationByWorkDetails(verifications);
+    const stale = completedWorkDetails.filter((wd) => {
+      const latest = latestReview.get(wd.id);
+      if (isApproved(latest)) return false;
+      if (isOpenForRework(latest, wd.latest_progress_created_at)) return false;
+      return isPastAutoVerifyDeadline(wd.latest_progress_created_at);
+    });
+    if (stale.length === 0) return;
+
+    autoVerifyStaleWorkDetails(stale).then((count) => {
+      if (count > 0) fetchData();
+    });
+  }, [
+    completedWorkDetails,
+    verifications,
+    loading,
+    canReview,
+    autoVerifyStaleWorkDetails,
+    fetchData,
+  ]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -1528,8 +1613,15 @@ export default function WorkVerification() {
                                     {verification.work_details?.uom}
                                   </td>
                                   <td className="px-6 py-4 text-sm text-gray-500">
-                                    {verification.profiles?.name ||
-                                      "Unknown User"}
+                                    {verification.is_auto_verified ? (
+                                      <span className="inline-flex items-center gap-1 text-amber-700 bg-amber-50 px-2 py-0.5 rounded text-xs font-medium">
+                                        <Clock className="w-3 h-3" />{" "}
+                                        Auto-approved (2-day deadline)
+                                      </span>
+                                    ) : (
+                                      verification.profiles?.name ||
+                                      "Unknown User"
+                                    )}
                                   </td>
                                   <td className="px-6 py-4 text-sm text-gray-500">
                                     {formatDate(verification.verification_date)}

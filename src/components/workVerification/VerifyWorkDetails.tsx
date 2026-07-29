@@ -185,7 +185,7 @@ export default function VerifyWorkDetails() {
       const { data: historyData, error: historyError } = await supabase
         .from("work_verification")
         .select(
-          "id, work_details_id, status, verification_date, verification_notes, created_at, profiles(id, name, email)",
+          "id, work_details_id, status, verification_date, verification_notes, created_at, is_auto_verified, profiles(id, name, email)",
         )
         .eq("work_details_id", parseInt(workDetailsId))
         .is("deleted_at", null)
@@ -627,7 +627,9 @@ export default function VerifyWorkDetails() {
                           </span>
                           <span className="text-xs text-slate-500">
                             {formatDate(review.verification_date)} by{" "}
-                            {review.profiles?.name || "Unknown"}
+                            {review.is_auto_verified
+                              ? "Auto-approved (2-day deadline)"
+                              : review.profiles?.name || "Unknown"}
                           </span>
                         </div>
                         {review.verification_notes && (

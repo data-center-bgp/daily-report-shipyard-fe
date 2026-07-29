@@ -17,8 +17,34 @@ export interface VerificationRecord {
   verification_date: string;
   verification_notes?: string | null;
   deleted_at?: string | null;
-  user_id?: number;
+  user_id?: number | null;
+  is_auto_verified?: boolean;
   profiles?: { id: number; name: string; email: string } | null;
+}
+
+/**
+ * A completed work detail that hasn't been manually reviewed within this
+ * long gets auto-approved instead of waiting indefinitely for the
+ * Operation Head. See 20260729130000_work_verification_auto_approval.sql.
+ */
+export const AUTO_VERIFY_DEADLINE_MS = 2 * 24 * 60 * 60 * 1000;
+
+export const AUTO_VERIFY_NOTE =
+  "Automatically approved — Operation Head did not review this within 2 days of it reaching 100% progress.";
+
+/**
+ * Whether a completed-but-unreviewed work detail has been sitting long
+ * enough to qualify for auto-approval. Callers must already have confirmed
+ * the item is actually pending (not approved, not open for rework).
+ */
+export function isPastAutoVerifyDeadline(
+  latestProgressCreatedAt: string | null | undefined,
+): boolean {
+  if (!latestProgressCreatedAt) return false;
+  return (
+    Date.now() - new Date(latestProgressCreatedAt).getTime() >=
+    AUTO_VERIFY_DEADLINE_MS
+  );
 }
 
 /** Minimal shape the helpers below actually need — callers can select just these columns. */
