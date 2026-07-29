@@ -32,6 +32,7 @@ import {
   History,
   Undo2,
   Lock,
+  Ban,
 } from "lucide-react";
 
 interface WorkDetailsWithProgress extends WorkDetails {
@@ -78,7 +79,7 @@ export default function VerifyWorkDetails() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [blockedReason, setBlockedReason] = useState<
-    "approved" | "awaitingRework" | null
+    "approved" | "awaitingRework" | "cancelled" | null
   >(null);
   const [verificationDate, setVerificationDate] = useState(
     new Date().toISOString().split("T")[0],
@@ -142,6 +143,16 @@ export default function VerifyWorkDetails() {
       if (wdError) throw wdError;
       if (!workDetailsData) {
         throw new Error("Work details not found");
+      }
+
+      if (workDetailsData.cancelled_at) {
+        setBlockedReason("cancelled");
+        setWorkDetails({
+          ...workDetailsData,
+          current_progress: 0,
+        });
+        setLoading(false);
+        return;
       }
 
       const progressRecords: WorkProgressItem[] =
@@ -743,7 +754,27 @@ export default function VerifyWorkDetails() {
 
           {/* Sidebar - 1/3 */}
           <div className="lg:col-span-1">
-            {blockedReason === "approved" ? (
+            {blockedReason === "cancelled" ? (
+              <div className="bg-white rounded-xl shadow-lg border border-slate-200/50 sticky top-24 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-gray-50">
+                  <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                    <Ban className="w-5 h-5 text-slate-500" /> Cancelled
+                  </h3>
+                </div>
+                <div className="p-4 text-sm text-slate-600 space-y-3">
+                  <p>
+                    This work detail was cancelled by PPIC and no longer
+                    needs review.
+                  </p>
+                  <button
+                    onClick={() => navigate("/work-verification")}
+                    className="w-full px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all duration-200 text-sm font-medium"
+                  >
+                    Back to Verification List
+                  </button>
+                </div>
+              </div>
+            ) : blockedReason === "approved" ? (
               <div className="bg-white rounded-xl shadow-lg border border-slate-200/50 sticky top-24 overflow-hidden">
                 <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-green-50 to-emerald-50">
                   <h3 className="font-semibold text-slate-800 flex items-center gap-2">

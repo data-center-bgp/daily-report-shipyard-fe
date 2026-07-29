@@ -327,6 +327,12 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
                               <td className="border border-gray-300 px-2 py-1">
                                 <div className="font-medium">
                                   {item.work_details?.description}
+                                  {item.work_details?.cancelled_at && (
+                                    <span className="font-normal text-gray-500">
+                                      {" "}
+                                      (Cancelled)
+                                    </span>
+                                  )}
                                 </div>
                                 {item.work_details?.work_scope && (
                                   <div className="text-gray-600 mt-0.5">

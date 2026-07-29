@@ -23,6 +23,7 @@ import {
   Lightbulb,
   Package,
   Undo2,
+  Ban,
   Clock,
   Receipt,
 } from "lucide-react";
@@ -77,6 +78,7 @@ export default function BASTPDetails() {
         description,
         quantity,
         uom,
+        cancelled_at,
         planned_start_date,
         target_close_date,
         pic,
@@ -307,13 +309,20 @@ export default function BASTPDetails() {
 
   const reviewCounts = (bastp?.bastp_work_details || []).reduce(
     (acc, bwd) => {
+      // Cancelled work details never need review — don't count them as
+      // "pending," which would misleadingly suggest they're blocking the
+      // BASTP from progressing.
+      if (bwd.work_details?.cancelled_at) {
+        acc.cancelled += 1;
+        return acc;
+      }
       const status = getLatestReviewStatus(bwd.work_details?.work_verification);
       if (status === "APPROVED") acc.approved += 1;
       else if (status === "REJECTED") acc.rejected += 1;
       else acc.pending += 1;
       return acc;
     },
-    { approved: 0, rejected: 0, pending: 0 },
+    { approved: 0, rejected: 0, pending: 0, cancelled: 0 },
   );
 
   // Generate signed URL and open modal
@@ -695,10 +704,13 @@ export default function BASTPDetails() {
             </h2>
             {bastp.status === "DRAFT" && reviewCounts.pending + reviewCounts.rejected > 0 && (
               <p className="text-sm text-gray-500 mt-1">
-                {reviewCounts.approved} of {bastp.bastp_work_details?.length || 0}{" "}
+                {reviewCounts.approved} of{" "}
+                {reviewCounts.approved + reviewCounts.pending + reviewCounts.rejected}{" "}
                 approved
                 {reviewCounts.rejected > 0 &&
                   ` • ${reviewCounts.rejected} sent back for rework`}
+                {reviewCounts.cancelled > 0 &&
+                  ` • ${reviewCounts.cancelled} cancelled`}
                 {" — this is why the BASTP hasn't moved past Draft."}
               </p>
             )}
@@ -801,7 +813,11 @@ export default function BASTPDetails() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {reviewStatus === "APPROVED" ? (
+                        {bwd.work_details?.cancelled_at ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-600">
+                            <Ban className="w-3 h-3" /> Cancelled
+                          </span>
+                        ) : reviewStatus === "APPROVED" ? (
                           <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
                             <CheckCircle2 className="w-3 h-3" /> Approved
                           </span>

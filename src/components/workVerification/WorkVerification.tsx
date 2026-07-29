@@ -321,9 +321,11 @@ export default function WorkVerification() {
         };
       });
 
-      // Filter only completed work details (100% progress)
+      // Filter only completed work details (100% progress) — cancelled ones
+      // never need review, even if they happened to reach 100% before being
+      // cancelled.
       const completed = workDetailsWithProgress.filter(
-        (wd) => wd.current_progress === 100,
+        (wd) => wd.current_progress === 100 && !wd.cancelled_at,
       );
       setCompletedWorkDetails(completed);
 

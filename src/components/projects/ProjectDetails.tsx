@@ -47,6 +47,7 @@ interface WorkOrderRow {
   work_details: {
     planned_start_date: string | null;
     target_close_date: string | null;
+    cancelled_at?: string | null;
     work_progress: {
       progress_percentage: number;
       report_date: string;
@@ -69,8 +70,10 @@ const STATUS_BADGE: Record<string, { label: string; className: string }> = {
 };
 
 function overallProgress(wo: WorkOrderRow): number {
-  if (!wo.work_details.length) return 0;
-  const totals = wo.work_details.map((wd) => {
+  // Cancelled work details don't count toward completion.
+  const activeDetails = wo.work_details.filter((wd) => !wd.cancelled_at);
+  if (!activeDetails.length) return 0;
+  const totals = activeDetails.map((wd) => {
     const progress = wd.work_progress || [];
     if (!progress.length) return 0;
     // Latest by report_date, tie-broken by created_at — see WODetailsTable
@@ -136,6 +139,7 @@ export default function ProjectDetails() {
           work_details (
             planned_start_date,
             target_close_date,
+            cancelled_at,
             work_progress ( progress_percentage, report_date, created_at )
           )
         `,

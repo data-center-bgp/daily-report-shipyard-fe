@@ -37,6 +37,7 @@ import {
   MapPin,
   ClipboardList,
   X,
+  Ban,
 } from "lucide-react";
 
 interface VesselData {
@@ -204,21 +205,27 @@ export default function VesselWorkOrders() {
               };
             });
 
-          // Calculate overall work order progress
+          // Calculate overall work order progress — cancelled work details
+          // are excluded from the average (they're still shown in the list
+          // below, just don't count toward completion).
           let overallProgress = 0;
           let hasProgressData = false;
 
-          if (workDetailsWithProgress.length > 0) {
-            // Average progress across all work details
-            const totalProgress = workDetailsWithProgress.reduce(
+          const activeForAverage = workDetailsWithProgress.filter(
+            (detail: WorkDetailWithProgress) => !detail.cancelled_at,
+          );
+
+          if (activeForAverage.length > 0) {
+            // Average progress across all active (non-cancelled) work details
+            const totalProgress = activeForAverage.reduce(
               (sum: number, detail: WorkDetailWithProgress) =>
                 sum + (detail.current_progress || 0),
               0,
             );
             overallProgress = Math.round(
-              totalProgress / workDetailsWithProgress.length,
+              totalProgress / activeForAverage.length,
             );
-            hasProgressData = workDetailsWithProgress.some(
+            hasProgressData = activeForAverage.some(
               (detail: WorkDetailWithProgress) => detail.current_progress > 0,
             );
           }
@@ -1034,8 +1041,21 @@ export default function VesselWorkOrders() {
                                               )}
                                             </span>
                                             <div className="flex-1">
-                                              <h5 className="font-medium text-gray-900 mb-2">
+                                              <h5 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
                                                 {detail.description}
+                                                {detail.cancelled_at && (
+                                                  <span
+                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-600"
+                                                    title={
+                                                      detail.cancellation_reason
+                                                        ? `Reason: ${detail.cancellation_reason}`
+                                                        : undefined
+                                                    }
+                                                  >
+                                                    <Ban className="w-3 h-3" />{" "}
+                                                    Cancelled
+                                                  </span>
+                                                )}
                                               </h5>
                                               <div className="space-y-1 text-sm text-gray-600">
                                                 {detail.location && (
@@ -1196,7 +1216,8 @@ export default function VesselWorkOrders() {
                                             Edit Details
                                           </button>
                                         )}
-                                        {canWriteProgress && (
+                                        {canWriteProgress &&
+                                          !detail.cancelled_at && (
                                           <button
                                             onClick={() =>
                                               navigate(

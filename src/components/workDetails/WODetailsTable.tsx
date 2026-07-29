@@ -1,4 +1,11 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+  Fragment,
+} from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   supabase,
@@ -38,6 +45,7 @@ import {
   FileCheck,
   FolderKanban,
   Undo2,
+  Ban,
 } from "lucide-react";
 
 interface ProjectOption {
@@ -65,6 +73,9 @@ interface WorkDetailsWithWorkOrder extends WorkDetails {
   latest_progress_date?: string;
   progress_count?: number;
   isOpenForRework?: boolean;
+  cancelled_at?: string | null;
+  cancelled_by?: number | null;
+  cancellation_reason?: string | null;
   work_scope?: {
     id: number;
     work_scope: string;
@@ -122,6 +133,11 @@ export default function WODetailsTable({
   // also covers PPIC editing its own work-detail planning fields.
   const canWriteProgress =
     profile?.role === "MASTER" || profile?.role === "PRODUCTION";
+  // Cancelling a work detail is PPIC's call (MASTER keeps the usual
+  // superuser override) — separate from canEditWorkDetails since
+  // ADMIN_SHIPPING can edit/create but shouldn't decide cancellations.
+  const canCancelWorkDetail =
+    profile?.role === "PPIC" || profile?.role === "MASTER";
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -167,6 +183,10 @@ export default function WODetailsTable({
   const [detailToDelete, setDetailToDelete] =
     useState<WorkDetailsWithWorkOrder | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [detailToCancel, setDetailToCancel] =
+    useState<WorkDetailsWithWorkOrder | null>(null);
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [isCancelling, setIsCancelling] = useState(false);
 
   // Filter State
   const [vessels, setVessels] = useState<Vessel[]>([]);
@@ -391,7 +411,7 @@ export default function WODetailsTable({
             customer_wo_number,
             vessel (id, name, type, company)
           ),
-          profiles (id, name, email),
+          profiles!fk_work_details_user (id, name, email),
           work_progress (id, progress_percentage, report_date, created_at),
           work_verification (status, created_at, deleted_at),
           location:location_id (id, location),
@@ -791,6 +811,106 @@ export default function WODetailsTable({
     setDetailToDelete(null);
   };
 
+  const handleCancelWorkDetail = (detail: WorkDetailsWithWorkOrder) => {
+    setDetailToCancel(detail);
+    setCancellationReason("");
+  };
+
+  const closeCancelModal = () => {
+    setDetailToCancel(null);
+    setCancellationReason("");
+  };
+
+  const confirmCancelWorkDetail = async () => {
+    if (!detailToCancel || !profile) return;
+
+    try {
+      setIsCancelling(true);
+      const { data, error } = await supabase
+        .from("work_details")
+        .update({
+          cancelled_at: new Date().toISOString(),
+          cancelled_by: profile.id,
+          cancellation_reason: cancellationReason.trim() || null,
+        })
+        .eq("id", detailToCancel.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        await ActivityLogService.logActivity({
+          action: "update",
+          tableName: "work_details",
+          recordId: data.id,
+          oldData: detailToCancel,
+          newData: data,
+          description: `Cancelled work detail: ${detailToCancel.description}`,
+        });
+      }
+
+      await fetchWorkDetails();
+      onRefresh?.();
+      closeCancelModal();
+    } catch (err) {
+      console.error("Error cancelling work detail:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "An error occurred while cancelling",
+      );
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const handleUncancelWorkDetail = async (detail: WorkDetailsWithWorkOrder) => {
+    if (
+      !window.confirm(
+        `Uncancel "${detail.description}"? It'll count toward the work order's progress average again.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("work_details")
+        .update({
+          cancelled_at: null,
+          cancelled_by: null,
+          cancellation_reason: null,
+        })
+        .eq("id", detail.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        await ActivityLogService.logActivity({
+          action: "update",
+          tableName: "work_details",
+          recordId: data.id,
+          oldData: detail,
+          newData: data,
+          description: `Uncancelled work detail: ${detail.description}`,
+        });
+      }
+
+      await fetchWorkDetails();
+      onRefresh?.();
+    } catch (err) {
+      console.error("Error uncancelling work detail:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "An error occurred while uncancelling",
+      );
+    }
+  };
+
   const handleViewPermit = async (detail: WorkDetailsWithWorkOrder) => {
     if (!detail.storage_path) return;
     try {
@@ -1058,7 +1178,7 @@ export default function WODetailsTable({
           customer_wo_number,
           vessel (id, name, type, company)
         ),
-        profiles (id, name, email),
+        profiles!fk_work_details_user (id, name, email),
         work_progress (id, progress_percentage, report_date, created_at),
         work_verification (status, created_at, deleted_at),
         location:location_id (id, location),
@@ -1244,8 +1364,8 @@ export default function WODetailsTable({
     const isExpanded = expandedRows.has(detail.id);
 
     return (
-      <>
-        <tr key={detail.id} className="hover:bg-gray-50 transition-colors">
+      <Fragment key={detail.id}>
+        <tr className="hover:bg-gray-50 transition-colors">
           <td className="px-6 py-4">
             <button
               onClick={() => toggleRowExpansion(detail.id)}
@@ -1290,6 +1410,18 @@ export default function WODetailsTable({
                 {detail.isOpenForRework && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">
                     <Undo2 className="w-3 h-3" /> Needs Rework
+                  </span>
+                )}
+                {detail.cancelled_at && (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-600"
+                    title={
+                      detail.cancellation_reason
+                        ? `Reason: ${detail.cancellation_reason}`
+                        : undefined
+                    }
+                  >
+                    <Ban className="w-3 h-3" /> Cancelled
                   </span>
                 )}
               </div>
@@ -1576,7 +1708,7 @@ export default function WODetailsTable({
                       <BarChart3 className="w-4 h-4" /> View Progress (
                       {detail.progress_count || 0})
                     </button>
-                    {canWriteProgress && (
+                    {canWriteProgress && !detail.cancelled_at && (
                       <button
                         onClick={() => handleAddProgress(detail.id)}
                         className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm"
@@ -1584,13 +1716,29 @@ export default function WODetailsTable({
                         <Plus className="w-4 h-4" /> Add Progress
                       </button>
                     )}
+                    {canCancelWorkDetail &&
+                      (detail.cancelled_at ? (
+                        <button
+                          onClick={() => handleUncancelWorkDetail(detail)}
+                          className="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm"
+                        >
+                          <Undo2 className="w-4 h-4" /> Uncancel
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleCancelWorkDetail(detail)}
+                          className="bg-white text-red-700 border border-red-300 px-4 py-2 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-2 text-sm"
+                        >
+                          <Ban className="w-4 h-4" /> Cancel Work Detail
+                        </button>
+                      ))}
                   </div>
                 </div>
               </div>
             </td>
           </tr>
         )}
-      </>
+      </Fragment>
     );
   };
 
@@ -1766,6 +1914,81 @@ export default function WODetailsTable({
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4" /> Delete
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderCancelModal = () => {
+    if (!detailToCancel) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div
+          className="fixed inset-0 bg-black/30 backdrop-blur-sm transition-opacity"
+          onClick={closeCancelModal}
+        ></div>
+
+        <div className="flex min-h-full items-center justify-center p-4">
+          <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full transform transition-all">
+            <div className="bg-red-600 px-6 py-4 rounded-t-lg">
+              <div className="flex items-center gap-3">
+                <Ban className="w-8 h-8 text-white" />
+                <h3 className="text-xl font-bold text-white">
+                  Cancel Work Detail
+                </h3>
+              </div>
+            </div>
+
+            <div className="px-6 py-6">
+              <p className="text-gray-700 text-base">
+                This removes it from the work order's progress average and
+                lets it be added to a BASTP at zero price. It can be
+                uncancelled later if needed.
+              </p>
+              <div className="mt-4 p-3 bg-gray-50 rounded border border-gray-200">
+                <p className="text-sm font-medium text-gray-900 line-clamp-2">
+                  {detailToCancel.description}
+                </p>
+              </div>
+              <label className="block text-sm font-medium text-gray-700 mt-4 mb-2">
+                Reason (optional)
+              </label>
+              <textarea
+                value={cancellationReason}
+                onChange={(e) => setCancellationReason(e.target.value)}
+                rows={3}
+                placeholder="Why is this work detail being cancelled?"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+              />
+            </div>
+
+            <div className="bg-gray-50 px-6 py-4 rounded-b-lg flex gap-3 justify-end">
+              <button
+                onClick={closeCancelModal}
+                disabled={isCancelling}
+                className="px-5 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Back
+              </button>
+              <button
+                onClick={confirmCancelWorkDetail}
+                disabled={isCancelling}
+                className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isCancelling ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Cancelling...
+                  </>
+                ) : (
+                  <>
+                    <Ban className="w-4 h-4" /> Confirm Cancel
                   </>
                 )}
               </button>
@@ -2031,6 +2254,7 @@ export default function WODetailsTable({
   return (
     <div className={embedded ? "space-y-4" : "space-y-6"}>
       {renderDeleteModal()}
+      {renderCancelModal()}
 
       {/* Header */}
       {!embedded && (

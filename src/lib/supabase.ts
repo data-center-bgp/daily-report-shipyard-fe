@@ -74,6 +74,9 @@ export interface WorkDetails {
   notes?: string;
   ptw_number?: string;
   ppic_price?: number | null;
+  cancelled_at?: string | null;
+  cancelled_by?: number | null;
+  cancellation_reason?: string | null;
 }
 
 export interface WorkProgress {

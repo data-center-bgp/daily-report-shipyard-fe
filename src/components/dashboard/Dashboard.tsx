@@ -63,6 +63,7 @@ interface WorkDetailsWithProgress {
   current_progress: number;
   verification_status: boolean;
   latest_progress_date?: string;
+  cancelled_at?: string | null;
 }
 
 interface ProcessedWorkOrder {
@@ -99,9 +100,10 @@ interface DatabaseWorkDetail {
     created_at: string;
   }>;
   work_verification: Array<{
-    work_verification: boolean;
+    status: "APPROVED" | "REJECTED";
     verification_date: string;
   }>;
+  cancelled_at?: string | null;
   [key: string]: unknown;
 }
 
@@ -310,7 +312,7 @@ export default function Dashboard() {
               created_at
             ),
             work_verification (
-              work_verification,
+              status,
               verification_date
             )
           ),
@@ -357,7 +359,7 @@ export default function Dashboard() {
                 current_progress: 0,
                 latest_progress_date: undefined,
                 verification_status: verificationRecords.some(
-                  (v) => v.work_verification === true
+                  (v) => v.status === "APPROVED"
                 ),
               };
             }
@@ -375,32 +377,38 @@ export default function Dashboard() {
               current_progress: latestProgress,
               latest_progress_date: latestProgressDate,
               verification_status: verificationRecords.some(
-                (v) => v.work_verification === true
+                (v) => v.status === "APPROVED"
               ),
             };
           }
         );
 
+        // Cancelled work details don't count toward completion — a 10-item
+        // work order with 1 cancelled averages over the other 9.
+        const activeForAverage = workDetailsWithProgress.filter(
+          (detail: WorkDetailsWithProgress) => !detail.cancelled_at
+        );
+
         let overallProgress = 0;
         let hasProgressData = false;
 
-        if (workDetailsWithProgress.length > 0) {
-          const totalProgress = workDetailsWithProgress.reduce(
+        if (activeForAverage.length > 0) {
+          const totalProgress = activeForAverage.reduce(
             (sum: number, detail: WorkDetailsWithProgress) =>
               sum + (detail.current_progress || 0),
             0
           );
           overallProgress = Math.round(
-            totalProgress / workDetailsWithProgress.length
+            totalProgress / activeForAverage.length
           );
-          hasProgressData = workDetailsWithProgress.some(
+          hasProgressData = activeForAverage.some(
             (detail: WorkDetailsWithProgress) => detail.current_progress > 0
           );
         }
 
         const isFullyCompleted =
-          workDetailsWithProgress.length > 0 &&
-          workDetailsWithProgress.every(
+          activeForAverage.length > 0 &&
+          activeForAverage.every(
             (detail: WorkDetailsWithProgress) => detail.current_progress === 100
           );
 

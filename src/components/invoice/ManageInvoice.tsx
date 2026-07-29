@@ -19,6 +19,7 @@ import {
   Loader,
   Wrench,
   DollarSign,
+  Ban,
 } from "lucide-react";
 
 interface WorkDetailPrice {
@@ -27,6 +28,7 @@ interface WorkDetailPrice {
   quantity: number;
   uom: string;
   payment_price: number;
+  is_cancelled?: boolean;
 }
 
 interface GeneralServicePrice {
@@ -146,6 +148,7 @@ export default function ManageInvoice() {
                 quantity,
                 uom,
                 ppic_price,
+                cancelled_at,
                 pic,
                 location:location_id (
                   id,
@@ -256,7 +259,12 @@ export default function ManageInvoice() {
 
           const quantity = workDetail?.quantity || 0;
           const uom = workDetail?.uom || "";
-          const unit_price = existingPrice?.unit_price || 0;
+          const is_cancelled = !!workDetail?.cancelled_at;
+          // Cancelled work details are always billed at zero, even if a
+          // non-zero price was saved before it was cancelled.
+          const unit_price = is_cancelled
+            ? 0
+            : existingPrice?.unit_price || 0;
 
           return {
             work_details_id: workDetailId,
@@ -264,6 +272,7 @@ export default function ManageInvoice() {
             quantity: quantity,
             uom: uom,
             payment_price: unit_price * quantity,
+            is_cancelled,
           };
         },
       );
@@ -317,6 +326,7 @@ export default function ManageInvoice() {
             quantity,
             uom,
             ppic_price,
+            cancelled_at,
             pic,
             location:location_id (
               id,
@@ -393,6 +403,7 @@ export default function ManageInvoice() {
             quantity: item.work_details?.quantity || 0,
             uom: item.work_details?.uom || "",
             payment_price: 0,
+            is_cancelled: !!item.work_details?.cancelled_at,
           })) || [];
       setWorkDetailPrices(initialPrices);
 
@@ -609,7 +620,10 @@ export default function ManageInvoice() {
 
         // Insert work details
         const workDetailsToInsert = workDetailPrices
-          .filter((item) => item.unit_price > 0)
+          // Cancelled items are always included (at zero price) so there's a
+          // visible record on the invoice; everything else still needs a
+          // real price to be worth a line item.
+          .filter((item) => item.unit_price > 0 || item.is_cancelled)
           .map((item) => ({
             invoice_details_id: Number(invoiceId),
             work_details_id: item.work_details_id,
@@ -715,7 +729,10 @@ export default function ManageInvoice() {
 
         // Insert work details
         const workDetailsToInsert = workDetailPrices
-          .filter((item) => item.unit_price > 0)
+          // Cancelled items are always included (at zero price) so there's a
+          // visible record on the invoice; everything else still needs a
+          // real price to be worth a line item.
+          .filter((item) => item.unit_price > 0 || item.is_cancelled)
           .map((item) => ({
             invoice_details_id: invoiceData.id,
             work_details_id: item.work_details_id,
@@ -1490,15 +1507,24 @@ export default function ManageInvoice() {
                                 numericValue,
                               );
                             }}
-                            disabled={pricingLocked}
+                            disabled={
+                              pricingLocked || !!item.work_details?.cancelled_at
+                            }
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right disabled:bg-gray-100 disabled:cursor-not-allowed"
                             placeholder="0"
                           />
-                          {item.work_details?.ppic_price != null && (
-                            <div className="text-xs text-gray-500 mt-1 text-right">
-                              PPIC price:{" "}
-                              {formatCurrency(item.work_details.ppic_price)}
+                          {item.work_details?.cancelled_at ? (
+                            <div className="text-xs text-gray-500 mt-1 text-right inline-flex items-center gap-1 justify-end w-full">
+                              <Ban className="w-3 h-3" /> Cancelled — billed at
+                              Rp 0
                             </div>
+                          ) : (
+                            item.work_details?.ppic_price != null && (
+                              <div className="text-xs text-gray-500 mt-1 text-right">
+                                PPIC price:{" "}
+                                {formatCurrency(item.work_details.ppic_price)}
+                              </div>
+                            )
                           )}
                         </td>
                         <td className="px-4 py-4 text-right">

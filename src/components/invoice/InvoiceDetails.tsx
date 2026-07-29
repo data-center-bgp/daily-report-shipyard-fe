@@ -22,6 +22,7 @@ import {
   User,
   MapPin,
   Calendar,
+  Ban,
 } from "lucide-react";
 
 export default function InvoiceDetails() {
@@ -109,6 +110,7 @@ export default function InvoiceDetails() {
               quantity,
               uom,
               ppic_price,
+              cancelled_at,
               pic,
               planned_start_date,
               target_close_date,
@@ -745,8 +747,13 @@ export default function InvoiceDetails() {
                           )}
 
                           {/* Work Details Description */}
-                          <div className="font-medium text-gray-900 mb-1">
+                          <div className="font-medium text-gray-900 mb-1 flex items-center gap-2">
                             {item.work_details?.description}
+                            {item.work_details?.cancelled_at && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-600">
+                                <Ban className="w-3 h-3" /> Cancelled
+                              </span>
+                            )}
                           </div>
                           {item.work_details?.pic && (
                             <div className="text-xs text-gray-500 flex items-center gap-1">

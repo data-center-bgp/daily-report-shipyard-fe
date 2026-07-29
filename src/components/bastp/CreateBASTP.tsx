@@ -33,6 +33,7 @@ import {
   Search,
   Loader,
   Undo2,
+  Ban,
   Lock,
   Ship,
   FolderKanban,
@@ -384,7 +385,10 @@ export default function CreateBASTP() {
             latest_progress_created_at: latestProgressCreatedAt,
           };
         })
-        .filter((wd) => wd.current_progress === 100);
+        // Cancelled items skip the 100%-complete requirement entirely —
+        // they'll never be worked on, but PPIC can still add them to a
+        // BASTP (at zero invoice price) for record-keeping.
+        .filter((wd) => wd.current_progress === 100 || wd.cancelled_at);
 
       // Check which work details are approved — the latest review per work
       // detail decides this, not just "does a work_verification row exist,"
@@ -1654,6 +1658,11 @@ export default function CreateBASTP() {
                             {wd.isOpenForRework && (
                               <span className="inline-flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">
                                 <Undo2 className="w-3 h-3" /> Needs Rework
+                              </span>
+                            )}
+                            {wd.cancelled_at && (
+                              <span className="inline-flex items-center gap-1 text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded">
+                                <Ban className="w-3 h-3" /> Cancelled
                               </span>
                             )}
                           </div>

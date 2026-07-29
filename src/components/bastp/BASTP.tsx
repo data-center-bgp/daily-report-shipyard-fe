@@ -74,6 +74,7 @@ export default function BASTP() {
         description,
         quantity,
         uom,
+        cancelled_at,
         work_order (
           id,
           shipyard_wo_number,
@@ -128,6 +129,14 @@ export default function BASTP() {
 
           if (workDetailIds.length === 0) return;
 
+          // Cancelled work details never get verified — don't let them
+          // block this BASTP from being promoted to VERIFIED.
+          const cancelledIds = new Set(
+            (bastp.bastp_work_details ?? [])
+              .filter((bwd: any) => bwd.work_details?.cancelled_at)
+              .map((bwd: any) => bwd.work_details?.id),
+          );
+
           const { data: verifications, error } = await supabase
             .from("work_verification")
             .select("work_details_id, status, created_at")
@@ -138,8 +147,9 @@ export default function BASTP() {
             const latestByWorkDetails = getLatestVerificationByWorkDetails(
               verifications || [],
             );
-            const allVerified = workDetailIds.every((id) =>
-              isApproved(latestByWorkDetails.get(id)),
+            const allVerified = workDetailIds.every(
+              (id) =>
+                cancelledIds.has(id) || isApproved(latestByWorkDetails.get(id)),
             );
             if (allVerified) {
               await supabase
