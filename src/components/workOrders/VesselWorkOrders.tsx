@@ -113,6 +113,11 @@ export default function VesselWorkOrders() {
   const [detailSearchTerms, setDetailSearchTerms] = useState<
     Record<number, string>
   >({});
+  // Per-work-order "Additional Work" filter for the same expanded section —
+  // "" = all, "yes" = additional work details only, "no" = original only.
+  const [detailAdditionalWoFilters, setDetailAdditionalWoFilters] = useState<
+    Record<number, string>
+  >({});
   const [sortField, setSortField] = useState<
     "shipyard_wo_date" | "shipyard_wo_number"
   >("shipyard_wo_date");
@@ -840,19 +845,30 @@ export default function VesselWorkOrders() {
                   const detailSearchTerm = (
                     detailSearchTerms[wo.id] || ""
                   ).toLowerCase();
-                  const visibleDetails = detailSearchTerm
-                    ? wo.work_details.filter((detail) => {
-                        const safeIncludes = (
-                          value: string | null | undefined,
-                        ) => value?.toLowerCase().includes(detailSearchTerm) || false;
-                        return (
-                          safeIncludes(detail.description) ||
-                          safeIncludes(detail.location?.location) ||
-                          safeIncludes(detail.work_scope?.work_scope) ||
-                          safeIncludes(detail.pic)
-                        );
-                      })
-                    : wo.work_details;
+                  const detailAdditionalWoFilter =
+                    detailAdditionalWoFilters[wo.id] || "";
+                  const visibleDetails = wo.work_details
+                    .filter((detail) => {
+                      if (!detailSearchTerm) return true;
+                      const safeIncludes = (
+                        value: string | null | undefined,
+                      ) => value?.toLowerCase().includes(detailSearchTerm) || false;
+                      return (
+                        safeIncludes(detail.description) ||
+                        safeIncludes(detail.location?.location) ||
+                        safeIncludes(detail.work_scope?.work_scope) ||
+                        safeIncludes(detail.pic)
+                      );
+                    })
+                    .filter((detail) => {
+                      if (detailAdditionalWoFilter === "yes") {
+                        return detail.is_additional_wo_details;
+                      }
+                      if (detailAdditionalWoFilter === "no") {
+                        return !detail.is_additional_wo_details;
+                      }
+                      return true;
+                    });
 
                   return (
                   <Fragment key={wo.id}>
@@ -1095,33 +1111,49 @@ export default function VesselWorkOrders() {
                               </div>
 
                               {wo.work_details.length > 0 && (
-                                <div className="relative mb-3 max-w-sm">
-                                  <input
-                                    type="text"
-                                    value={detailSearchTerms[wo.id] || ""}
+                                <div className="flex flex-col sm:flex-row gap-2 mb-3">
+                                  <div className="relative max-w-sm flex-1">
+                                    <input
+                                      type="text"
+                                      value={detailSearchTerms[wo.id] || ""}
+                                      onChange={(e) =>
+                                        setDetailSearchTerms((prev) => ({
+                                          ...prev,
+                                          [wo.id]: e.target.value,
+                                        }))
+                                      }
+                                      placeholder="Filter these work details by description, scope, location, or PIC..."
+                                      className="w-full pl-9 pr-8 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                    <Search className="absolute left-3 top-2 w-3.5 h-3.5 text-gray-400" />
+                                    {detailSearchTerms[wo.id] && (
+                                      <button
+                                        onClick={() =>
+                                          setDetailSearchTerms((prev) => ({
+                                            ...prev,
+                                            [wo.id]: "",
+                                          }))
+                                        }
+                                        className="absolute right-2 top-1.5 text-gray-400 hover:text-gray-600"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                  <select
+                                    value={detailAdditionalWoFilters[wo.id] || ""}
                                     onChange={(e) =>
-                                      setDetailSearchTerms((prev) => ({
+                                      setDetailAdditionalWoFilters((prev) => ({
                                         ...prev,
                                         [wo.id]: e.target.value,
                                       }))
                                     }
-                                    placeholder="Filter these work details by description, scope, location, or PIC..."
-                                    className="w-full pl-9 pr-8 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                  />
-                                  <Search className="absolute left-3 top-2 w-3.5 h-3.5 text-gray-400" />
-                                  {detailSearchTerms[wo.id] && (
-                                    <button
-                                      onClick={() =>
-                                        setDetailSearchTerms((prev) => ({
-                                          ...prev,
-                                          [wo.id]: "",
-                                        }))
-                                      }
-                                      className="absolute right-2 top-1.5 text-gray-400 hover:text-gray-600"
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
+                                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                  >
+                                    <option value="">All work details</option>
+                                    <option value="yes">Additional only</option>
+                                    <option value="no">Original only</option>
+                                  </select>
                                 </div>
                               )}
 
@@ -1141,8 +1173,14 @@ export default function VesselWorkOrders() {
                                               )}
                                             </span>
                                             <div className="flex-1">
-                                              <h5 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
+                                              <h5 className="font-medium text-gray-900 mb-2 flex items-center gap-2 flex-wrap">
                                                 {detail.description}
+                                                {detail.is_additional_wo_details && (
+                                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
+                                                    <AlertTriangle className="w-3 h-3" />{" "}
+                                                    Additional Work
+                                                  </span>
+                                                )}
                                                 {detail.cancelled_at && (
                                                   <span
                                                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-600"
@@ -1361,16 +1399,21 @@ export default function VesselWorkOrders() {
                                 <div className="text-center py-8 text-gray-500">
                                   <ClipboardList className="w-16 h-16 text-gray-400 mx-auto mb-2" />
                                   <p>
-                                    No work details match "
-                                    {detailSearchTerms[wo.id]}"
+                                    {detailSearchTerms[wo.id]
+                                      ? `No work details match "${detailSearchTerms[wo.id]}"`
+                                      : "No work details match this filter"}
                                   </p>
                                   <button
-                                    onClick={() =>
+                                    onClick={() => {
                                       setDetailSearchTerms((prev) => ({
                                         ...prev,
                                         [wo.id]: "",
-                                      }))
-                                    }
+                                      }));
+                                      setDetailAdditionalWoFilters((prev) => ({
+                                        ...prev,
+                                        [wo.id]: "",
+                                      }));
+                                    }}
                                     className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
                                   >
                                     Clear filter

@@ -302,6 +302,10 @@ export default function WODetailsTable({
   const [workDetailsSearchTerm, setWorkDetailsSearchTerm] = useState(
     () => searchParams.get("search") || "",
   );
+  // "" = all, "yes" = only additional work details, "no" = only original ones.
+  const [additionalWoFilter, setAdditionalWoFilter] = useState<string>(
+    () => searchParams.get("additionalWo") || "",
+  );
   // The work details search now hits the database, so keystrokes are
   // debounced instead of filtering an in-memory array.
   const [debouncedWorkDetailsSearchTerm, setDebouncedWorkDetailsSearchTerm] =
@@ -485,6 +489,7 @@ export default function WODetailsTable({
       sortDirection: "asc" | "desc";
       page: number;
       search: string;
+      additionalWo: string;
     }) => {
       try {
         setLoading(true);
@@ -494,6 +499,12 @@ export default function WODetailsTable({
           .from("work_details")
           .select(WORK_DETAILS_SELECT, { count: "exact" })
           .is("deleted_at", null);
+
+        if (params.additionalWo === "yes") {
+          baseQuery = baseQuery.eq("is_additional_wo_details", true);
+        } else if (params.additionalWo === "no") {
+          baseQuery = baseQuery.eq("is_additional_wo_details", false);
+        }
 
         // Apply filters
         if (workOrderId) {
@@ -618,6 +629,7 @@ export default function WODetailsTable({
         sortDirection,
         page: currentPage,
         search: debouncedWorkDetailsSearchTerm,
+        additionalWo: additionalWoFilter,
       }),
     [
       runWorkDetailsQuery,
@@ -628,6 +640,7 @@ export default function WODetailsTable({
       sortDirection,
       currentPage,
       debouncedWorkDetailsSearchTerm,
+      additionalWoFilter,
     ],
   );
 
@@ -642,6 +655,7 @@ export default function WODetailsTable({
       sortDirectionParam: "asc" | "desc",
       pageParam: number,
       searchParam: string,
+      additionalWoParam: string,
     ) =>
       runWorkDetailsQuery({
         vesselId: vesselIdParam,
@@ -651,6 +665,7 @@ export default function WODetailsTable({
         sortDirection: sortDirectionParam,
         page: pageParam,
         search: searchParam,
+        additionalWo: additionalWoParam,
       }),
     [runWorkDetailsQuery],
   );
@@ -814,6 +829,16 @@ export default function WODetailsTable({
     });
   };
 
+  const handleAdditionalWoFilterChange = (value: string) => {
+    setAdditionalWoFilter(value);
+    setCurrentPage(1);
+
+    updateUrlParams({
+      additionalWo: value || null,
+      page: 1,
+    });
+  };
+
   const handleSort = (field: typeof sortField) => {
     const newDirection =
       sortField === field && sortDirection === "asc" ? "desc" : "asc";
@@ -846,6 +871,7 @@ export default function WODetailsTable({
       workOrderId: selectedWorkOrderId,
       woSearch: workOrderSearchTerm,
       search: workDetailsSearchTerm,
+      additionalWo: additionalWoFilter,
       sortField,
       sortDirection,
       page: currentPage,
@@ -874,6 +900,7 @@ export default function WODetailsTable({
       workOrderId: selectedWorkOrderId,
       woSearch: workOrderSearchTerm,
       search: workDetailsSearchTerm,
+      additionalWo: additionalWoFilter,
       sortField,
       sortDirection,
       page: currentPage,
@@ -1199,6 +1226,9 @@ export default function WODetailsTable({
           if (navigationState.search) {
             setWorkDetailsSearchTerm(navigationState.search);
           }
+          if (navigationState.additionalWo) {
+            setAdditionalWoFilter(navigationState.additionalWo);
+          }
           if (navigationState.sortField) {
             setSortField(navigationState.sortField);
             setSortDirection(navigationState.sortDirection);
@@ -1268,6 +1298,7 @@ export default function WODetailsTable({
               navigationState.sortDirection || "asc",
               navigationState.page || 1,
               navigationState.search || "",
+              navigationState.additionalWo || "",
             );
           }, 300);
         } catch (error) {
@@ -1421,6 +1452,11 @@ export default function WODetailsTable({
                 {detail.location && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
                     <MapPin className="w-3 h-3" /> {detail.location.location}
+                  </span>
+                )}
+                {detail.is_additional_wo_details && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
+                    <AlertTriangle className="w-3 h-3" /> Additional Work
                   </span>
                 )}
                 {detail.isOpenForRework && (
@@ -2181,6 +2217,22 @@ export default function WODetailsTable({
                     ))}
                   </div>
                 )}
+            </div>
+
+            {/* Additional Work Filter */}
+            <div className="flex-1">
+              <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
+                <AlertTriangle className="w-4 h-4" /> Additional Work
+              </label>
+              <select
+                value={additionalWoFilter}
+                onChange={(e) => handleAdditionalWoFilterChange(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              >
+                <option value="">All</option>
+                <option value="yes">Additional only</option>
+                <option value="no">Original only</option>
+              </select>
             </div>
           </div>
 
