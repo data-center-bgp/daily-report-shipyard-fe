@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState, useEffect, useCallback, Fragment } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   supabase,
   type WorkOrderWithDetails,
@@ -8,6 +8,7 @@ import {
 import { useAuth } from "../../hooks/useAuth";
 import { ActivityLogService } from "../../services/activityLogService";
 import { getLatestProgressRecord } from "../../utils/progressPercentage";
+import { isWorkOrderFullyCompleted } from "../../utils/workOrderCompletion";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -72,9 +73,11 @@ interface WorkOrderWithProgress extends Omit<
   has_progress_data: boolean;
 }
 
+
 export default function VesselWorkOrders() {
   const { vesselId } = useParams<{ vesselId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isOperationsReadOnly, isShippingCreateOnly, profile } = useAuth();
   // ADMIN_SHIPPING can create work orders/details here but never edit/delete
   // one, and has no Progress access at all.
@@ -90,12 +93,21 @@ export default function VesselWorkOrders() {
   const [filteredWorkOrders, setFilteredWorkOrders] = useState<
     WorkOrderWithProgress[]
   >([]);
+  // Set (and scrolled to) when arriving here from a work-order-number search
+  // elsewhere, so the target work order is easy to spot in the full list.
+  const [highlightedWorkOrderId, setHighlightedWorkOrderId] = useState<
+    number | null
+  >(null);
   const [expandedWorkOrders, setExpandedWorkOrders] = useState<Set<number>>(
     new Set(),
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  // Hides work orders whose work details are all 100% complete by default —
+  // this page is mainly used to track work still in progress. Toggled back
+  // on to look up finished work orders (e.g. for BASTP/invoice history).
+  const [showCompleted, setShowCompleted] = useState(false);
   // Per-work-order search term for filtering the work details shown inside
   // its expanded section, keyed by work order id.
   const [detailSearchTerms, setDetailSearchTerms] = useState<
@@ -254,6 +266,10 @@ export default function VesselWorkOrders() {
   useEffect(() => {
     let filtered = workOrders;
 
+    if (!showCompleted) {
+      filtered = filtered.filter((wo) => !isWorkOrderFullyCompleted(wo.work_details));
+    }
+
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
       filtered = workOrders.filter((wo) => {
@@ -272,13 +288,51 @@ export default function VesselWorkOrders() {
     }
 
     setFilteredWorkOrders(filtered);
-  }, [workOrders, searchTerm]);
+  }, [workOrders, searchTerm, showCompleted]);
 
   useEffect(() => {
     if (vesselId) {
       fetchVesselWorkOrders();
     }
   }, [fetchVesselWorkOrders, vesselId]);
+
+  // Arriving here from a work-order-number search elsewhere: expand and
+  // scroll to the specific work order that was searched for, then clear the
+  // nav state so a later refresh doesn't keep re-triggering it.
+  useEffect(() => {
+    const targetId = (location.state as { highlightWorkOrderId?: number })
+      ?.highlightWorkOrderId;
+    if (!targetId || workOrders.length === 0) return;
+    const targetWo = workOrders.find((wo) => wo.id === targetId);
+    if (!targetWo) return;
+
+    // The target might be hidden behind the "hide completed" default —
+    // reveal it so the deep link actually lands on the work order.
+    if (isWorkOrderFullyCompleted(targetWo.work_details)) {
+      setShowCompleted(true);
+    }
+
+    setExpandedWorkOrders((prev) => new Set(prev).add(targetId));
+    setHighlightedWorkOrderId(targetId);
+
+    const timer = setTimeout(() => {
+      document
+        .getElementById(`work-order-row-${targetId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
+
+    navigate(location.pathname, {
+      replace: true,
+      state: { vesselName: (location.state as { vesselName?: string })?.vesselName },
+    });
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workOrders]);
+
+  const completedCount = workOrders.filter((wo) =>
+    isWorkOrderFullyCompleted(wo.work_details),
+  ).length;
 
   const toggleWorkOrderExpansion = (workOrderId: number) => {
     setExpandedWorkOrders((prev) => {
@@ -670,6 +724,35 @@ export default function VesselWorkOrders() {
         </div>
       </div>
 
+      {/* Progress Summary — always reflects every work order on this vessel,
+          regardless of the "hide completed" filter below. */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-yellow-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">
+                In Progress
+              </p>
+              <p className="text-2xl font-bold text-gray-900">
+                {workOrders.length - completedCount}
+              </p>
+            </div>
+            <Play className="w-8 h-8 text-yellow-500" />
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Completed</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {completedCount}
+              </p>
+            </div>
+            <CheckCircle2 className="w-8 h-8 text-green-500" />
+          </div>
+        </div>
+      </div>
+
       {/* Search and Actions */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
@@ -683,7 +766,17 @@ export default function VesselWorkOrders() {
             />
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={showCompleted}
+                onChange={(e) => setShowCompleted(e.target.checked)}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              Show completed work orders
+              {completedCount > 0 && ` (${completedCount})`}
+            </label>
             <button
               onClick={fetchVesselWorkOrders}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
@@ -762,9 +855,16 @@ export default function VesselWorkOrders() {
                     : wo.work_details;
 
                   return (
-                  <>
+                  <Fragment key={wo.id}>
                     {/* Main Work Order Row */}
-                    <tr key={wo.id} className="hover:bg-gray-50">
+                    <tr
+                      id={`work-order-row-${wo.id}`}
+                      className={`hover:bg-gray-50 ${
+                        highlightedWorkOrderId === wo.id
+                          ? "bg-yellow-50 ring-2 ring-inset ring-yellow-400"
+                          : ""
+                      }`}
+                    >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <button
@@ -1297,7 +1397,7 @@ export default function VesselWorkOrders() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                   );
                 })}
               </tbody>
@@ -1316,6 +1416,22 @@ export default function VesselWorkOrders() {
                   className="text-blue-600 hover:text-blue-800 transition-colors"
                 >
                   Clear search
+                </button>
+              </>
+            ) : !showCompleted && completedCount > 0 ? (
+              <>
+                <p className="text-gray-500 text-lg mb-2">
+                  All {completedCount} work order
+                  {completedCount !== 1 ? "s are" : " is"} fully completed
+                </p>
+                <p className="text-gray-400 text-sm mb-4">
+                  They're hidden by default — nothing left in progress here.
+                </p>
+                <button
+                  onClick={() => setShowCompleted(true)}
+                  className="text-blue-600 hover:text-blue-800 transition-colors"
+                >
+                  Show completed work orders
                 </button>
               </>
             ) : (

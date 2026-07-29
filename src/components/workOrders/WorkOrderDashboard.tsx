@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase, type Kapro } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import { getLatestProgressRecord } from "../../utils/progressPercentage";
+import { isWorkOrderFullyCompleted } from "../../utils/workOrderCompletion";
 import {
   RefreshCw,
   Plus,
@@ -24,12 +26,29 @@ interface VesselSummary {
   type: string;
   company: string;
   totalWorkOrders: number;
+  completedWorkOrders: number;
+  inProgressWorkOrders: number;
   workOrders: {
+    id: number;
+    shipyard_wo_number?: string;
+    customer_wo_number?: string;
     work_type?: string;
     work_location?: string;
     kapro_id?: number;
     is_additional_wo?: boolean;
   }[];
+}
+
+interface WorkOrderSearchResult {
+  id: number;
+  shipyard_wo_number?: string;
+  customer_wo_number?: string;
+  work_type?: string;
+  is_additional_wo?: boolean;
+  vesselId: number;
+  vesselName: string;
+  vesselType: string;
+  vesselCompany: string;
 }
 
 export default function WorkOrderDashboard() {
@@ -46,6 +65,11 @@ export default function WorkOrderDashboard() {
   const [showVesselDropdown, setShowVesselDropdown] = useState(false);
   const vesselDropdownRef = useRef<HTMLDivElement>(null);
   const [selectedVesselId, setSelectedVesselId] = useState<number | null>(null);
+
+  // Switches the whole section below between browsing by vessel and
+  // searching directly for a work order by its number.
+  const [viewMode, setViewMode] = useState<"vessel" | "workOrder">("vessel");
+  const [woSearchTerm, setWoSearchTerm] = useState("");
 
   // Filter states
   const [workTypeFilter, setWorkTypeFilter] = useState<string>("");
@@ -127,6 +151,15 @@ export default function WorkOrderDashboard() {
             name,
             type,
             company
+          ),
+          work_details (
+            id,
+            cancelled_at,
+            work_progress (
+              progress_percentage,
+              report_date,
+              created_at
+            )
           )
         `,
         )
@@ -172,7 +205,11 @@ export default function WorkOrderDashboard() {
           type: string;
           company: string;
           count: number;
+          completedCount: number;
           workOrders: {
+            id: number;
+            shipyard_wo_number?: string;
+            customer_wo_number?: string;
             work_type?: string;
             work_location?: string;
             kapro_id?: number;
@@ -191,13 +228,30 @@ export default function WorkOrderDashboard() {
             type: wo.vessel!.type,
             company: wo.vessel!.company,
             count: 0,
+            completedCount: 0,
             workOrders: [],
           });
         }
 
         const vesselData = vesselMap.get(vesselId)!;
         vesselData.count++;
+
+        const workDetailsWithLatestProgress = (wo.work_details || []).map(
+          (d: { cancelled_at?: string | null; work_progress?: any[] }) => ({
+            cancelled_at: d.cancelled_at,
+            current_progress:
+              getLatestProgressRecord(d.work_progress || [])
+                ?.progress_percentage || 0,
+          }),
+        );
+        if (isWorkOrderFullyCompleted(workDetailsWithLatestProgress)) {
+          vesselData.completedCount++;
+        }
+
         vesselData.workOrders.push({
+          id: wo.id,
+          shipyard_wo_number: wo.shipyard_wo_number,
+          customer_wo_number: wo.customer_wo_number,
           work_type: wo.work_type,
           work_location: wo.work_location,
           kapro_id: wo.kapro_id,
@@ -211,6 +265,8 @@ export default function WorkOrderDashboard() {
         type: vessel.type,
         company: vessel.company,
         totalWorkOrders: vessel.count,
+        completedWorkOrders: vessel.completedCount,
+        inProgressWorkOrders: vessel.count - vessel.completedCount,
         workOrders: vessel.workOrders,
       }));
 
@@ -265,6 +321,46 @@ export default function WorkOrderDashboard() {
     setVesselSearchTerm("");
     setSelectedVesselId(null);
     setShowVesselDropdown(false);
+  };
+
+  // Matching work orders across all vessels, for the "By Work Order Number"
+  // section — a flat list of the actual work orders, not vessels.
+  const searchFilteredWorkOrders: WorkOrderSearchResult[] = (() => {
+    const term = woSearchTerm.toLowerCase();
+    if (!term) return [];
+    const results: WorkOrderSearchResult[] = [];
+    vessels.forEach((vessel) => {
+      vessel.workOrders.forEach((wo) => {
+        if (
+          wo.shipyard_wo_number?.toLowerCase().includes(term) ||
+          wo.customer_wo_number?.toLowerCase().includes(term)
+        ) {
+          results.push({
+            id: wo.id,
+            shipyard_wo_number: wo.shipyard_wo_number,
+            customer_wo_number: wo.customer_wo_number,
+            work_type: wo.work_type,
+            is_additional_wo: wo.is_additional_wo,
+            vesselId: vessel.id,
+            vesselName: vessel.name,
+            vesselType: vessel.type,
+            vesselCompany: vessel.company,
+          });
+        }
+      });
+    });
+    return results;
+  })();
+
+  // Jumps straight into the matched work order's own vessel page, with that
+  // specific row expanded and scrolled into view.
+  const handleViewWorkOrder = (match: WorkOrderSearchResult) => {
+    navigate(`/vessel/${match.vesselId}/work-orders`, {
+      state: {
+        vesselName: match.vesselName,
+        highlightWorkOrderId: match.id,
+      },
+    });
   };
 
   const handleClearFilters = () => {
@@ -524,7 +620,152 @@ export default function WorkOrderDashboard() {
         </div>
       </div>
 
+      {/* View Mode Toggle */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setViewMode("vessel")}
+          className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 font-medium ${
+            viewMode === "vessel"
+              ? "bg-blue-600 text-white"
+              : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+          }`}
+        >
+          <Ship className="w-4 h-4" /> By Vessel
+        </button>
+        <button
+          onClick={() => setViewMode("workOrder")}
+          className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 font-medium ${
+            viewMode === "workOrder"
+              ? "bg-blue-600 text-white"
+              : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+          }`}
+        >
+          <FileText className="w-4 h-4" /> By Work Order Number
+        </button>
+      </div>
+
+      {viewMode === "workOrder" && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-900">
+              Search Work Orders
+            </h2>
+            <p className="text-gray-600 text-sm">
+              Find a specific work order directly by its shipyard or customer
+              WO number
+            </p>
+            <div className="relative mt-4 max-w-md">
+              <input
+                type="text"
+                placeholder="Search by WO number..."
+                value={woSearchTerm}
+                onChange={(e) => setWoSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                autoFocus
+              />
+              <span className="absolute left-3 top-2.5 text-gray-400">
+                🔍
+              </span>
+              {woSearchTerm && (
+                <button
+                  onClick={() => setWoSearchTerm("")}
+                  className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="p-6">
+            {!woSearchTerm ? (
+              <div className="text-center py-12">
+                <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500 text-lg">
+                  Enter a work order number to search
+                </p>
+              </div>
+            ) : searchFilteredWorkOrders.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Shipyard WO Number
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Customer WO Number
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Vessel
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Work Type
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Additional WO
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {searchFilteredWorkOrders.map((match) => (
+                      <tr key={match.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+                          {match.shipyard_wo_number || "-"}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700">
+                          {match.customer_wo_number || "-"}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-medium text-gray-900">
+                            {match.vesselName}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {match.vesselType} • {match.vesselCompany}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700">
+                          {match.work_type || "-"}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700">
+                          {match.is_additional_wo ? "Yes" : "No"}
+                        </td>
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={() => handleViewWorkOrder(match)}
+                            className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700 flex items-center gap-1"
+                          >
+                            View <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500 text-lg mb-2">
+                  No work orders found matching "{woSearchTerm}"
+                </p>
+                <button
+                  onClick={() => setWoSearchTerm("")}
+                  className="text-blue-600 hover:text-blue-800 transition-colors"
+                >
+                  Clear search
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Vessels Section with Filters */}
+      {viewMode === "vessel" && (
       <div className="bg-white rounded-lg shadow">
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex flex-col gap-4">
@@ -806,11 +1047,26 @@ export default function WorkOrderDashboard() {
                       <ChevronRight className="w-5 h-5 text-blue-500 group-hover:text-blue-700 transition-colors flex-shrink-0" />
                     </div>
 
-                    <div className="text-center">
+                    <div className="text-center mb-3">
                       <p className="text-2xl font-bold text-blue-600">
                         {vessel.totalWorkOrders}
                       </p>
                       <p className="text-sm text-gray-600">Work Orders</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-3 border-t border-gray-100">
+                      <div className="text-center">
+                        <p className="text-lg font-semibold text-yellow-600">
+                          {vessel.inProgressWorkOrders}
+                        </p>
+                        <p className="text-xs text-gray-500">In Progress</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-semibold text-green-600">
+                          {vessel.completedWorkOrders}
+                        </p>
+                        <p className="text-xs text-gray-500">Completed</p>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -927,6 +1183,7 @@ export default function WorkOrderDashboard() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
