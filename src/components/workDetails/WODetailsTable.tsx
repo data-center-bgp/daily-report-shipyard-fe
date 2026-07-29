@@ -1,10 +1,10 @@
 import {
+  Fragment,
   useState,
   useEffect,
   useCallback,
   useRef,
   useMemo,
-  Fragment,
 } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -53,6 +53,38 @@ interface ProjectOption {
   project_name: string;
   vessel_id: number;
 }
+
+const ITEMS_PER_PAGE = 10;
+
+type WorkDetailsSortField =
+  | "planned_start_date"
+  | "target_close_date"
+  | "created_at"
+  | "description";
+
+const WORK_DETAILS_SELECT = `
+  *,
+  work_order (
+    id,
+    shipyard_wo_number,
+    customer_wo_number,
+    vessel (id, name, type, company)
+  ),
+  profiles!fk_work_details_user (id, name, email),
+  work_progress (id, progress_percentage, report_date, created_at),
+  work_verification (status, created_at, deleted_at),
+  location:location_id (id, location),
+  work_scope:work_scope_id (id, work_scope)
+`;
+
+// Columns of work_details itself that the search box covers.
+const SEARCHABLE_WORK_DETAILS_COLUMNS = [
+  "description",
+  "pic",
+  "spk_number",
+  "spkk_number",
+  "ptw_number",
+] as const;
 
 interface WorkDetailsWithWorkOrder extends WorkDetails {
   work_order?: WorkOrder & {
@@ -120,6 +152,59 @@ function deriveIsOpenForRework(
   return isOpenForRework(latestVerification, latestProgressCreatedAt);
 }
 
+// PostgREST parses commas and parentheses inside filter values as syntax, so
+// user-supplied values have to go in as quoted strings. Note this only holds
+// inside an or=(...) group: as a standalone filter (what .ilike() builds) a
+// quoted value is matched literally and the % wildcards stop working, so
+// every search clause below goes through .or() even when there is only one.
+function quoteFilterValue(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+// The search box spans work_details' own columns plus WO numbers, location
+// and work scope, which live on related tables. PostgREST can't OR a parent
+// column together with an embedded one in a single request, so resolve the
+// related tables to id lists first and OR on the foreign keys instead.
+// Deleted rows are deliberately not excluded here — a work detail still
+// shows its WO/location/scope even if that parent row was soft deleted, so
+// searching has to match them too.
+async function buildWorkDetailsSearchFilter(term: string): Promise<string> {
+  const quoted = quoteFilterValue(`%${term}%`);
+
+  const [workOrders, locations, workScopes] = await Promise.all([
+    supabase
+      .from("work_order")
+      .select("id")
+      .or(
+        `shipyard_wo_number.ilike.${quoted},customer_wo_number.ilike.${quoted}`,
+      ),
+    supabase.from("location").select("id").or(`location.ilike.${quoted}`),
+    supabase.from("work_scope").select("id").or(`work_scope.ilike.${quoted}`),
+  ]);
+
+  for (const result of [workOrders, locations, workScopes]) {
+    if (result.error) throw result.error;
+  }
+
+  const clauses = SEARCHABLE_WORK_DETAILS_COLUMNS.map(
+    (column) => `${column}.ilike.${quoted}`,
+  );
+
+  const addForeignKeyClause = (
+    column: string,
+    rows: { id: number }[] | null,
+  ) => {
+    const ids = (rows || []).map((row) => row.id);
+    if (ids.length > 0) clauses.push(`${column}.in.(${ids.join(",")})`);
+  };
+
+  addForeignKeyClause("work_order_id", workOrders.data);
+  addForeignKeyClause("location_id", locations.data);
+  addForeignKeyClause("work_scope_id", workScopes.data);
+
+  return clauses.join(",");
+}
+
 export default function WODetailsTable({
   workOrderId,
   onRefresh,
@@ -146,27 +231,17 @@ export default function WODetailsTable({
     [],
   );
   const [loading, setLoading] = useState(true);
+  // Separates the first load from later refetches. Searching and paging now
+  // go to the server, and replacing the whole page with a spinner on every
+  // debounced keystroke would unmount the search box and steal focus.
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Sorting & Pagination
-  const [sortField, setSortField] = useState<
-    "planned_start_date" | "target_close_date" | "created_at" | "description"
-  >(
-    ():
-      | "planned_start_date"
-      | "target_close_date"
-      | "created_at"
-      | "description" => {
-      const sort = searchParams.get("sortField");
-      return (
-        (sort as
-          | "planned_start_date"
-          | "target_close_date"
-          | "created_at"
-          | "description") || "planned_start_date"
-      );
-    },
-  );
+  const [sortField, setSortField] = useState<WorkDetailsSortField>(() => {
+    const sort = searchParams.get("sortField");
+    return (sort as WorkDetailsSortField) || "planned_start_date";
+  });
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">(() => {
     const direction = searchParams.get("sortDirection");
     return (direction as "asc" | "desc") || "asc";
@@ -175,7 +250,9 @@ export default function WODetailsTable({
     const page = searchParams.get("page");
     return page ? parseInt(page) : 1;
   });
-  const itemsPerPage = 10;
+  // Row count of the current query, straight from PostgREST — the table only
+  // ever holds one page's worth of rows, so it can't be counted locally.
+  const [totalItems, setTotalItems] = useState(0);
 
   // UI State
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
@@ -225,6 +302,10 @@ export default function WODetailsTable({
   const [workDetailsSearchTerm, setWorkDetailsSearchTerm] = useState(
     () => searchParams.get("search") || "",
   );
+  // The work details search now hits the database, so keystrokes are
+  // debounced instead of filtering an in-memory array.
+  const [debouncedWorkDetailsSearchTerm, setDebouncedWorkDetailsSearchTerm] =
+    useState(workDetailsSearchTerm);
 
   // Dropdown State
   const [showVesselDropdown, setShowVesselDropdown] = useState(false);
@@ -241,39 +322,11 @@ export default function WODetailsTable({
 
   // ==================== COMPUTED VALUES ====================
 
-  // Search filter includes all relevant fields
-  const filteredWorkDetailsForDisplay = useMemo(() => {
-    if (!workDetailsSearchTerm) return workDetails;
-
-    const searchLower = workDetailsSearchTerm.toLowerCase();
-    return workDetails.filter((wd) => {
-      return (
-        wd.description?.toLowerCase().includes(searchLower) ||
-        wd.location?.location?.toLowerCase().includes(searchLower) ||
-        wd.pic?.toLowerCase().includes(searchLower) ||
-        wd.work_order?.shipyard_wo_number
-          ?.toLowerCase()
-          .includes(searchLower) ||
-        wd.work_order?.customer_wo_number
-          ?.toLowerCase()
-          .includes(searchLower) ||
-        wd.spk_number?.toLowerCase().includes(searchLower) ||
-        wd.spkk_number?.toLowerCase().includes(searchLower) ||
-        wd.ptw_number?.toLowerCase().includes(searchLower) ||
-        wd.work_scope?.work_scope?.toLowerCase().includes(searchLower)
-      );
-    });
-  }, [workDetails, workDetailsSearchTerm]);
-
-  // Pagination calculations
-  const totalItems = filteredWorkDetailsForDisplay.length;
-  const totalPages = Math.ceil(totalItems / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentWorkDetails = filteredWorkDetailsForDisplay.slice(
-    startIndex,
-    endIndex,
-  );
+  // Pagination calculations. Filtering, sorting and slicing all happen in the
+  // query now, so workDetails already *is* the current page.
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const currentWorkDetails = workDetails;
 
   // Filter vessels for search dropdown
   const filteredVesselsForSearch = useMemo(() => {
@@ -306,6 +359,31 @@ export default function WODetailsTable({
         wo.customer_wo_number?.toLowerCase().includes(searchLower),
     );
   }, [workOrders, workOrderSearchTerm]);
+
+  // Kept stable (updates read the previous params rather than closing over
+  // them) so writing to the URL doesn't invalidate the fetch callbacks below
+  // and trigger a second, redundant query.
+  const updateUrlParams = useCallback(
+    (updates: Record<string, string | number | null>) => {
+      setSearchParams(
+        (prev) => {
+          const newParams = new URLSearchParams(prev);
+
+          Object.entries(updates).forEach(([key, value]) => {
+            if (value === null || value === "" || value === 0) {
+              newParams.delete(key);
+            } else {
+              newParams.set(key, String(value));
+            }
+          });
+
+          return newParams;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   // ==================== DATA FETCHING ====================
 
@@ -395,120 +473,187 @@ export default function WODetailsTable({
     }
   }, []);
 
-  const fetchWorkDetails = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  // Single place where the work details list is queried. Everything is done
+  // server-side: PostgREST caps any response at 1000 rows, so filtering or
+  // paginating in the browser silently hid every work detail past that cap.
+  const runWorkDetailsQuery = useCallback(
+    async (params: {
+      vesselId: number;
+      projectId: number;
+      workOrderIdFilter: number;
+      sortField: WorkDetailsSortField;
+      sortDirection: "asc" | "desc";
+      page: number;
+      search: string;
+    }) => {
+      try {
+        setLoading(true);
+        setError(null);
 
-      let baseQuery = supabase
-        .from("work_details")
-        .select(
-          `
-          *,
-          work_order (
-            id,
-            shipyard_wo_number,
-            customer_wo_number,
-            vessel (id, name, type, company)
-          ),
-          profiles!fk_work_details_user (id, name, email),
-          work_progress (id, progress_percentage, report_date, created_at),
-          work_verification (status, created_at, deleted_at),
-          location:location_id (id, location),
-          work_scope:work_scope_id (id, work_scope)
-        `,
-        )
-        .is("deleted_at", null);
-
-      // Apply filters
-      if (workOrderId) {
-        baseQuery = baseQuery.eq("work_order_id", workOrderId);
-      } else if (selectedWorkOrderId > 0) {
-        baseQuery = baseQuery.eq("work_order_id", selectedWorkOrderId);
-      } else if (selectedVesselId > 0 || selectedProjectId > 0) {
-        let woQuery = supabase
-          .from("work_order")
-          .select("id")
+        let baseQuery = supabase
+          .from("work_details")
+          .select(WORK_DETAILS_SELECT, { count: "exact" })
           .is("deleted_at", null);
-        if (selectedVesselId > 0) {
-          woQuery = woQuery.eq("vessel_id", selectedVesselId);
-        }
-        if (selectedProjectId > 0) {
-          woQuery = woQuery.eq("project_id", selectedProjectId);
-        }
-        const { data: matchingWorkOrders } = await woQuery;
 
-        if (matchingWorkOrders && matchingWorkOrders.length > 0) {
-          const workOrderIds = matchingWorkOrders.map((wo) => wo.id);
-          baseQuery = baseQuery.in("work_order_id", workOrderIds);
-        } else {
-          setWorkDetails([]);
-          setLoading(false);
+        // Apply filters
+        if (workOrderId) {
+          baseQuery = baseQuery.eq("work_order_id", workOrderId);
+        } else if (params.workOrderIdFilter > 0) {
+          baseQuery = baseQuery.eq("work_order_id", params.workOrderIdFilter);
+        } else if (params.vesselId > 0 || params.projectId > 0) {
+          let woQuery = supabase
+            .from("work_order")
+            .select("id")
+            .is("deleted_at", null);
+          if (params.vesselId > 0) {
+            woQuery = woQuery.eq("vessel_id", params.vesselId);
+          }
+          if (params.projectId > 0) {
+            woQuery = woQuery.eq("project_id", params.projectId);
+          }
+          const { data: matchingWorkOrders } = await woQuery;
+
+          if (matchingWorkOrders && matchingWorkOrders.length > 0) {
+            const workOrderIds = matchingWorkOrders.map((wo) => wo.id);
+            baseQuery = baseQuery.in("work_order_id", workOrderIds);
+          } else {
+            setWorkDetails([]);
+            setTotalItems(0);
+            setLoading(false);
+            return;
+          }
+        }
+
+        const searchTerm = params.search.trim();
+        if (searchTerm) {
+          baseQuery = baseQuery.or(
+            await buildWorkDetailsSearchFilter(searchTerm),
+          );
+        }
+
+        // Add sorting. id breaks ties so that rows sharing a sort value (most
+        // work details share a planned_start_date) keep a stable order and
+        // can't be duplicated across pages or skipped entirely.
+        const rangeStart = (params.page - 1) * ITEMS_PER_PAGE;
+        const query = baseQuery
+          .order(params.sortField, {
+            ascending: params.sortDirection === "asc",
+          })
+          .order("id", { ascending: true })
+          .range(rangeStart, rangeStart + ITEMS_PER_PAGE - 1);
+
+        const { data, error: queryError, count } = await query;
+
+        if (queryError) throw queryError;
+
+        const rowCount = count ?? 0;
+        setTotalItems(rowCount);
+
+        // Requesting a page past the end (stale ?page=, or a narrower filter
+        // than last time) returns nothing; land on the last real page instead
+        // of showing an empty table. Changing the page refetches.
+        const lastPage = Math.max(1, Math.ceil(rowCount / ITEMS_PER_PAGE));
+        if (params.page > lastPage) {
+          setCurrentPage(lastPage);
+          updateUrlParams({ page: lastPage });
           return;
         }
-      }
 
-      // Add sorting
-      const query = baseQuery.order(sortField, {
-        ascending: sortDirection === "asc",
-      });
+        // Process work details with progress data
+        const workDetailsWithProgress = (data || []).map((detail) => {
+          const progressRecords: Array<{
+            progress_percentage: number;
+            report_date: string;
+            created_at: string;
+          }> = detail.work_progress || [];
+          const isOpenForReworkFlag = deriveIsOpenForRework(
+            progressRecords,
+            detail.work_verification,
+          );
 
-      const { data, error: queryError } = await query;
+          if (progressRecords.length === 0) {
+            return {
+              ...detail,
+              current_progress: 0,
+              latest_progress_date: undefined,
+              progress_count: 0,
+              isOpenForRework: isOpenForReworkFlag,
+            };
+          }
 
-      if (queryError) throw queryError;
+          // Latest by report_date, tie-broken by created_at — sorting on
+          // report_date alone left same-day entries in whatever order the
+          // query happened to return them, which could show an earlier
+          // same-day report (e.g. 10%) instead of a later one (e.g. 100%).
+          const latest = getLatestProgressRecord(progressRecords);
 
-      // Process work details with progress data
-      const workDetailsWithProgress = (data || []).map((detail) => {
-        const progressRecords: Array<{
-          progress_percentage: number;
-          report_date: string;
-          created_at: string;
-        }> = detail.work_progress || [];
-        const isOpenForReworkFlag = deriveIsOpenForRework(
-          progressRecords,
-          detail.work_verification,
-        );
-
-        if (progressRecords.length === 0) {
           return {
             ...detail,
-            current_progress: 0,
-            latest_progress_date: undefined,
-            progress_count: 0,
+            current_progress: latest?.progress_percentage || 0,
+            latest_progress_date: latest?.report_date,
+            progress_count: progressRecords.length,
             isOpenForRework: isOpenForReworkFlag,
           };
-        }
+        });
 
-        // Latest by report_date, tie-broken by created_at — sorting on
-        // report_date alone left same-day entries in whatever order the
-        // query happened to return them, which could show an earlier
-        // same-day report (e.g. 10%) instead of a later one (e.g. 100%).
-        const latest = getLatestProgressRecord(progressRecords);
+        setWorkDetails(workDetailsWithProgress);
+      } catch (err) {
+        console.error("Error in runWorkDetailsQuery:", err);
+        setError(err instanceof Error ? err.message : "An error occurred");
+      } finally {
+        setLoading(false);
+        setHasLoadedOnce(true);
+      }
+    },
+    [workOrderId, updateUrlParams],
+  );
 
-        return {
-          ...detail,
-          current_progress: latest?.progress_percentage || 0,
-          latest_progress_date: latest?.report_date,
-          progress_count: progressRecords.length,
-          isOpenForRework: isOpenForReworkFlag,
-        };
-      });
+  const fetchWorkDetails = useCallback(
+    () =>
+      runWorkDetailsQuery({
+        vesselId: selectedVesselId,
+        projectId: selectedProjectId,
+        workOrderIdFilter: selectedWorkOrderId,
+        sortField,
+        sortDirection,
+        page: currentPage,
+        search: debouncedWorkDetailsSearchTerm,
+      }),
+    [
+      runWorkDetailsQuery,
+      selectedVesselId,
+      selectedProjectId,
+      selectedWorkOrderId,
+      sortField,
+      sortDirection,
+      currentPage,
+      debouncedWorkDetailsSearchTerm,
+    ],
+  );
 
-      setWorkDetails(workDetailsWithProgress);
-    } catch (err) {
-      console.error("Error in fetchWorkDetails:", err);
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    selectedVesselId,
-    selectedProjectId,
-    selectedWorkOrderId,
-    workOrderId,
-    sortField,
-    sortDirection,
-  ]);
+  // Used by the "returning from add/edit" path, which has the restored
+  // filters in hand before the corresponding state updates have landed.
+  const fetchWorkDetailsWithFilters = useCallback(
+    (
+      vesselIdParam: number,
+      projectIdParam: number,
+      workOrderIdParam: number,
+      sortFieldParam: WorkDetailsSortField,
+      sortDirectionParam: "asc" | "desc",
+      pageParam: number,
+      searchParam: string,
+    ) =>
+      runWorkDetailsQuery({
+        vesselId: vesselIdParam,
+        projectId: projectIdParam,
+        workOrderIdFilter: workOrderIdParam,
+        sortField: sortFieldParam,
+        sortDirection: sortDirectionParam,
+        page: pageParam,
+        search: searchParam,
+      }),
+    [runWorkDetailsQuery],
+  );
 
   // ==================== EVENT HANDLERS ====================
 
@@ -533,23 +678,6 @@ export default function WODetailsTable({
       setWorkOrders([]);
     }
   };
-
-  const updateUrlParams = useCallback(
-    (updates: Record<string, string | number | null>) => {
-      const newParams = new URLSearchParams(searchParams);
-
-      Object.entries(updates).forEach(([key, value]) => {
-        if (value === null || value === "" || value === 0) {
-          newParams.delete(key);
-        } else {
-          newParams.set(key, String(value));
-        }
-      });
-
-      setSearchParams(newParams, { replace: true });
-    },
-    [searchParams, setSearchParams],
-  );
 
   const handleVesselSelectFromDropdown = (vessel: Vessel) => {
     const vesselDisplayText = `${vessel.name} - ${vessel.type} (${vessel.company})`;
@@ -787,7 +915,7 @@ export default function WODetailsTable({
       }
 
       const newTotalItems = totalItems - 1;
-      const newTotalPages = Math.ceil(newTotalItems / itemsPerPage);
+      const newTotalPages = Math.ceil(newTotalItems / ITEMS_PER_PAGE);
       if (currentPage > newTotalPages && newTotalPages > 0) {
         setCurrentPage(newTotalPages);
       }
@@ -1046,8 +1174,15 @@ export default function WODetailsTable({
     }
   }, [workOrderId, workDetails]);
 
+  // Debounce the search term before it reaches the database. Resetting to
+  // page 1 is handled by handleWorkDetailsSearchChange, so that a page
+  // restored from the URL or from navigation state survives mount.
   useEffect(() => {
-    setCurrentPage(1);
+    const timeout = setTimeout(
+      () => setDebouncedWorkDetailsSearchTerm(workDetailsSearchTerm),
+      300,
+    );
+    return () => clearTimeout(timeout);
   }, [workDetailsSearchTerm]);
 
   useEffect(() => {
@@ -1131,6 +1266,8 @@ export default function WODetailsTable({
               navigationState.workOrderId || 0,
               navigationState.sortField || "planned_start_date",
               navigationState.sortDirection || "asc",
+              navigationState.page || 1,
+              navigationState.search || "",
             );
           }, 300);
         } catch (error) {
@@ -1144,133 +1281,10 @@ export default function WODetailsTable({
       // No navigation state, do normal fetch
       fetchWorkDetails();
     }
-    // Only run once on mount
+    // fetchWorkDetails already closes over every filter, sort, page and
+    // search value this needs, so it is the only dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    selectedVesselId,
-    selectedProjectId,
-    selectedWorkOrderId,
-    sortField,
-    sortDirection,
-    fetchWorkDetails,
-  ]);
-
-  const fetchWorkDetailsWithFilters = useCallback(
-    async (
-      vesselIdParam: number,
-      projectIdParam: number,
-      workOrderIdParam: number,
-      sortFieldParam: typeof sortField,
-      sortDirectionParam: "asc" | "desc",
-    ) => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        let baseQuery = supabase
-          .from("work_details")
-          .select(
-            `
-        *,
-        work_order (
-          id,
-          shipyard_wo_number,
-          customer_wo_number,
-          vessel (id, name, type, company)
-        ),
-        profiles!fk_work_details_user (id, name, email),
-        work_progress (id, progress_percentage, report_date, created_at),
-        work_verification (status, created_at, deleted_at),
-        location:location_id (id, location),
-        work_scope:work_scope_id (id, work_scope)
-      `,
-          )
-          .is("deleted_at", null);
-
-        // Apply filters using the parameters
-        if (workOrderId) {
-          baseQuery = baseQuery.eq("work_order_id", workOrderId);
-        } else if (workOrderIdParam > 0) {
-          baseQuery = baseQuery.eq("work_order_id", workOrderIdParam);
-        } else if (vesselIdParam > 0 || projectIdParam > 0) {
-          let woQuery = supabase
-            .from("work_order")
-            .select("id")
-            .is("deleted_at", null);
-          if (vesselIdParam > 0) {
-            woQuery = woQuery.eq("vessel_id", vesselIdParam);
-          }
-          if (projectIdParam > 0) {
-            woQuery = woQuery.eq("project_id", projectIdParam);
-          }
-          const { data: matchingWorkOrders } = await woQuery;
-
-          if (matchingWorkOrders && matchingWorkOrders.length > 0) {
-            const workOrderIds = matchingWorkOrders.map((wo) => wo.id);
-            baseQuery = baseQuery.in("work_order_id", workOrderIds);
-          } else {
-            setWorkDetails([]);
-            setLoading(false);
-            return;
-          }
-        }
-
-        // Add sorting using the parameters
-        const query = baseQuery.order(sortFieldParam, {
-          ascending: sortDirectionParam === "asc",
-        });
-
-        const { data, error: queryError } = await query;
-
-        if (queryError) throw queryError;
-
-        // Process work details with progress data
-        const workDetailsWithProgress = (data || []).map((detail) => {
-          const progressRecords: Array<{
-            progress_percentage: number;
-            report_date: string;
-            created_at: string;
-          }> = detail.work_progress || [];
-          const isOpenForReworkFlag = deriveIsOpenForRework(
-            progressRecords,
-            detail.work_verification,
-          );
-
-          if (progressRecords.length === 0) {
-            return {
-              ...detail,
-              current_progress: 0,
-              latest_progress_date: undefined,
-              progress_count: 0,
-              isOpenForRework: isOpenForReworkFlag,
-            };
-          }
-
-          // Latest by report_date, tie-broken by created_at — sorting on
-          // report_date alone left same-day entries in whatever order the
-          // query happened to return them, which could show an earlier
-          // same-day report (e.g. 10%) instead of a later one (e.g. 100%).
-          const latest = getLatestProgressRecord(progressRecords);
-
-          return {
-            ...detail,
-            current_progress: latest?.progress_percentage || 0,
-            latest_progress_date: latest?.report_date,
-            progress_count: progressRecords.length,
-            isOpenForRework: isOpenForReworkFlag,
-          };
-        });
-
-        setWorkDetails(workDetailsWithProgress);
-      } catch (err) {
-        console.error("Error in fetchWorkDetailsWithFilters:", err);
-        setError(err instanceof Error ? err.message : "An error occurred");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [workOrderId],
-  );
+  }, [fetchWorkDetails]);
 
   useEffect(() => {
     if (selectedVesselId > 0 && vessels.length === 0) {
@@ -1364,6 +1378,8 @@ export default function WODetailsTable({
     const isExpanded = expandedRows.has(detail.id);
 
     return (
+      // Two sibling rows (main + expandable), so the list key has to sit on
+      // the fragment itself — a key on the inner <tr> doesn't count.
       <Fragment key={detail.id}>
         <tr className="hover:bg-gray-50 transition-colors">
           <td className="px-6 py-4">
@@ -1780,14 +1796,18 @@ export default function WODetailsTable({
         <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
           <div>
             <p className="text-sm text-gray-700">
-              Showing <span className="font-medium">{startIndex + 1}</span> to{" "}
+              Showing{" "}
               <span className="font-medium">
-                {Math.min(endIndex, totalItems)}
+                {totalItems === 0 ? 0 : startIndex + 1}
+              </span>{" "}
+              to{" "}
+              <span className="font-medium">
+                {startIndex + currentWorkDetails.length}
               </span>{" "}
               of <span className="font-medium">{totalItems}</span> results
               {workDetailsSearchTerm && (
                 <span className="ml-2 text-blue-600 font-medium">
-                  (filtered from {workDetails.length} total)
+                  (matching "{workDetailsSearchTerm}")
                 </span>
               )}
             </p>
@@ -2188,7 +2208,7 @@ export default function WODetailsTable({
             </div>
             {workDetailsSearchTerm && (
               <p className="text-xs text-blue-600 mt-1">
-                Found {filteredWorkDetailsForDisplay.length} work detail(s)
+                Found {totalItems} work detail(s)
               </p>
             )}
           </div>
@@ -2227,7 +2247,7 @@ export default function WODetailsTable({
 
   // ==================== MAIN RENDER ====================
 
-  if (loading) {
+  if (loading && !hasLoadedOnce) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -2432,7 +2452,14 @@ export default function WODetailsTable({
         </div>
 
         <div className="overflow-x-auto">
-          {currentWorkDetails.length > 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <span className="ml-3 text-sm text-gray-600">
+                Loading work details...
+              </span>
+            </div>
+          ) : currentWorkDetails.length > 0 ? (
             <>
               <table className="min-w-full divide-y divide-gray-200">
                 {renderTableHeader()}
