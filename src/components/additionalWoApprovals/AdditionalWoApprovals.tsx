@@ -175,7 +175,9 @@ export default function AdditionalWoApprovals() {
           </h1>
           <p className="text-gray-600 mt-1">
             An additional work order can't be created until the Operation
-            Head approves a request for it.
+            Head approves a request for it — unless it's a Chairman
+            Directive, which is self-approved immediately and shown here for
+            monitoring.
           </p>
         </div>
         <button
@@ -229,6 +231,11 @@ export default function AdditionalWoApprovals() {
                         >
                           {badge.label}
                         </span>
+                        {request.is_chairman_directive && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                            Chairman Directive
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-gray-600 flex items-center gap-1">
                         <Ship className="w-3.5 h-3.5" /> {request.vessel?.name}{" "}
@@ -250,27 +257,38 @@ export default function AdditionalWoApprovals() {
                         </p>
                       </div>
 
-                      {request.status !== "PENDING" && (
-                        <p className="text-sm text-gray-500 mt-3 flex items-center gap-1">
+                      {request.is_chairman_directive ? (
+                        <p className="text-sm text-purple-700 mt-3 flex items-center gap-1">
                           <Clock className="w-3.5 h-3.5" />
-                          {request.status === "APPROVED"
-                            ? "Approved"
-                            : "Rejected"}{" "}
-                          by{" "}
-                          <span className="font-medium">
-                            {request.decider?.name || "Unknown"}
-                          </span>{" "}
-                          on{" "}
-                          {request.decided_at
-                            ? new Date(request.decided_at).toLocaleDateString()
-                            : ""}
-                          {request.decision_notes && (
-                            <span className="italic">
-                              {" "}
-                              — "{request.decision_notes}"
-                            </span>
-                          )}
+                          Auto-approved as a Chairman Directive on{" "}
+                          {new Date(request.created_at).toLocaleDateString()}{" "}
+                          — no Operation Head review was performed.
                         </p>
+                      ) : (
+                        request.status !== "PENDING" && (
+                          <p className="text-sm text-gray-500 mt-3 flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            {request.status === "APPROVED"
+                              ? "Approved"
+                              : "Rejected"}{" "}
+                            by{" "}
+                            <span className="font-medium">
+                              {request.decider?.name || "Unknown"}
+                            </span>{" "}
+                            on{" "}
+                            {request.decided_at
+                              ? new Date(
+                                  request.decided_at,
+                                ).toLocaleDateString()
+                              : ""}
+                            {request.decision_notes && (
+                              <span className="italic">
+                                {" "}
+                                — "{request.decision_notes}"
+                              </span>
+                            )}
+                          </p>
+                        )
                       )}
 
                       {request.status === "APPROVED" && (

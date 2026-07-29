@@ -14,6 +14,7 @@ export interface AdditionalWoRequest {
   decided_at: string | null;
   decision_notes: string | null;
   work_order_id: number | null;
+  is_chairman_directive: boolean;
 }
 
 export interface AdditionalWoRequestWithDetails extends AdditionalWoRequest {

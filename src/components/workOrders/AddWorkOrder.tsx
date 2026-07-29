@@ -59,12 +59,18 @@ export default function AddWorkOrder() {
       reason: string;
       decision_notes: string | null;
       work_order_id: number | null;
+      is_chairman_directive: boolean;
     }[]
   >([]);
   const [loadingAdditionalWoRequests, setLoadingAdditionalWoRequests] =
     useState(false);
   const [requestReason, setRequestReason] = useState("");
   const [submittingRequest, setSubmittingRequest] = useState(false);
+
+  // Chairman directive: bypasses Operation Head approval entirely for
+  // urgent, chairman-ordered additional work orders.
+  const [isChairmanDirective, setIsChairmanDirective] = useState(false);
+  const [chairmanReason, setChairmanReason] = useState("");
 
   // Inline "new project" creation
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
@@ -327,7 +333,9 @@ export default function AddWorkOrder() {
     try {
       const { data, error } = await supabase
         .from("additional_wo_requests")
-        .select("id, status, reason, decision_notes, work_order_id")
+        .select(
+          "id, status, reason, decision_notes, work_order_id, is_chairman_directive",
+        )
         .eq("project_id", projectId)
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
@@ -348,6 +356,20 @@ export default function AddWorkOrder() {
       return;
     }
     fetchAdditionalWoRequests(selectedProject.id);
+  }, [selectedProject]);
+
+  // Reset the chairman-directive toggle when it's no longer applicable, so a
+  // stale reason/checkbox state can't leak into a different project or a
+  // plain (non-additional) work order.
+  useEffect(() => {
+    if (!formData.is_additional_wo || hasOriginalInProject !== true) {
+      setIsChairmanDirective(false);
+      setChairmanReason("");
+    }
+  }, [formData.is_additional_wo, hasOriginalInProject]);
+  useEffect(() => {
+    setIsChairmanDirective(false);
+    setChairmanReason("");
   }, [selectedProject]);
 
   const unconsumedApprovedRequest = additionalWoRequests.find(
@@ -577,12 +599,26 @@ export default function AddWorkOrder() {
       return;
     }
 
+    if (
+      formData.is_additional_wo &&
+      isChairmanDirective &&
+      !chairmanReason.trim()
+    ) {
+      setError(
+        "Please explain the chairman's directive before creating this work order.",
+      );
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     let approvedRequestIdToConsume: number | null = null;
 
     try {
+      const userId = await resolveUserId();
+
+
       // Gate: the ORIGINAL work order for a project requires an approved
       // readiness form. Re-check fresh from the DB rather than trusting
       // whatever was loaded into the picker, in case it changed since.
@@ -623,31 +659,60 @@ export default function AddWorkOrder() {
           return;
         }
 
-        // Gate: an ADDITIONAL work order also requires an Operation Head
-        // approval on file. Re-check fresh from the DB.
-        const { data: freshRequests, error: requestError } = await supabase
-          .from("additional_wo_requests")
-          .select("id")
-          .eq("project_id", selectedProject.id)
-          .eq("status", "APPROVED")
-          .is("work_order_id", null)
-          .is("deleted_at", null)
-          .limit(1);
+        if (isChairmanDirective) {
+          // Chairman directive: self-approve immediately instead of waiting
+          // on an Operation Head decision. Still leaves a record behind for
+          // monitoring (is_chairman_directive = true, decided_by/decided_at
+          // stay null since no one actually reviewed it).
+          const { data: newRequest, error: insertError } = await supabase
+            .from("additional_wo_requests")
+            .insert({
+              project_id: selectedProject.id,
+              vessel_id: selectedProject.vessel_id,
+              requested_by: userId,
+              reason: chairmanReason.trim(),
+              status: "APPROVED",
+              is_chairman_directive: true,
+            })
+            .select()
+            .single();
 
-        if (requestError) throw requestError;
+          if (insertError) throw insertError;
 
-        if (!freshRequests || freshRequests.length === 0) {
-          setError(
-            "This additional work order needs an approved request from the Operation Head first. Submit a request below and wait for approval.",
-          );
-          setLoading(false);
-          return;
+          await ActivityLogService.logActivity({
+            action: "create",
+            tableName: "additional_wo_requests",
+            recordId: newRequest.id,
+            newData: newRequest,
+            description: `Chairman directive: auto-approved additional work order request for project ${selectedProject.project_name} (no Operation Head review)`,
+          });
+
+          approvedRequestIdToConsume = newRequest.id;
+        } else {
+          // Gate: an ADDITIONAL work order also requires an Operation Head
+          // approval on file. Re-check fresh from the DB.
+          const { data: freshRequests, error: requestError } = await supabase
+            .from("additional_wo_requests")
+            .select("id")
+            .eq("project_id", selectedProject.id)
+            .eq("status", "APPROVED")
+            .is("work_order_id", null)
+            .is("deleted_at", null)
+            .limit(1);
+
+          if (requestError) throw requestError;
+
+          if (!freshRequests || freshRequests.length === 0) {
+            setError(
+              "This additional work order needs an approved request from the Operation Head first. Submit a request below and wait for approval, or use the Chairman Directive option if this is urgent.",
+            );
+            setLoading(false);
+            return;
+          }
+
+          approvedRequestIdToConsume = freshRequests[0].id;
         }
-
-        approvedRequestIdToConsume = freshRequests[0].id;
       }
-
-      const userId = await resolveUserId();
 
       const submitData = {
         vessel_id: selectedProject.vessel_id,
@@ -983,10 +1048,54 @@ export default function AddWorkOrder() {
               </p>
             )}
 
+            {/* Chairman directive: bypasses Operation Head approval entirely */}
+            {selectedProject &&
+              hasOriginalInProject === true &&
+              formData.is_additional_wo && (
+                <div className="border border-purple-200 rounded-lg p-4 space-y-3 bg-purple-50">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="isChairmanDirective"
+                      checked={isChairmanDirective}
+                      onChange={(e) => setIsChairmanDirective(e.target.checked)}
+                      className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                    />
+                    <label
+                      htmlFor="isChairmanDirective"
+                      className="ml-2 block text-sm font-medium text-purple-900"
+                    >
+                      This is a Chairman Directive — urgent, skip Operation
+                      Head approval
+                    </label>
+                  </div>
+                  {isChairmanDirective && (
+                    <>
+                      <p className="text-xs text-purple-700">
+                        The chairman has directly ordered this work and it
+                        must proceed immediately. This work order will be
+                        created right away without Operation Head review —
+                        it's still recorded on the Additional WO Approvals
+                        screen, tagged as a Chairman Directive, for
+                        monitoring.
+                      </p>
+                      <textarea
+                        value={chairmanReason}
+                        onChange={(e) => setChairmanReason(e.target.value)}
+                        rows={2}
+                        placeholder="Describe the chairman's directive (required)..."
+                        className="w-full px-3 py-2 border border-purple-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                      />
+                    </>
+                  )}
+                </div>
+              )}
+
             {/* Operation Head approval for additional work orders */}
             {selectedProject &&
               hasOriginalInProject === true &&
               formData.is_additional_wo &&
+              !isChairmanDirective &&
               !loadingAdditionalWoRequests && (
                 <div>
                   {unconsumedApprovedRequest ? (
@@ -1282,7 +1391,10 @@ export default function AddWorkOrder() {
                   loading ||
                   vessels.length === 0 ||
                   !currentUser ||
-                  (formData.is_additional_wo && !unconsumedApprovedRequest)
+                  (formData.is_additional_wo &&
+                    (isChairmanDirective
+                      ? !chairmanReason.trim()
+                      : !unconsumedApprovedRequest))
                 }
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
