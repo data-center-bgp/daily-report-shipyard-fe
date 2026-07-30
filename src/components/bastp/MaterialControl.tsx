@@ -10,6 +10,7 @@ import type {
 } from "../../types/materialControl.types";
 import MaterialFieldsForm from "./MaterialFieldsForm";
 import { calcMaterialTotal as calcTotal } from "../../utils/materialCalculations";
+import type { MaterialsStatus } from "../../types/bastp.types";
 import {
   Package,
   Plus,
@@ -21,6 +22,8 @@ import {
   FileText,
   Loader,
   Minus,
+  CheckCircle2,
+  Undo2,
 } from "lucide-react";
 
 interface MaterialControlProps {
@@ -38,6 +41,13 @@ interface MaterialEntry extends MaterialControlFormData {
   materialSearchTerm: string;
 }
 
+interface SubmissionRecord {
+  id: number;
+  materials_status: MaterialsStatus;
+  materials_submitted_at: string | null;
+  materials_submitted_by: number | null;
+}
+
 export default function MaterialControl({
   bastpId,
   workDetailsId,
@@ -45,11 +55,18 @@ export default function MaterialControl({
   onClose,
   locked,
 }: MaterialControlProps) {
-  const { isBastpReadOnly } = useAuth();
+  const { isBastpReadOnly, profile } = useAuth();
   // FINANCE and OP_HEAD consume/monitor BASTP materials but shouldn't edit
   // them (isBastpReadOnly), and a BASTP already financially committed
   // (locked) can't be touched by anyone regardless of role.
   const isLockedForEdit = isBastpReadOnly || !!locked;
+  const [bwdRecord, setBwdRecord] = useState<SubmissionRecord | null>(null);
+  const [statusSaving, setStatusSaving] = useState(false);
+  const isSubmitted = bwdRecord?.materials_status === "SUBMITTED";
+  // Once submitted, materials are finalized for the READY_FOR_INVOICE gate —
+  // editing needs an explicit "reopen" first, same spirit as the BASTP-level
+  // lock above.
+  const canEditMaterials = !isLockedForEdit && !isSubmitted;
   const [materials, setMaterials] = useState<MaterialControlWithDetails[]>([]);
   const [materialLists, setMaterialLists] = useState<MaterialList[]>([]);
   const [materialDensities, setMaterialDensities] = useState<MaterialDensity[]>(
@@ -112,7 +129,113 @@ export default function MaterialControl({
     fetchMaterialLists();
     fetchMaterialDensities();
     fetchMaterials();
+    fetchSubmissionStatus();
   }, [workDetailsId, bastpId]);
+
+  const fetchSubmissionStatus = async () => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from("bastp_work_details")
+        .select("id, materials_status, materials_submitted_at, materials_submitted_by")
+        .eq("work_details_id", workDetailsId)
+        .eq("bastp_id", bastpId)
+        .is("deleted_at", null)
+        .single();
+
+      if (fetchError) throw fetchError;
+      setBwdRecord(data);
+    } catch (err) {
+      console.error("Error fetching materials submission status:", err);
+    }
+  };
+
+  const handleSubmitMaterials = async () => {
+    if (!bwdRecord) return;
+    if (
+      materials.length === 0 &&
+      !confirm(
+        "No materials have been added for this work detail. Submit anyway to mark it as needing no materials?",
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setStatusSaving(true);
+      setError(null);
+
+      const { data: updated, error: updateError } = await supabase
+        .from("bastp_work_details")
+        .update({
+          materials_status: "SUBMITTED",
+          materials_submitted_at: new Date().toISOString(),
+          materials_submitted_by: profile?.id ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", bwdRecord.id)
+        .select("id, materials_status, materials_submitted_at, materials_submitted_by")
+        .single();
+
+      if (updateError) throw updateError;
+
+      setBwdRecord(updated);
+      await ActivityLogService.logActivity({
+        action: "update",
+        tableName: "bastp_work_details",
+        recordId: bwdRecord.id,
+        oldData: bwdRecord,
+        newData: updated,
+        description: `Submitted materials for ${workDetailsDescription}`,
+      });
+    } catch (err) {
+      console.error("Error submitting materials:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to submit materials",
+      );
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
+  const handleReopenMaterials = async () => {
+    if (!bwdRecord) return;
+
+    try {
+      setStatusSaving(true);
+      setError(null);
+
+      const { data: updated, error: updateError } = await supabase
+        .from("bastp_work_details")
+        .update({
+          materials_status: "DRAFT",
+          materials_submitted_at: null,
+          materials_submitted_by: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", bwdRecord.id)
+        .select("id, materials_status, materials_submitted_at, materials_submitted_by")
+        .single();
+
+      if (updateError) throw updateError;
+
+      setBwdRecord(updated);
+      await ActivityLogService.logActivity({
+        action: "update",
+        tableName: "bastp_work_details",
+        recordId: bwdRecord.id,
+        oldData: bwdRecord,
+        newData: updated,
+        description: `Reopened materials for editing for ${workDetailsDescription}`,
+      });
+    } catch (err) {
+      console.error("Error reopening materials:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to reopen materials",
+      );
+    } finally {
+      setStatusSaving(false);
+    }
+  };
 
   const fetchMaterialLists = async () => {
     try {
@@ -674,7 +797,7 @@ export default function MaterialControl({
           </p>
         </div>
         <div className="flex gap-2">
-          {!isLockedForEdit && !showForm && (
+          {canEditMaterials && !showForm && (
             <button
               onClick={() => {
                 setShowForm(true);
@@ -696,6 +819,70 @@ export default function MaterialControl({
         </div>
       </div>
 
+      {/* Materials Submission Status */}
+      {bwdRecord && (
+        <div
+          className={`flex items-center justify-between p-4 rounded-lg border ${
+            isSubmitted
+              ? "bg-green-50 border-green-200"
+              : "bg-yellow-50 border-yellow-200"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {isSubmitted ? (
+              <>
+                <CheckCircle2 className="w-5 h-5 text-green-600" />
+                <div>
+                  <p className="text-sm font-medium text-green-900">
+                    Materials submitted
+                  </p>
+                  {bwdRecord.materials_submitted_at && (
+                    <p className="text-xs text-green-700">
+                      Submitted on{" "}
+                      {new Date(
+                        bwdRecord.materials_submitted_at,
+                      ).toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                <p className="text-sm font-medium text-yellow-900">
+                  Draft — not yet submitted. This work detail blocks the
+                  BASTP from becoming ready for invoice until submitted.
+                </p>
+              </>
+            )}
+          </div>
+          {!isLockedForEdit && (
+            <button
+              onClick={isSubmitted ? handleReopenMaterials : handleSubmitMaterials}
+              disabled={statusSaving}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                isSubmitted
+                  ? "bg-white border border-green-300 text-green-700 hover:bg-green-100"
+                  : "bg-green-600 text-white hover:bg-green-700"
+              }`}
+            >
+              {statusSaving ? (
+                <Loader className="w-4 h-4 animate-spin" />
+              ) : isSubmitted ? (
+                <Undo2 className="w-4 h-4" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4" />
+              )}
+              {isSubmitted ? "Reopen for Editing" : "Submit Materials"}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Error Message */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -707,7 +894,7 @@ export default function MaterialControl({
       )}
 
       {/* Add/Edit Form */}
-      {showForm && !isLockedForEdit && (
+      {showForm && canEditMaterials && (
         <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h4 className="text-md font-semibold text-gray-900">
@@ -964,7 +1151,7 @@ export default function MaterialControl({
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                     UOM
                   </th>
-                  {!isLockedForEdit && (
+                  {canEditMaterials && (
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
@@ -1045,7 +1232,7 @@ export default function MaterialControl({
                         {material.uom}
                       </span>
                     </td>
-                    {!isLockedForEdit && (
+                    {canEditMaterials && (
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button

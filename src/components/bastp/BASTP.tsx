@@ -69,6 +69,7 @@ export default function BASTP() {
     ),
     bastp_work_details (
       id,
+      materials_status,
       work_details (
         id,
         description,
@@ -162,16 +163,34 @@ export default function BASTP() {
           }
         }
 
-        // 2. If document uploaded and status is VERIFIED -> READY_FOR_INVOICE
-        if (bastp.storage_path && bastp.status === "VERIFIED") {
-          await supabase
-            .from("bastp")
-            .update({
-              status: "READY_FOR_INVOICE",
-              ready_for_invoice_date: new Date().toISOString(),
-            })
-            .eq("id", bastp.id);
-          fetchBASTPs();
+        // 2. If every non-cancelled work detail has its materials submitted
+        // and the Form Penawaran has been uploaded, status VERIFIED ->
+        // READY_FOR_INVOICE
+        if (
+          bastp.status === "VERIFIED" &&
+          bastp.bastp_work_details &&
+          bastp.bastp_work_details.length > 0
+        ) {
+          const relevantDetails = (bastp.bastp_work_details ?? []).filter(
+            (bwd: any) => !bwd.work_details?.cancelled_at,
+          );
+          const allMaterialsSubmitted =
+            relevantDetails.length > 0 &&
+            relevantDetails.every(
+              (bwd: any) => bwd.materials_status === "SUBMITTED",
+            );
+          const formPenawaranUploaded = !!bastp.form_penawaran_storage_path;
+
+          if (allMaterialsSubmitted && formPenawaranUploaded) {
+            await supabase
+              .from("bastp")
+              .update({
+                status: "READY_FOR_INVOICE",
+                ready_for_invoice_date: new Date().toISOString(),
+              })
+              .eq("id", bastp.id);
+            fetchBASTPs();
+          }
         }
 
         // 3. If invoice created for this BASTP -> INVOICED
@@ -410,11 +429,6 @@ export default function BASTP() {
                       <div className="text-sm font-medium text-gray-900">
                         {bastp.number}
                       </div>
-                      {bastp.storage_path && (
-                        <div className="flex items-center gap-1 text-xs text-green-600">
-                          <FileText className="w-3 h-3" /> Document
-                        </div>
-                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm font-medium text-gray-900">

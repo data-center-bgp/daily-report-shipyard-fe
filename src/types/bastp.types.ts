@@ -17,6 +17,8 @@ export interface BASTP {
   bastp_upload_date?: string | null;
   document_url?: string | null;
   storage_path?: string | null;
+  form_penawaran_storage_path?: string | null;
+  form_penawaran_uploaded_at?: string | null;
   status: BASTPStatus;
   verification_status?: string | null;
   verification_date?: string | null;
@@ -30,6 +32,8 @@ export interface BASTP {
   general_services?: GeneralService[];
 }
 
+export type MaterialsStatus = "DRAFT" | "SUBMITTED";
+
 export interface BASTPWorkDetails {
   id: number;
   created_at: string;
@@ -37,6 +41,9 @@ export interface BASTPWorkDetails {
   deleted_at: string | null;
   bastp_id: number;
   work_details_id: number;
+  materials_status: MaterialsStatus;
+  materials_submitted_at: string | null;
+  materials_submitted_by: number | null;
 }
 
 export interface BASTPWithDetails extends BASTP {

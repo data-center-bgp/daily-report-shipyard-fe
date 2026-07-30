@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import MaterialControl from "./MaterialControl";
+import type { MaterialsStatus } from "../../types/bastp.types";
 import {
   Package,
   ArrowLeft,
   Loader,
   AlertTriangle,
   FileText,
+  CheckCircle2,
 } from "lucide-react";
 
 interface WorkDetail {
@@ -16,6 +18,7 @@ interface WorkDetail {
   quantity: number;
   uom: string;
   material_count?: number;
+  materials_status?: MaterialsStatus;
 }
 
 interface BastpInfo {
@@ -90,6 +93,7 @@ export default function BASTPMaterialsPage() {
         .select(
           `
           id,
+          materials_status,
           work_details:work_details_id (
             id,
             description,
@@ -113,6 +117,7 @@ export default function BASTPMaterialsPage() {
             description: wd.description,
             quantity: wd.quantity,
             uom: wd.uom,
+            materials_status: item.materials_status,
           });
         }
       });
@@ -250,6 +255,13 @@ export default function BASTPMaterialsPage() {
               materials are locked from further changes.
             </p>
           )}
+          {!isLocked && bastp.status === "VERIFIED" && workDetails.length > 0 && (
+            <p className="mt-4 text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+              {workDetails.filter((wd) => wd.materials_status === "SUBMITTED").length} of{" "}
+              {workDetails.length} work details have submitted materials — all
+              must be submitted before this BASTP can become ready for invoice.
+            </p>
+          )}
         </div>
       )}
 
@@ -303,6 +315,9 @@ export default function BASTPMaterialsPage() {
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Materials
                   </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
@@ -343,6 +358,17 @@ export default function BASTPMaterialsPage() {
                       ) : (
                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
                           No materials
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      {workDetail.materials_status === "SUBMITTED" ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                          <CheckCircle2 className="w-3 h-3" /> Submitted
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                          <AlertTriangle className="w-3 h-3" /> Draft
                         </span>
                       )}
                     </td>

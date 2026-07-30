@@ -26,7 +26,6 @@ import {
   Wrench,
   RefreshCw,
   CheckCircle2,
-  ArrowRight,
   Plus,
   X,
   FileEdit,
@@ -121,7 +120,6 @@ export default function CreateBASTP() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [uploadingDocument, setUploadingDocument] = useState(false);
 
   // Vessel is locked once work details are selected — the vessel and the
   // project/work-order "find" fields below all share that same lock, since
@@ -761,83 +759,6 @@ export default function CreateBASTP() {
       );
     });
 
-  // Handle document upload
-  const handleDocumentUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file || !bastpId) return;
-
-    // Validate file size (10MB max)
-    const maxSize = 10 * 1024 * 1024;
-    if (file.size > maxSize) {
-      alert("❌ File size must be less than 10MB");
-      return;
-    }
-
-    // Validate file type
-    const allowedTypes = [
-      "application/pdf",
-      "image/jpeg",
-      "image/jpg",
-      "image/png",
-    ];
-    if (!allowedTypes.includes(file.type)) {
-      alert("❌ Only PDF, JPG, and PNG files are allowed");
-      return;
-    }
-
-    try {
-      setUploadingDocument(true);
-
-      // Delete old file if exists
-      if (existingBastp?.storage_path) {
-        await supabase.storage
-          .from("bastp")
-          .remove([existingBastp.storage_path]);
-      }
-
-      // Upload to Supabase Storage
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${bastpId}_${Date.now()}.${fileExt}`;
-      const filePath = `bastp-documents/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("bastp")
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      // Update BASTP record
-      const { error: updateError } = await supabase
-        .from("bastp")
-        .update({
-          storage_path: filePath,
-          bastp_upload_date: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", bastpId);
-
-      if (updateError) throw updateError;
-
-      alert(
-        "✅ Document uploaded successfully! Status will update automatically.",
-      );
-
-      // Refresh to show new document
-      await fetchExistingBastp();
-    } catch (err) {
-      console.error("Error uploading document:", err);
-      alert(
-        `❌ Failed to upload document: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-    } finally {
-      setUploadingDocument(false);
-    }
-  };
-
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -899,23 +820,40 @@ export default function CreateBASTP() {
 
         if (updateError) throw updateError;
 
-        // Delete existing work details
-        await supabase
-          .from("bastp_work_details")
-          .delete()
-          .eq("bastp_id", bastpId);
+        // Only touch rows for work details that actually left or joined the
+        // composition — a blanket delete-then-reinsert would also wipe the
+        // materials_status of every unchanged work detail on each edit,
+        // even ones that don't touch composition at all (e.g. just editing
+        // the BASTP date or general services).
+        const removedIds = [...initialWorkDetailIds].filter(
+          (id) => !currentIds.has(id),
+        );
+        const addedIds = [...currentIds].filter(
+          (id) => !initialWorkDetailIds.has(id),
+        );
 
-        // Insert updated work details
-        const workDetailsToInsert = selectedWorkDetails.map((wd) => ({
-          bastp_id: parseInt(bastpId),
-          work_details_id: wd.id,
-        }));
+        if (removedIds.length > 0) {
+          const { error: removeError } = await supabase
+            .from("bastp_work_details")
+            .delete()
+            .eq("bastp_id", bastpId)
+            .in("work_details_id", removedIds);
 
-        const { error: workDetailsError } = await supabase
-          .from("bastp_work_details")
-          .insert(workDetailsToInsert);
+          if (removeError) throw removeError;
+        }
 
-        if (workDetailsError) throw workDetailsError;
+        if (addedIds.length > 0) {
+          const { error: workDetailsError } = await supabase
+            .from("bastp_work_details")
+            .insert(
+              addedIds.map((id) => ({
+                bastp_id: parseInt(bastpId),
+                work_details_id: id,
+              })),
+            );
+
+          if (workDetailsError) throw workDetailsError;
+        }
 
         // Delete existing general services
         await supabase
@@ -1541,76 +1479,6 @@ export default function CreateBASTP() {
               </div>
             )}
         </div>
-
-        {/* Document Upload (Edit Mode Only) */}
-        {isEditMode && existingBastp && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <FileText className="w-5 h-5" /> BASTP Document
-            </h2>
-            {existingBastp.document_url ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium text-green-900">
-                      Document Uploaded
-                    </p>
-                    <p className="text-xs text-green-700">
-                      Uploaded on:{" "}
-                      {existingBastp.bastp_upload_date
-                        ? new Date(
-                            existingBastp.bastp_upload_date,
-                          ).toLocaleDateString()
-                        : "Unknown"}
-                    </p>
-                  </div>
-                  <a
-                    href={existingBastp.document_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-blue-600 hover:text-blue-800"
-                  >
-                    View Document <ArrowRight className="w-4 h-4" />
-                  </a>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Replace Document
-                  </label>
-                  <input
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    onChange={handleDocumentUpload}
-                    disabled={uploadingDocument}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-            ) : (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Upload Signed Document
-                </label>
-                <input
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png"
-                  onChange={handleDocumentUpload}
-                  disabled={uploadingDocument}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Upload the signed BASTP document (PDF, JPG, or PNG)
-                </p>
-              </div>
-            )}
-            {uploadingDocument && (
-              <div className="flex items-center gap-2 text-blue-600 mt-2">
-                <Loader className="w-4 h-4 animate-spin" />
-                <span className="text-sm">Uploading document...</span>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Work Details Selection */}
         {formData.vessel_id > 0 && (

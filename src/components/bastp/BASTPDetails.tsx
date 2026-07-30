@@ -15,10 +15,7 @@ import {
   Calendar,
   MapPin,
   User,
-  Eye,
   Lock,
-  Download,
-  X,
   Wrench,
   Lightbulb,
   Package,
@@ -26,6 +23,8 @@ import {
   Ban,
   Clock,
   Receipt,
+  Eye,
+  Loader,
 } from "lucide-react";
 
 export default function BASTPDetails() {
@@ -36,14 +35,15 @@ export default function BASTPDetails() {
   const [bastp, setBastp] = useState<BASTPWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewingDocument, setViewingDocument] = useState(false);
-  const [documentError, setDocumentError] = useState<string | null>(null);
-  const [documentUrl, setDocumentUrl] = useState<string | null>(null);
-  const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [profilesMap, setProfilesMap] = useState<
     Record<number, { id: number; name: string; email: string }>
   >({});
   const [invoiceId, setInvoiceId] = useState<number | null>(null);
+  const [uploadingFormPenawaran, setUploadingFormPenawaran] = useState(false);
+  const [formPenawaranError, setFormPenawaranError] = useState<string | null>(
+    null,
+  );
+  const [viewingFormPenawaran, setViewingFormPenawaran] = useState(false);
 
   // Once a BASTP is ready for (or already) invoicing, its composition and
   // materials are financially committed — Edit/Material Control lock so
@@ -73,6 +73,7 @@ export default function BASTPDetails() {
     bastp_work_details (
       id,
       deleted_at,
+      materials_status,
       work_details:work_details_id (
         id,
         description,
@@ -325,45 +326,100 @@ export default function BASTPDetails() {
     { approved: 0, rejected: 0, pending: 0, cancelled: 0 },
   );
 
-  // Generate signed URL and open modal
-  const handleViewDocument = async () => {
-    if (!bastp?.storage_path) return;
+  // Materials-submission progress toward READY_FOR_INVOICE — cancelled work
+  // details are exempt from needing materials, same reasoning as review.
+  const materialsCounts = (bastp?.bastp_work_details || []).reduce(
+    (acc, bwd) => {
+      if (bwd.work_details?.cancelled_at) {
+        acc.cancelled += 1;
+        return acc;
+      }
+      if (bwd.materials_status === "SUBMITTED") acc.submitted += 1;
+      else acc.draft += 1;
+      return acc;
+    },
+    { submitted: 0, draft: 0, cancelled: 0 },
+  );
+
+  const handleFormPenawaranUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file || !bastp) return;
+
+    if (file.type !== "application/pdf") {
+      setFormPenawaranError("Only PDF files are allowed for Form Penawaran");
+      event.target.value = "";
+      return;
+    }
+
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setFormPenawaranError("File size must be less than 10MB");
+      event.target.value = "";
+      return;
+    }
 
     try {
-      setViewingDocument(true);
-      setDocumentError(null);
+      setUploadingFormPenawaran(true);
+      setFormPenawaranError(null);
 
-      // Generate fresh signed URL (valid for 5 minutes)
-      const { data, error } = await supabase.storage
+      if (bastp.form_penawaran_storage_path) {
+        await supabase.storage
+          .from("bastp")
+          .remove([bastp.form_penawaran_storage_path]);
+      }
+
+      const filePath = `form-penawaran/${bastp.id}_${Date.now()}.pdf`;
+      const { error: uploadError } = await supabase.storage
         .from("bastp")
-        .createSignedUrl(bastp.storage_path, 300); // 5 minutes = 300 seconds
+        .upload(filePath, file);
 
-      if (error) throw error;
+      if (uploadError) throw uploadError;
 
-      // Set document URL and open modal
-      setDocumentUrl(data.signedUrl);
-      setShowDocumentModal(true);
+      const { error: updateError } = await supabase
+        .from("bastp")
+        .update({
+          form_penawaran_storage_path: filePath,
+          form_penawaran_uploaded_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", bastp.id);
+
+      if (updateError) throw updateError;
+
+      await fetchBastpDetails();
     } catch (err) {
-      console.error("Error viewing document:", err);
-      setDocumentError("Failed to view document. Please try again.");
+      console.error("Error uploading Form Penawaran:", err);
+      setFormPenawaranError(
+        err instanceof Error ? err.message : "Failed to upload Form Penawaran",
+      );
     } finally {
-      setViewingDocument(false);
+      setUploadingFormPenawaran(false);
+      event.target.value = "";
     }
   };
 
-  // Close modal
-  const handleCloseModal = () => {
-    setShowDocumentModal(false);
-    setDocumentUrl(null);
-  };
+  const handleViewFormPenawaran = async () => {
+    if (!bastp?.form_penawaran_storage_path) return;
 
-  // Detect file type
-  const getFileType = () => {
-    if (!bastp?.storage_path) return "unknown";
-    const extension = bastp.storage_path.split(".").pop()?.toLowerCase();
-    if (["pdf"].includes(extension || "")) return "pdf";
-    if (["jpg", "jpeg", "png", "gif"].includes(extension || "")) return "image";
-    return "unknown";
+    try {
+      setViewingFormPenawaran(true);
+      setFormPenawaranError(null);
+
+      const { data, error } = await supabase.storage
+        .from("bastp")
+        .createSignedUrl(bastp.form_penawaran_storage_path, 300);
+
+      if (error) throw error;
+
+      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      console.error("Error viewing Form Penawaran:", err);
+      setFormPenawaranError("Failed to open Form Penawaran. Please try again.");
+    } finally {
+      setViewingFormPenawaran(false);
+    }
   };
 
   if (loading) {
@@ -488,16 +544,6 @@ export default function BASTPDetails() {
             </label>
             <p className="text-gray-900">{formatDate(bastp.date)}</p>
           </div>
-          {bastp.bastp_upload_date && (
-            <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">
-                Document Upload Date
-              </label>
-              <p className="text-gray-900">
-                {formatDate(bastp.bastp_upload_date)}
-              </p>
-            </div>
-          )}
           <div>
             <label className="block text-sm font-medium text-gray-500 mb-1">
               Total Work Details
@@ -523,46 +569,64 @@ export default function BASTPDetails() {
             </div>
           )}
         </div>
-        {/* Document Section */}
-        {bastp.storage_path && (
-          <div className="p-6 border-t border-gray-200 bg-green-50">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                  <FileText className="w-5 h-5" /> Signed Document
-                </h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  Uploaded on {formatDate(bastp.bastp_upload_date || "")}
-                </p>
-                <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                  <Lock className="w-3 h-3" /> Secure document - link expires
-                  after 5 minutes
-                </p>
+      </div>
+
+      {/* Form Penawaran */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <FileText className="w-5 h-5" /> Form Penawaran
+          </h3>
+          {bastp.form_penawaran_storage_path && (
+            <button
+              onClick={handleViewFormPenawaran}
+              disabled={viewingFormPenawaran}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {viewingFormPenawaran ? (
+                <Loader className="w-4 h-4 animate-spin" />
+              ) : (
+                <Eye className="w-4 h-4" />
+              )}
+              View Form Penawaran
+            </button>
+          )}
+        </div>
+        {bastp.form_penawaran_storage_path ? (
+          <p className="text-sm text-gray-600">
+            Uploaded on{" "}
+            {formatDate(bastp.form_penawaran_uploaded_at || "")}
+          </p>
+        ) : (
+          <p className="text-sm text-gray-600">
+            Required (PDF) before this BASTP can become ready for invoice.
+          </p>
+        )}
+        {canEditBastp && (
+          <div className="mt-3">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {bastp.form_penawaran_storage_path ? "Replace" : "Upload"} Form
+              Penawaran (PDF)
+            </label>
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={handleFormPenawaranUpload}
+              disabled={uploadingFormPenawaran}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+            {uploadingFormPenawaran && (
+              <div className="flex items-center gap-2 text-blue-600 mt-2">
+                <Loader className="w-4 h-4 animate-spin" />
+                <span className="text-sm">Uploading...</span>
               </div>
-              <button
-                onClick={handleViewDocument}
-                disabled={viewingDocument}
-                className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
-                  viewingDocument
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-blue-600 hover:bg-blue-700"
-                } text-white`}
-              >
-                {viewingDocument ? (
-                  "Loading..."
-                ) : (
-                  <>
-                    <Eye className="w-4 h-4" /> View Document
-                  </>
-                )}
-              </button>
-            </div>
-            {documentError && (
-              <p className="mt-3 text-sm text-red-700 flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5" /> {documentError}
-              </p>
             )}
           </div>
+        )}
+        {formPenawaranError && (
+          <p className="mt-3 text-sm text-red-700 flex items-center gap-1">
+            <AlertTriangle className="w-3.5 h-3.5" /> {formPenawaranError}
+          </p>
         )}
       </div>
 
@@ -714,12 +778,36 @@ export default function BASTPDetails() {
                 {" — this is why the BASTP hasn't moved past Draft."}
               </p>
             )}
+            {bastp.status === "VERIFIED" &&
+              (materialsCounts.draft > 0 ||
+                !bastp.form_penawaran_storage_path) && (
+                <p className="text-sm text-gray-500 mt-1">
+                  {materialsCounts.draft > 0 &&
+                    `${materialsCounts.submitted} of ${
+                      materialsCounts.submitted + materialsCounts.draft
+                    } work details have submitted materials`}
+                  {materialsCounts.cancelled > 0 &&
+                    ` • ${materialsCounts.cancelled} cancelled`}
+                  {materialsCounts.draft > 0 &&
+                    !bastp.form_penawaran_storage_path &&
+                    " • "}
+                  {!bastp.form_penawaran_storage_path &&
+                    "Form Penawaran not yet uploaded"}
+                  {" — this is why the BASTP isn't ready for invoice yet."}
+                </p>
+              )}
           </div>
           <button
-            onClick={() => navigate("/work-verification")}
+            onClick={() =>
+              bastp.status === "VERIFIED"
+                ? navigate(`/bastp/${bastp.id}/materials`)
+                : navigate("/work-verification")
+            }
             className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 whitespace-nowrap"
           >
-            Review in Work Verification →
+            {bastp.status === "VERIFIED"
+              ? "Manage Materials →"
+              : "Review in Work Verification →"}
           </button>
         </div>
         <div className="overflow-x-auto">
@@ -1042,79 +1130,6 @@ export default function BASTPDetails() {
           </div>
         )}
 
-      {/* Document Viewer Modal */}
-      {showDocumentModal && documentUrl && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] flex flex-col shadow-2xl">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <FileText className="w-5 h-5" /> BASTP Document - {bastp.number}
-              </h3>
-              <button
-                onClick={handleCloseModal}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="flex-1 overflow-auto p-4">
-              {getFileType() === "pdf" && (
-                <iframe
-                  src={documentUrl}
-                  className="w-full h-[70vh] border-0"
-                  title="BASTP Document"
-                />
-              )}
-              {getFileType() === "image" && (
-                <img
-                  src={documentUrl}
-                  alt="BASTP Document"
-                  className="max-w-full h-auto mx-auto"
-                />
-              )}
-              {getFileType() === "unknown" && (
-                <div className="text-center py-12">
-                  <p className="text-gray-600 mb-4">
-                    Cannot preview this file type
-                  </p>
-                  <a
-                    href={documentUrl}
-                    download
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 inline-block"
-                  >
-                    Download Document
-                  </a>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-gray-200 flex justify-between items-center">
-              <p className="text-xs text-gray-500 flex items-center gap-1">
-                <Lock className="w-3 h-3" /> This link expires in 5 minutes
-              </p>
-              <div className="space-x-2">
-                <a
-                  href={documentUrl}
-                  download
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 inline-flex items-center gap-2"
-                >
-                  <Download className="w-4 h-4" /> Download
-                </a>
-                <button
-                  onClick={handleCloseModal}
-                  className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
