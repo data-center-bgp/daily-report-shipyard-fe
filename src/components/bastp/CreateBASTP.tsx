@@ -14,6 +14,7 @@ import {
   isOpenForRework,
 } from "../../utils/workVerificationStatus";
 import { getLatestProgressRecord } from "../../utils/progressPercentage";
+import { suggestBastpNumber } from "../../utils/bastpNumbering";
 import type {
   GeneralServiceType,
   GeneralServiceInput,
@@ -475,6 +476,28 @@ export default function CreateBASTP() {
     fetchExistingBastp,
     isEditMode,
   ]);
+
+  // Auto-generate the BASTP number from its date, same convention as the
+  // Work Order number — locked/read-only in create mode (see the input
+  // below); edit mode leaves it manually editable, pre-filled from the
+  // loaded row.
+  useEffect(() => {
+    if (isEditMode || !formData.date) return;
+
+    let cancelled = false;
+    suggestBastpNumber(formData.date)
+      .then((number) => {
+        if (!cancelled) {
+          setFormData((prev) => ({ ...prev, number }));
+        }
+      })
+      .catch((err) => {
+        console.error("Error suggesting BASTP number:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isEditMode, formData.date]);
 
   // Pre-fill the vessel search box once vessels are loaded and a vessel_id
   // is already set (edit mode, or right after a project/work-order pick).
@@ -1094,10 +1117,23 @@ export default function CreateBASTP() {
                 onChange={(e) =>
                   setFormData({ ...formData, number: e.target.value })
                 }
-                placeholder="e.g., BASTP/2024/001"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder={
+                  isEditMode
+                    ? "e.g., BASTP/2024/001"
+                    : "Pick a BASTP Date to generate this number"
+                }
+                readOnly={!isEditMode}
+                className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                  !isEditMode ? "bg-gray-100 text-gray-600 cursor-not-allowed" : ""
+                }`}
                 required
               />
+              {!isEditMode && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Auto-generated from the BASTP Date below. Need to change
+                  it? Edit the BASTP after creating it.
+                </p>
+              )}
             </div>
 
             <div className="relative" ref={projectDropdownRef}>

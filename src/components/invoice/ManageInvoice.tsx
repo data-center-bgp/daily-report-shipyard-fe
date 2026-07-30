@@ -5,6 +5,7 @@ import { useAuth } from "../../hooks/useAuth";
 import type { BASTPWithDetails } from "../../types/bastp.types";
 import type { Invoice } from "../../types/invoiceTypes";
 import { ActivityLogService } from "../../services/activityLogService";
+import { suggestInvoiceNumber } from "../../utils/invoiceNumbering";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -112,6 +113,31 @@ export default function ManageInvoice() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bastpId, invoiceId]);
+
+  // Auto-generate the invoice number from the BASTP Collection Date (falls
+  // back to today if that isn't set yet), same convention as the Work Order
+  // number — locked/read-only in create mode (see the input below); edit
+  // mode leaves it manually editable, pre-filled from the loaded row.
+  useEffect(() => {
+    if (!isCreateMode) return;
+
+    const effectiveDate =
+      formData.bastp_collection_date || new Date().toISOString().split("T")[0];
+
+    let cancelled = false;
+    suggestInvoiceNumber(effectiveDate)
+      .then((number) => {
+        if (!cancelled) {
+          setFormData((prev) => ({ ...prev, invoice_number: number }));
+        }
+      })
+      .catch((err) => {
+        console.error("Error suggesting invoice number:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCreateMode, formData.bastp_collection_date]);
 
   // Fetch existing invoice for edit mode
   const fetchExistingInvoice = async () => {
@@ -1133,9 +1159,18 @@ export default function ManageInvoice() {
                 onChange={(e) =>
                   setFormData({ ...formData, invoice_number: e.target.value })
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                readOnly={isCreateMode}
+                className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  isCreateMode ? "bg-gray-100 text-gray-600 cursor-not-allowed" : ""
+                }`}
                 placeholder="INV-2024-001"
               />
+              {isCreateMode && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Auto-generated from the BASTP Collection Date. Need to
+                  change it? Edit the invoice after creating it.
+                </p>
+              )}
             </div>
 
             <div>
