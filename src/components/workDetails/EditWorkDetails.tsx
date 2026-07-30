@@ -502,10 +502,6 @@ export default function EditWorkDetails() {
 
     // Validate production-specific fields
     if (isProduction) {
-      if (!formData.pic.trim()) {
-        errors.push("Person in charge (PIC) is required");
-      }
-
       // Date validation for PRODUCTION
       if (formData.actual_start_date && formData.actual_close_date) {
         const actualStart = new Date(formData.actual_start_date);
@@ -1209,7 +1205,7 @@ export default function EditWorkDetails() {
                     htmlFor="pic"
                     className="block text-sm font-medium text-gray-700 mb-2"
                   >
-                    Person in Charge (PIC) *{" "}
+                    Person in Charge (PIC){" "}
                     <span className="text-green-600">(PRODUCTION)</span>
                   </label>
                   <input
@@ -1220,7 +1216,6 @@ export default function EditWorkDetails() {
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Name of responsible person"
-                    required={isProduction}
                   />
                 </div>
 
