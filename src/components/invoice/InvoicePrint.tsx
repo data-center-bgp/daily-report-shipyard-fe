@@ -68,12 +68,12 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
               .print-table thead {
                 display: table-header-group;
               }
-              
+
               .print-table thead td {
                 padding: 0 6mm;
                 vertical-align: top;
               }
-              
+
               .print-table thead img {
                 width: 100%;
                 height: auto;
@@ -82,7 +82,26 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
                 object-position: top center;
                 display: block;
               }
-              
+
+              /* Footer repeats on every page */
+              .print-table tfoot {
+                display: table-footer-group;
+              }
+
+              .print-table tfoot td {
+                padding: 0 6mm;
+                vertical-align: bottom;
+              }
+
+              .print-table tfoot img {
+                width: 100%;
+                height: auto;
+                max-height: 20mm;
+                object-fit: contain;
+                object-position: bottom center;
+                display: block;
+              }
+
               /* Body content */
               .print-table tbody {
                 display: table-row-group;
@@ -134,7 +153,14 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
                 max-height: 35mm;
                 margin-bottom: 1rem;
               }
-              
+
+              .print-table tfoot img {
+                width: 100%;
+                height: auto;
+                max-height: 20mm;
+                margin-top: 1rem;
+              }
+
               .print-table tbody td {
                 padding: 0.5rem 1.5rem;
               }
@@ -147,10 +173,17 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
           <thead>
             <tr>
               <td>
-                <img src="/images/invoice-header.jpeg" alt="Company Header" />
+                <img src="/images/invoice-header.png" alt="Company Header" />
               </td>
             </tr>
           </thead>
+          <tfoot>
+            <tr>
+              <td>
+                <img src="/images/invoice-footer.png" alt="Company Footer" />
+              </td>
+            </tr>
+          </tfoot>
           <tbody>
             {/* Invoice Title */}
             <tr>
