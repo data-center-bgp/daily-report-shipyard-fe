@@ -7,9 +7,10 @@ import type {
   MaterialList,
   MaterialDensity,
   MaterialControlFormData,
+  CalcMode,
 } from "../../types/materialControl.types";
 import MaterialFieldsForm from "./MaterialFieldsForm";
-import { calcMaterialTotal as calcTotal } from "../../utils/materialCalculations";
+import { calcTotalForMode, CALC_MODE_OPTIONS } from "../../utils/materialCalculations";
 import type { MaterialsStatus } from "../../types/bastp.types";
 import {
   Package,
@@ -25,6 +26,47 @@ import {
   CheckCircle2,
   Undo2,
 } from "lucide-react";
+
+const emptyMaterialFields = {
+  material_density_id: 0,
+  calc_mode: "DIMENSIONAL" as CalcMode,
+  length: 0,
+  width: 0,
+  thickness: 0,
+  area: 0,
+  layers: 0,
+  diameter: 0,
+  density: 0,
+  amount: 0,
+  total_amount: 0,
+  uom: "",
+};
+
+interface CalcFieldsShape {
+  calc_mode: CalcMode;
+  length: number;
+  width: number;
+  thickness: number;
+  area: number;
+  layers: number;
+  diameter: number;
+  density: number;
+  amount: number;
+  total_amount: number;
+  uom: string;
+}
+
+// Recomputes total_amount (and, for modes with an auto-resolved unit, uom)
+// from the current field values. COUNT's uom stays whatever the caller set
+// (Ls/pcs is a user choice, not derived).
+function withRecalculatedTotal<T extends CalcFieldsShape>(fields: T): T {
+  const { total, uom } = calcTotalForMode(fields.calc_mode, fields);
+  return {
+    ...fields,
+    total_amount: total,
+    uom: uom !== null ? uom : fields.uom,
+  };
+}
 
 interface MaterialControlProps {
   bastpId: number;
@@ -100,15 +142,26 @@ export default function MaterialControl({
   const [editFormData, setEditFormData] = useState({
     material_id: 0,
     materialSearchTerm: "",
-    material_density_id: 0,
-    length: 0,
-    width: 0,
-    thickness: 0,
-    density: 0,
-    amount: 0,
-    total_amount: 0,
-    uom: "",
+    ...emptyMaterialFields,
   });
+
+  // Inline "create new material" flow — triggered from the search dropdown
+  // when a typed material isn't found. `creatingMaterialFor` holds either a
+  // batch entry's tempId or "edit", so the newly created material gets
+  // auto-selected into whichever form triggered it.
+  const [creatingMaterialFor, setCreatingMaterialFor] = useState<
+    string | null
+  >(null);
+  const [newMaterialForm, setNewMaterialForm] = useState({
+    material: "",
+    specification: "",
+    category: "",
+    calc_mode: "DIMENSIONAL" as CalcMode,
+  });
+  const [creatingMaterialSaving, setCreatingMaterialSaving] = useState(false);
+  const [creatingMaterialError, setCreatingMaterialError] = useState<
+    string | null
+  >(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -331,14 +384,7 @@ export default function MaterialControl({
       tempId: `temp-${Date.now()}-${Math.random()}`,
       material_id: 0,
       materialSearchTerm: "",
-      material_density_id: 0,
-      length: 0,
-      width: 0,
-      thickness: 0,
-      density: 0,
-      amount: 0,
-      total_amount: 0,
-      uom: "",
+      ...emptyMaterialFields,
     };
     setMaterialEntries([...materialEntries, newEntry]);
   };
@@ -350,6 +396,25 @@ export default function MaterialControl({
     );
   };
 
+  const RECALC_FIELDS = ["length", "width", "thickness", "area", "layers", "diameter", "density", "amount", "calc_mode"];
+
+  // AREA has no meaningful "amount" of its own (the area itself is the
+  // total) — the column is still not-null, so pin it to 1 whenever the mode
+  // switches to AREA. COUNT's unit is free text, so a stale unit carried
+  // over from another mode (e.g. "m2") is cleared rather than left looking
+  // like a real choice.
+  const applyCalcModeSideEffects = <
+    T extends { calc_mode: CalcMode; amount: number; uom: string },
+  >(
+    field: string,
+    updated: T,
+  ): T => {
+    if (field !== "calc_mode") return updated;
+    if (updated.calc_mode === "AREA") return { ...updated, amount: 1 };
+    if (updated.calc_mode === "COUNT") return { ...updated, uom: "" };
+    return updated;
+  };
+
   // Update a specific material entry field
   const updateMaterialEntry = (
     tempId: string,
@@ -359,44 +424,30 @@ export default function MaterialControl({
     setMaterialEntries(
       materialEntries.map((entry) => {
         if (entry.tempId !== tempId) return entry;
-        const updated = { ...entry, [field]: value };
-        if (
-          ["length", "width", "thickness", "density", "amount"].includes(
-            field as string,
-          )
-        ) {
-          updated.total_amount = calcTotal(
-            updated.length,
-            updated.width,
-            updated.thickness,
-            updated.density,
-            updated.amount,
-          );
+        const updated = applyCalcModeSideEffects(field as string, {
+          ...entry,
+          [field]: value,
+        });
+        if (RECALC_FIELDS.includes(field as string)) {
+          return withRecalculatedTotal(updated);
         }
         return updated;
       }),
     );
   };
 
-  // Recomputes the total only for the dimension/density/amount fields —
-  // uom passes through untouched, matching updateMaterialEntry's behavior
-  // for the batch rows.
+  // Recomputes the total for the dimension/density/amount fields — uom
+  // passes through untouched for COUNT (a free-text unit stays a user
+  // choice) and is auto-resolved otherwise, matching updateMaterialEntry's
+  // behavior for the batch rows.
   const handleEditFieldChange = (
     field: keyof MaterialControlFormData,
     value: number | string,
   ) => {
     setEditFormData((prev) => {
-      const updated = { ...prev, [field]: value };
-      if (
-        ["length", "width", "thickness", "density", "amount"].includes(field)
-      ) {
-        updated.total_amount = calcTotal(
-          updated.length,
-          updated.width,
-          updated.thickness,
-          updated.density,
-          updated.amount,
-        );
+      const updated = applyCalcModeSideEffects(field, { ...prev, [field]: value });
+      if (RECALC_FIELDS.includes(field)) {
+        return withRecalculatedTotal(updated);
       }
       return updated;
     });
@@ -419,40 +470,24 @@ export default function MaterialControl({
     setMaterialEntries(
       materialEntries.map((entry) => {
         if (entry.tempId !== tempId) return entry;
-        const updated = {
+        return withRecalculatedTotal({
           ...entry,
           material_density_id: densityId,
           density: selected?.density ?? entry.density,
-        };
-        updated.total_amount = calcTotal(
-          updated.length,
-          updated.width,
-          updated.thickness,
-          updated.density,
-          updated.amount,
-        );
-        return updated;
+        });
       }),
     );
   };
 
   const handleEditDensityTypeChange = (densityId: number) => {
     const selected = materialDensities.find((d) => d.id === densityId);
-    setEditFormData((prev) => {
-      const updated = {
+    setEditFormData((prev) =>
+      withRecalculatedTotal({
         ...prev,
         material_density_id: densityId,
         density: selected?.density ?? prev.density,
-      };
-      updated.total_amount = calcTotal(
-        updated.length,
-        updated.width,
-        updated.thickness,
-        updated.density,
-        updated.amount,
-      );
-      return updated;
-    });
+      }),
+    );
   };
 
   // Handle material selection for a specific entry
@@ -470,21 +505,17 @@ export default function MaterialControl({
     setMaterialEntries(
       materialEntries.map((entry) => {
         if (entry.tempId !== tempId) return entry;
-        const updated = {
+        return withRecalculatedTotal({
           ...entry,
           material_id: material.id,
           materialSearchTerm: displayText,
+          calc_mode: material.calc_mode,
           material_density_id: densityId,
           density: densityVal,
-        };
-        updated.total_amount = calcTotal(
-          updated.length,
-          updated.width,
-          updated.thickness,
-          updated.density,
-          updated.amount,
-        );
-        return updated;
+          // AREA has no meaningful "amount" of its own (the area itself is
+          // the total) — the column is still not-null, so pin it to 1.
+          amount: material.calc_mode === "AREA" ? 1 : entry.amount,
+        });
       }),
     );
     setActiveDropdownId(null);
@@ -497,34 +528,124 @@ export default function MaterialControl({
       : material.material;
     const densityId = material.material_density_id || 0;
     const densityVal = material.material_density?.density || 0;
-    setEditFormData((prev) => {
-      const updated = {
+    setEditFormData((prev) =>
+      withRecalculatedTotal({
         ...prev,
         material_id: material.id,
         materialSearchTerm: displayText,
+        calc_mode: material.calc_mode,
         material_density_id: densityId,
         density: densityVal,
-        uom: prev.uom || "",
-      };
-      updated.total_amount = calcTotal(
-        updated.length,
-        updated.width,
-        updated.thickness,
-        updated.density,
-        updated.amount,
-      );
-      return updated;
-    });
+        amount: material.calc_mode === "AREA" ? 1 : prev.amount,
+      }),
+    );
     setActiveDropdownId(null);
   };
 
   const handleClearEditMaterialSearch = () => {
     setEditFormData({
-      ...editFormData,
       material_id: 0,
       materialSearchTerm: "",
+      ...emptyMaterialFields,
     });
     setActiveDropdownId(null);
+  };
+
+  // Inline "create new material" flow, triggered from MaterialFieldsForm's
+  // dropdown. `forId` is a batch entry's tempId or "edit".
+  const handleCreateMaterialClick = (forId: string, searchTerm: string) => {
+    setCreatingMaterialFor(forId);
+    setNewMaterialForm({
+      material: searchTerm,
+      specification: "",
+      category: "",
+      calc_mode: "DIMENSIONAL",
+    });
+    setCreatingMaterialError(null);
+    setActiveDropdownId(null);
+  };
+
+  const handleCreateMaterialSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMaterialForm.material.trim()) {
+      setCreatingMaterialError("Material name is required");
+      return;
+    }
+
+    try {
+      setCreatingMaterialSaving(true);
+      setCreatingMaterialError(null);
+
+      const { data: created, error: insertError } = await supabase
+        .from("material_lists")
+        .insert({
+          material: newMaterialForm.material.trim(),
+          specification: newMaterialForm.specification.trim() || null,
+          category: newMaterialForm.category.trim() || null,
+          calc_mode: newMaterialForm.calc_mode,
+        })
+        .select("*, material_density:material_density_id(id, name, density, unit)")
+        .single();
+
+      if (insertError) throw insertError;
+
+      await ActivityLogService.logActivity({
+        action: "create",
+        tableName: "material_lists",
+        recordId: created.id,
+        newData: created,
+        description: `Added new material "${created.material}" to master data`,
+      });
+
+      setMaterialLists((prev) => [...prev, created]);
+      if (created.category) {
+        setAvailableCategories((prev) =>
+          prev.includes(created.category) ? prev : [...prev, created.category],
+        );
+      }
+
+      if (creatingMaterialFor === "edit") {
+        handleEditMaterialSelect(created);
+      } else if (creatingMaterialFor) {
+        handleMaterialSelectForEntry(creatingMaterialFor, created);
+      }
+
+      setCreatingMaterialFor(null);
+    } catch (err) {
+      console.error("Error creating material:", err);
+      setCreatingMaterialError(
+        err instanceof Error ? err.message : "Failed to create material",
+      );
+    } finally {
+      setCreatingMaterialSaving(false);
+    }
+  };
+
+  const validateMaterialFields = (
+    fields: MaterialControlFormData,
+    label: string,
+  ): string | null => {
+    if (!fields.material_id) {
+      return `${label}: Please click on a material from the dropdown list to select it`;
+    }
+    if (fields.calc_mode === "AREA") {
+      if (fields.area <= 0) {
+        return `${label}: Area is required`;
+      }
+    } else if (fields.calc_mode === "CIRCULAR") {
+      if (fields.diameter <= 0) {
+        return `${label}: Diameter is required`;
+      }
+      if (fields.amount <= 0) {
+        return `${label}: Amount must be greater than 0`;
+      }
+    } else if (fields.amount <= 0) {
+      return `${label}: Amount must be greater than 0`;
+    }
+    if (!fields.uom.trim()) {
+      return `${label}: Unit of measurement is required`;
+    }
+    return null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -532,17 +653,9 @@ export default function MaterialControl({
 
     // Validation
     if (editingId) {
-      // Edit mode validation
-      if (!editFormData.material_id) {
-        setError("Please select a material");
-        return;
-      }
-      if (editFormData.amount <= 0) {
-        setError("Amount must be greater than 0");
-        return;
-      }
-      if (!editFormData.uom.trim()) {
-        setError("Unit of measurement is required");
+      const validationError = validateMaterialFields(editFormData, "Material");
+      if (validationError) {
+        setError(validationError);
         return;
       }
     } else {
@@ -553,20 +666,12 @@ export default function MaterialControl({
       }
 
       for (let i = 0; i < materialEntries.length; i++) {
-        const entry = materialEntries[i];
-
-        if (!entry.material_id || entry.material_id === 0) {
-          setError(
-            `Material #${i + 1}: Please click on a material from the dropdown list to select it`,
-          );
-          return;
-        }
-        if (entry.amount <= 0) {
-          setError(`Material #${i + 1}: Amount must be greater than 0`);
-          return;
-        }
-        if (!entry.uom.trim()) {
-          setError(`Material #${i + 1}: Unit of measurement is required`);
+        const validationError = validateMaterialFields(
+          materialEntries[i],
+          `Material #${i + 1}`,
+        );
+        if (validationError) {
+          setError(validationError);
           return;
         }
       }
@@ -584,11 +689,16 @@ export default function MaterialControl({
           .update({
             material_id: editFormData.material_id,
             material_density_id: editFormData.material_density_id || null,
+            calc_mode: editFormData.calc_mode,
             length: editFormData.length || null,
             width: editFormData.width || null,
             thickness: editFormData.thickness || null,
+            area: editFormData.area || null,
+            layers: editFormData.layers || null,
+            diameter: editFormData.diameter || null,
             density: editFormData.density || null,
-            amount: editFormData.amount,
+            amount:
+              editFormData.calc_mode === "AREA" ? 1 : editFormData.amount,
             total_amount: editFormData.total_amount || null,
             uom: editFormData.uom.trim(),
             updated_at: new Date().toISOString(),
@@ -615,11 +725,15 @@ export default function MaterialControl({
         const materialsToInsert = materialEntries.map((entry) => ({
           material_id: entry.material_id,
           material_density_id: entry.material_density_id || null,
+          calc_mode: entry.calc_mode,
           length: entry.length || null,
           width: entry.width || null,
           thickness: entry.thickness || null,
+          area: entry.area || null,
+          layers: entry.layers || null,
+          diameter: entry.diameter || null,
           density: entry.density || null,
-          amount: entry.amount,
+          amount: entry.calc_mode === "AREA" ? 1 : entry.amount,
           total_amount: entry.total_amount || null,
           uom: entry.uom.trim(),
           work_details_id: workDetailsId,
@@ -673,9 +787,13 @@ export default function MaterialControl({
       material_id: material.material_id,
       materialSearchTerm: displayText,
       material_density_id: material.material_density_id || 0,
+      calc_mode: material.calc_mode,
       length: material.length || 0,
       width: material.width || 0,
       thickness: material.thickness || 0,
+      area: material.area || 0,
+      layers: material.layers || 0,
+      diameter: material.diameter || 0,
       density: material.density || 0,
       amount: material.amount,
       total_amount: material.total_amount || 0,
@@ -732,14 +850,7 @@ export default function MaterialControl({
     setEditFormData({
       material_id: 0,
       materialSearchTerm: "",
-      material_density_id: 0,
-      length: 0,
-      width: 0,
-      thickness: 0,
-      density: 0,
-      amount: 0,
-      total_amount: 0,
-      uom: "",
+      ...emptyMaterialFields,
     });
     setMaterialEntries([]);
     setActiveDropdownId(null);
@@ -1005,6 +1116,9 @@ export default function MaterialControl({
                             ? materialDropdownRef
                             : null
                         }
+                        onCreateMaterialClick={(term) =>
+                          handleCreateMaterialClick(entry.tempId, term)
+                        }
                         isDensityDropdownOpen={densityOpenId === entry.tempId}
                         densitySearchTerm={
                           densitySearchTerms[entry.tempId] ?? ""
@@ -1059,6 +1173,9 @@ export default function MaterialControl({
                   onClearMaterialSearch={handleClearEditMaterialSearch}
                   materialDropdownRef={
                     activeDropdownId === "edit" ? materialDropdownRef : null
+                  }
+                  onCreateMaterialClick={(term) =>
+                    handleCreateMaterialClick("edit", term)
                   }
                   isDensityDropdownOpen={editDensityOpen}
                   densitySearchTerm={editDensitySearch}
@@ -1130,6 +1247,12 @@ export default function MaterialControl({
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Specification
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Mode
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Area (m²)
+                  </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Length
                   </th>
@@ -1138,6 +1261,12 @@ export default function MaterialControl({
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Thickness
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Layers
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Diameter
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Density
@@ -1180,6 +1309,18 @@ export default function MaterialControl({
                         {material.material_list?.specification || "-"}
                       </div>
                     </td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                        {CALC_MODE_OPTIONS.find(
+                          (m) => m.value === material.calc_mode,
+                        )?.label || material.calc_mode}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="text-sm text-gray-600">
+                        {material.area != null ? material.area : "-"}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 text-right">
                       <div className="text-sm text-gray-600">
                         {material.length != null ? material.length : "-"}
@@ -1193,6 +1334,16 @@ export default function MaterialControl({
                     <td className="px-6 py-4 text-right">
                       <div className="text-sm text-gray-600">
                         {material.thickness != null ? material.thickness : "-"}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="text-sm text-gray-600">
+                        {material.layers != null ? material.layers : "-"}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="text-sm text-gray-600">
+                        {material.diameter != null ? material.diameter : "-"}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
@@ -1267,6 +1418,145 @@ export default function MaterialControl({
           </div>
         </div>
       ) : null}
+
+      {creatingMaterialFor !== null && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-md w-full shadow-2xl">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Create New Material
+              </h3>
+              <button
+                type="button"
+                onClick={() => setCreatingMaterialFor(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateMaterialSubmit} className="p-4 space-y-4">
+              {creatingMaterialError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-red-700 text-sm">{creatingMaterialError}</p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Material <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={newMaterialForm.material}
+                  onChange={(e) =>
+                    setNewMaterialForm((prev) => ({
+                      ...prev,
+                      material: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g. Plat Besi"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Specification
+                </label>
+                <input
+                  type="text"
+                  value={newMaterialForm.specification}
+                  onChange={(e) =>
+                    setNewMaterialForm((prev) => ({
+                      ...prev,
+                      specification: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Optional"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Category
+                </label>
+                <input
+                  type="text"
+                  list="material-category-suggestions"
+                  value={newMaterialForm.category}
+                  onChange={(e) =>
+                    setNewMaterialForm((prev) => ({
+                      ...prev,
+                      category: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Optional"
+                />
+                <datalist id="material-category-suggestions">
+                  {availableCategories.map((cat) => (
+                    <option key={cat} value={cat} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Calculation Mode <span className="text-red-600">*</span>
+                </label>
+                <select
+                  value={newMaterialForm.calc_mode}
+                  onChange={(e) =>
+                    setNewMaterialForm((prev) => ({
+                      ...prev,
+                      calc_mode: e.target.value as CalcMode,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  {CALC_MODE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {
+                    CALC_MODE_OPTIONS.find(
+                      (opt) => opt.value === newMaterialForm.calc_mode,
+                    )?.description
+                  }
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setCreatingMaterialFor(null)}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingMaterialSaving}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {creatingMaterialSaving ? (
+                    <Loader className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Plus className="w-4 h-4" />
+                  )}
+                  Create Material
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
