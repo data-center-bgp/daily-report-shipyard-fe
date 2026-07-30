@@ -198,42 +198,54 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
             </tr>
 
             {/* Invoice Info */}
+            {/* A table (not CSS grid/flex) so page-break-inside: avoid is
+                reliably honored when printing — Chromium's print engine
+                doesn't consistently respect break-inside on grid/flex
+                containers, but does on table rows. */}
             <tr>
               <td>
-                <div className="mb-4 text-xs section-block">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <div className="flex gap-2">
-                        <span className="text-gray-600 w-32">
-                          Client Company:
-                        </span>
-                        <span className="font-medium">
-                          {invoice.company || "-"}
-                        </span>
-                      </div>
-                      <div className="flex gap-2">
-                        <span className="text-gray-600 w-32">UP:</span>
-                        <span className="font-medium">ACCOUNTING</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <span className="text-gray-600 w-32">
-                          Invoice Date:
-                        </span>
-                        <span className="font-medium">
-                          {formatDate(invoice.created_at)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right space-y-1">
-                      <div className="flex justify-end gap-2">
-                        <span className="text-gray-600">Vessel Name:</span>
-                        <span className="font-medium">
-                          {invoice.bastp?.vessel?.name || "-"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <table className="w-full text-xs mb-4 section-block">
+                  <tbody>
+                    <tr>
+                      <td className="align-top w-1/2">
+                        <div className="space-y-1">
+                          <div className="flex gap-2">
+                            <span className="text-gray-600 w-32">
+                              Client Company:
+                            </span>
+                            <span className="font-medium">
+                              {invoice.company || "-"}
+                            </span>
+                          </div>
+                          <div className="flex gap-2">
+                            <span className="text-gray-600 w-32">UP:</span>
+                            <span className="font-medium">ACCOUNTING</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <span className="text-gray-600 w-32">
+                              Invoice Date:
+                            </span>
+                            <span className="font-medium">
+                              {formatDate(invoice.created_at)}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="align-top w-1/2 text-right">
+                        <div className="space-y-1">
+                          <div className="flex justify-end gap-2">
+                            <span className="text-gray-600">
+                              Vessel Name:
+                            </span>
+                            <span className="font-medium">
+                              {invoice.bastp?.vessel?.name || "-"}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </td>
             </tr>
 
@@ -505,62 +517,64 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
             {/* Footer - Payment Info and Signature Section */}
             <tr>
               <td>
-                <div className="mt-2 pt-2 border-t border-gray-300 section-block">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <h3 className="font-semibold text-gray-900 mb-0.5 text-xs">
-                        INVOICE PAYMENT CAN BE SENT TO:
-                      </h3>
-                      <table className="text-xs">
-                        <tbody>
-                          <tr>
-                            <td className="text-gray-600 pr-1 py-0 align-top whitespace-nowrap">
-                              ON BEHALF OF:
-                            </td>
-                            <td className="font-medium py-0">
-                              PT BAROKAH GALANGAN PERKASA
-                            </td>
-                          </tr>
-                          <tr>
-                            <td className="text-gray-600 pr-1 py-0 align-top whitespace-nowrap">
-                              ACCOUNT NUMBER:
-                            </td>
-                            <td className="font-medium py-0">
-                              148-00-0025258-8
-                            </td>
-                          </tr>
-                          <tr>
-                            <td className="text-gray-600 pr-1 py-0 align-top whitespace-nowrap">
-                              BANK:
-                            </td>
-                            <td className="font-medium py-0">MANDIRI</td>
-                          </tr>
-                          <tr>
-                            <td className="text-gray-600 pr-1 py-0 align-top whitespace-nowrap">
-                              ADDRESS:
-                            </td>
-                            <td className="font-medium py-0">
-                              MULAWARMAN, SAMARINDA, INDONESIA
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="flex justify-end">
-                      <div className="text-center">
-                        <p className="font-semibold text-xs mb-0.5">
-                          PT BAROKAH GALANGAN PERKASA
-                        </p>
-                        <div className="h-12 mb-1"></div>
-                        <div className="border-t border-gray-400 pt-1 inline-block min-w-[180px]">
-                          <p className="font-medium text-xs">
-                            KHUSNUL KHOTIMAH
+                <table className="w-full mt-2 pt-2 border-t border-gray-300 section-block">
+                  <tbody>
+                    <tr>
+                      <td className="align-top w-1/2">
+                        <h3 className="font-semibold text-gray-900 mb-0.5 text-xs">
+                          INVOICE PAYMENT CAN BE SENT TO:
+                        </h3>
+                        <table className="text-xs">
+                          <tbody>
+                            <tr>
+                              <td className="text-gray-600 pr-1 py-0 align-top whitespace-nowrap">
+                                ON BEHALF OF:
+                              </td>
+                              <td className="font-medium py-0">
+                                PT BAROKAH GALANGAN PERKASA
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="text-gray-600 pr-1 py-0 align-top whitespace-nowrap">
+                                ACCOUNT NUMBER:
+                              </td>
+                              <td className="font-medium py-0">
+                                148-00-0025258-8
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="text-gray-600 pr-1 py-0 align-top whitespace-nowrap">
+                                BANK:
+                              </td>
+                              <td className="font-medium py-0">MANDIRI</td>
+                            </tr>
+                            <tr>
+                              <td className="text-gray-600 pr-1 py-0 align-top whitespace-nowrap">
+                                ADDRESS:
+                              </td>
+                              <td className="font-medium py-0">
+                                MULAWARMAN, SAMARINDA, INDONESIA
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td className="align-top w-1/2 text-right">
+                        <div className="text-center inline-block">
+                          <p className="font-semibold text-xs mb-0.5">
+                            PT BAROKAH GALANGAN PERKASA
                           </p>
+                          <div className="h-12 mb-1"></div>
+                          <div className="border-t border-gray-400 pt-1 inline-block min-w-[180px]">
+                            <p className="font-medium text-xs">
+                              KHUSNUL KHOTIMAH
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </td>
             </tr>
 

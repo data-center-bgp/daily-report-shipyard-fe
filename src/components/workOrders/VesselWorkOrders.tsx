@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, Fragment } from "react";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useReactToPrint } from "react-to-print";
 import {
   supabase,
   type WorkOrderWithDetails,
@@ -9,6 +10,8 @@ import { useAuth } from "../../hooks/useAuth";
 import { ActivityLogService } from "../../services/activityLogService";
 import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import { isWorkOrderFullyCompleted } from "../../utils/workOrderCompletion";
+import { ensureWorkOrderPrintNumber } from "../../utils/workOrderPrintNumbering";
+import WorkOrderPrint from "./WorkOrderPrint";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -39,6 +42,9 @@ import {
   ClipboardList,
   X,
   Ban,
+  Printer,
+  Download,
+  Loader,
 } from "lucide-react";
 
 interface VesselData {
@@ -128,6 +134,160 @@ export default function VesselWorkOrders() {
   const [workOrderToDelete, setWorkOrderToDelete] =
     useState<WorkOrderWithProgress | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Work Order document (Perintah Kerja) print preview state
+  const [printPreviewWO, setPrintPreviewWO] =
+    useState<WorkOrderWithProgress | null>(null);
+  const [printPreviewNumber, setPrintPreviewNumber] = useState<number | null>(
+    null,
+  );
+  const [printLoading, setPrintLoading] = useState<number | null>(null);
+  const [printError, setPrintError] = useState<string | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const printRef = useRef<HTMLDivElement>(null);
+
+  const handlePrintWorkOrder = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: `WO-${printPreviewWO?.shipyard_wo_number || printPreviewWO?.id}`,
+    pageStyle: `
+      @page {
+        size: A4;
+        margin: 0;
+      }
+      @media print {
+        body {
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .no-print {
+          display: none !important;
+        }
+      }
+    `,
+  });
+
+  // One-click PDF download via a canvas snapshot, separate from the real
+  // browser print path above. Trade-off accepted: unlike printing, this
+  // doesn't repeat the header/footer per page or avoid breaking rows across
+  // pages — it rasterizes the whole document into one tall canvas, then
+  // slices it into equal-height A4 pages, since neither html2canvas nor
+  // jsPDF understand the print-only "repeat thead/tfoot" CSS trick.
+  //
+  // Uses html2canvas-pro (not plain html2canvas, and not the html2pdf.js
+  // wrapper) because Tailwind v4's default palette uses oklch() colors,
+  // which classic html2canvas can't parse — it throws instead of
+  // rendering. html2canvas-pro is a maintained fork that added modern CSS
+  // color support. html2pdf.js was tried first but had to be dropped: it
+  // ships html2canvas pre-bundled inside its own dist file, so even a
+  // package.json override pointing "html2canvas" at html2canvas-pro
+  // couldn't reach the code actually executing.
+  const handleDownloadWorkOrderPdf = async () => {
+    if (!printRef.current || !printPreviewWO) return;
+    try {
+      setDownloadingPdf(true);
+      setPrintError(null);
+
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas-pro"),
+        import("jspdf"),
+      ]);
+
+      const canvas = await html2canvas(printRef.current, {
+        scale: 2,
+        useCORS: true,
+      });
+
+      const pdf = new jsPDF({
+        unit: "mm",
+        format: "a4",
+        orientation: "portrait",
+      });
+      const pageWidthMm = pdf.internal.pageSize.getWidth();
+      const pageHeightMm = pdf.internal.pageSize.getHeight();
+      const marginMm = 10;
+      const usableWidthMm = pageWidthMm - marginMm * 2;
+      const usableHeightMm = pageHeightMm - marginMm * 2;
+      const pxPerMm = canvas.width / usableWidthMm;
+      const pageHeightPx = usableHeightMm * pxPerMm;
+
+      let renderedPx = 0;
+      let firstPage = true;
+      while (renderedPx < canvas.height) {
+        const sliceHeightPx = Math.min(
+          pageHeightPx,
+          canvas.height - renderedPx,
+        );
+
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceHeightPx;
+        const ctx = pageCanvas.getContext("2d");
+        if (!ctx) throw new Error("Could not create canvas context");
+        ctx.drawImage(
+          canvas,
+          0,
+          renderedPx,
+          canvas.width,
+          sliceHeightPx,
+          0,
+          0,
+          canvas.width,
+          sliceHeightPx,
+        );
+
+        if (!firstPage) pdf.addPage();
+        pdf.addImage(
+          pageCanvas.toDataURL("image/jpeg", 0.98),
+          "JPEG",
+          marginMm,
+          marginMm,
+          usableWidthMm,
+          sliceHeightPx / pxPerMm,
+        );
+
+        renderedPx += sliceHeightPx;
+        firstPage = false;
+      }
+
+      pdf.save(
+        `WO-${printPreviewWO.shipyard_wo_number || printPreviewWO.id}.pdf`,
+      );
+    } catch (err) {
+      console.error("Error generating work order PDF:", err);
+      setPrintError(
+        err instanceof Error ? err.message : "Failed to generate PDF",
+      );
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
+  const handleOpenPrintPreview = async (wo: WorkOrderWithProgress) => {
+    try {
+      setPrintLoading(wo.id);
+      setPrintError(null);
+      const number = await ensureWorkOrderPrintNumber(
+        wo.id,
+        wo.shipyard_wo_date,
+        wo.wo_print_number,
+      );
+      const woWithNumber = { ...wo, wo_print_number: number };
+      setWorkOrders((prev) =>
+        prev.map((w) => (w.id === wo.id ? woWithNumber : w)),
+      );
+      setPrintPreviewWO(woWithNumber);
+      setPrintPreviewNumber(number);
+    } catch (err) {
+      console.error("Error preparing work order document:", err);
+      setPrintError(
+        err instanceof Error
+          ? err.message
+          : "Failed to prepare work order document",
+      );
+    } finally {
+      setPrintLoading(null);
+    }
+  };
 
   const fetchVesselWorkOrders = useCallback(async () => {
     try {
@@ -637,10 +797,73 @@ export default function VesselWorkOrders() {
     );
   }
 
+  const renderPrintPreviewModal = () => {
+    if (!printPreviewWO || printPreviewNumber == null) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <div className="bg-white rounded-lg max-w-5xl w-full my-8 shadow-2xl">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 sticky top-0 bg-white rounded-t-lg no-print z-10">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <FileText className="w-5 h-5" /> Work Order Print Preview
+            </h3>
+            <div className="flex gap-2">
+              <button
+                onClick={handlePrintWorkOrder}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Printer className="w-4 h-4" /> Print
+              </button>
+              <button
+                onClick={handleDownloadWorkOrderPdf}
+                disabled={downloadingPdf}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {downloadingPdf ? (
+                  <Loader className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                {downloadingPdf ? "Generating..." : "Download"}
+              </button>
+              <button
+                onClick={() => {
+                  setPrintPreviewWO(null);
+                  setPrintPreviewNumber(null);
+                }}
+                className="text-gray-500 hover:text-gray-700 px-2"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+          </div>
+
+          {/* Printable Content */}
+          <div className="overflow-y-auto max-h-[80vh]">
+            <WorkOrderPrint
+              ref={printRef}
+              workOrder={printPreviewWO}
+              printNumber={printPreviewNumber}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="p-8 space-y-6">
       {/* Delete Modal */}
       {renderDeleteModal()}
+      {renderPrintPreviewModal()}
+
+      {printError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-2">
+          <AlertTriangle className="w-5 h-5 text-red-600" />
+          <p className="text-red-700">{printError}</p>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex flex-col gap-4">
@@ -1054,6 +1277,15 @@ export default function VesselWorkOrders() {
                       {/* Actions */}
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleOpenPrintPreview(wo)}
+                            disabled={printLoading === wo.id}
+                            className="text-purple-600 hover:text-purple-900 transition-colors p-1 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Print Work Order Document"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+
                           <button
                             onClick={() => handleEditWorkOrder(wo)}
                             className={`${

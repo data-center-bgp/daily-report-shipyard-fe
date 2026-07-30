@@ -46,6 +46,7 @@ export interface WorkOrder {
   kapro_id?: number;
   work_location?: string;
   work_type?: string;
+  wo_print_number?: number | null;
 }
 
 export interface WorkDetails {
