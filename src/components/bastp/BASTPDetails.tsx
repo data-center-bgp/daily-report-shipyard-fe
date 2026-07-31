@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback, Fragment } from "react";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useReactToPrint } from "react-to-print";
 import { supabase } from "../../lib/supabase";
 import type { BASTPWithDetails } from "../../types/bastp.types";
 import { useAuth } from "../../hooks/useAuth";
+import BASTPPrint from "./BASTPPrint";
 import {
   ArrowLeft,
   Edit,
@@ -25,6 +27,9 @@ import {
   Receipt,
   Eye,
   Loader,
+  Printer,
+  Download,
+  X,
 } from "lucide-react";
 
 export default function BASTPDetails() {
@@ -44,6 +49,10 @@ export default function BASTPDetails() {
     null,
   );
   const [viewingFormPenawaran, setViewingFormPenawaran] = useState(false);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [printError, setPrintError] = useState<string | null>(null);
+  const printRef = useRef<HTMLDivElement>(null);
 
   // Once a BASTP is ready for (or already) invoicing, its composition and
   // materials are financially committed — Edit/Material Control lock so
@@ -118,9 +127,13 @@ export default function BASTPDetails() {
         material_control (
           id,
           material_id,
+          calc_mode,
           length,
           width,
           thickness,
+          area,
+          layers,
+          diameter,
           density,
           amount,
           total_amount,
@@ -212,6 +225,99 @@ export default function BASTPDetails() {
   useEffect(() => {
     fetchBastpDetails();
   }, [fetchBastpDetails]);
+
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: `BASTP-${bastp?.number || bastpId}`,
+    pageStyle: `
+      @page { size: A4; margin: 0; }
+      @media print {
+        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .no-print { display: none !important; }
+      }
+    `,
+  });
+
+  // Same canvas-snapshot approach as WorkOrderPrint's download — see that
+  // component for the tradeoffs (no repeated header/footer per page).
+  const handleDownloadPdf = async () => {
+    if (!printRef.current || !bastp) return;
+    try {
+      setDownloadingPdf(true);
+      setPrintError(null);
+
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas-pro"),
+        import("jspdf"),
+      ]);
+
+      const canvas = await html2canvas(printRef.current, {
+        scale: 2,
+        useCORS: true,
+      });
+
+      const pdf = new jsPDF({
+        unit: "mm",
+        format: "a4",
+        orientation: "portrait",
+      });
+      const pageWidthMm = pdf.internal.pageSize.getWidth();
+      const pageHeightMm = pdf.internal.pageSize.getHeight();
+      const marginMm = 10;
+      const usableWidthMm = pageWidthMm - marginMm * 2;
+      const usableHeightMm = pageHeightMm - marginMm * 2;
+      const pxPerMm = canvas.width / usableWidthMm;
+      const pageHeightPx = usableHeightMm * pxPerMm;
+
+      let renderedPx = 0;
+      let firstPage = true;
+      while (renderedPx < canvas.height) {
+        const sliceHeightPx = Math.min(
+          pageHeightPx,
+          canvas.height - renderedPx,
+        );
+
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceHeightPx;
+        const ctx = pageCanvas.getContext("2d");
+        if (!ctx) throw new Error("Could not create canvas context");
+        ctx.drawImage(
+          canvas,
+          0,
+          renderedPx,
+          canvas.width,
+          sliceHeightPx,
+          0,
+          0,
+          canvas.width,
+          sliceHeightPx,
+        );
+
+        if (!firstPage) pdf.addPage();
+        pdf.addImage(
+          pageCanvas.toDataURL("image/jpeg", 0.98),
+          "JPEG",
+          marginMm,
+          marginMm,
+          usableWidthMm,
+          sliceHeightPx / pxPerMm,
+        );
+
+        renderedPx += sliceHeightPx;
+        firstPage = false;
+      }
+
+      pdf.save(`BASTP-${bastp.number || bastpId}.pdf`);
+    } catch (err) {
+      console.error("Error generating BASTP PDF:", err);
+      setPrintError(
+        err instanceof Error ? err.message : "Failed to generate PDF",
+      );
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -463,6 +569,15 @@ export default function BASTPDetails() {
           <p className="text-gray-600 mt-2">{bastp.number}</p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              setPrintError(null);
+              setShowPrintPreview(true);
+            }}
+            className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-800 flex items-center gap-2"
+          >
+            <Printer className="w-4 h-4" /> Print
+          </button>
           {canEditBastp ? (
             <>
               <button
@@ -1129,6 +1244,57 @@ export default function BASTPDetails() {
             </div>
           </div>
         )}
+
+      {/* Print Preview Modal */}
+      {showPrintPreview && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-5xl w-full my-8 shadow-2xl">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 sticky top-0 bg-white rounded-t-lg no-print z-10">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FileText className="w-5 h-5" /> BASTP Print Preview
+              </h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={handlePrint}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Printer className="w-4 h-4" /> Print
+                </button>
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={downloadingPdf}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {downloadingPdf ? (
+                    <Loader className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  {downloadingPdf ? "Generating..." : "Download"}
+                </button>
+                <button
+                  onClick={() => setShowPrintPreview(false)}
+                  className="text-gray-500 hover:text-gray-700 px-2"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            {printError && (
+              <div className="p-4 no-print">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                  {printError}
+                </div>
+              </div>
+            )}
+
+            <div className="overflow-y-auto max-h-[80vh]">
+              <BASTPPrint ref={printRef} bastp={bastp} />
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

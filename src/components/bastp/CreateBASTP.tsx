@@ -88,6 +88,14 @@ export default function CreateBASTP() {
     number: "",
     date: new Date().toISOString().split("T")[0],
     vessel_id: 0,
+    // Printed-document fields — optional, only relevant for docking-type
+    // handovers (dates) or shown on the "To:" line (recipient).
+    tanggal_sandar: "",
+    tanggal_naik_docking: "",
+    tanggal_turun_docking: "",
+    tanggal_tambat_setelah_turun_dock: "",
+    to_name: "",
+    to_role: "",
   });
 
   // Data states
@@ -275,6 +283,13 @@ export default function CreateBASTP() {
         number: data.number,
         date: data.date,
         vessel_id: data.vessel_id,
+        tanggal_sandar: data.tanggal_sandar || "",
+        tanggal_naik_docking: data.tanggal_naik_docking || "",
+        tanggal_turun_docking: data.tanggal_turun_docking || "",
+        tanggal_tambat_setelah_turun_dock:
+          data.tanggal_tambat_setelah_turun_dock || "",
+        to_name: data.to_name || "",
+        to_role: data.to_role || "",
       });
 
       // Set selected work details
@@ -836,6 +851,13 @@ export default function CreateBASTP() {
             date: formData.date,
             vessel_id: formData.vessel_id,
             total_work_details: selectedWorkDetails.length,
+            tanggal_sandar: formData.tanggal_sandar || null,
+            tanggal_naik_docking: formData.tanggal_naik_docking || null,
+            tanggal_turun_docking: formData.tanggal_turun_docking || null,
+            tanggal_tambat_setelah_turun_dock:
+              formData.tanggal_tambat_setelah_turun_dock || null,
+            to_name: formData.to_name || null,
+            to_role: formData.to_role || null,
             ...(compositionChanged ? { status: "DRAFT" } : {}),
             updated_at: new Date().toISOString(),
           })
@@ -927,6 +949,13 @@ export default function CreateBASTP() {
             status: "DRAFT",
             is_invoiced: false,
             total_work_details: selectedWorkDetails.length,
+            tanggal_sandar: formData.tanggal_sandar || null,
+            tanggal_naik_docking: formData.tanggal_naik_docking || null,
+            tanggal_turun_docking: formData.tanggal_turun_docking || null,
+            tanggal_tambat_setelah_turun_dock:
+              formData.tanggal_tambat_setelah_turun_dock || null,
+            to_name: formData.to_name || null,
+            to_role: formData.to_role || null,
           })
           .select()
           .single();
@@ -1318,6 +1347,110 @@ export default function CreateBASTP() {
               />
             </div>
 
+          </div>
+        </div>
+
+        {/* Handover Document Details — optional, only used on the printed
+            BASTP. Docking dates apply to docking-type handovers only; leave
+            blank for pure-repair BASTPs. */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-1 flex items-center gap-2">
+            <FileText className="w-5 h-5" /> Handover Document Details
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Optional — only used on the printed BASTP. Leave the docking
+            dates blank if this handover doesn't involve docking.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Recipient Name (To:)
+              </label>
+              <input
+                type="text"
+                value={formData.to_name}
+                onChange={(e) =>
+                  setFormData({ ...formData, to_name: e.target.value })
+                }
+                placeholder="e.g., Agus Handoko"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Recipient Role
+              </label>
+              <input
+                type="text"
+                value={formData.to_role}
+                onChange={(e) =>
+                  setFormData({ ...formData, to_role: e.target.value })
+                }
+                placeholder="e.g., Owner Surveyor"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tanggal Sandar
+              </label>
+              <input
+                type="date"
+                value={formData.tanggal_sandar}
+                onChange={(e) =>
+                  setFormData({ ...formData, tanggal_sandar: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tanggal Naik Docking
+              </label>
+              <input
+                type="date"
+                value={formData.tanggal_naik_docking}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    tanggal_naik_docking: e.target.value,
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tanggal Turun Docking
+              </label>
+              <input
+                type="date"
+                value={formData.tanggal_turun_docking}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    tanggal_turun_docking: e.target.value,
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tanggal Tambat Setelah Turun Dock
+              </label>
+              <input
+                type="date"
+                value={formData.tanggal_tambat_setelah_turun_dock}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    tanggal_tambat_setelah_turun_dock: e.target.value,
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
         </div>
 

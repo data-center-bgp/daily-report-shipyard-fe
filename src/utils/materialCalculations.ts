@@ -125,6 +125,43 @@ export interface CalcFieldInputs {
 // Single entry point used by the material-entry form: computes the total
 // and, for modes with an auto-resolved unit, the uom to store alongside it.
 // COUNT returns uom: null since that choice stays with the user (Ls/pcs).
+// Display-only "Ukuran: ..." string for the printed BASTP, one convention
+// per calc mode (mirrors the shipyard's existing Excel wording).
+export function formatMaterialDimensionDisplay(
+  mc: {
+    calc_mode: CalcMode;
+    length?: number | null;
+    width?: number | null;
+    thickness?: number | null;
+    area?: number | null;
+    layers?: number | null;
+    diameter?: number | null;
+    amount: number;
+    uom: string;
+  },
+): string {
+  switch (mc.calc_mode) {
+    case "AREA": {
+      const layers = mc.layers && mc.layers > 1 ? ` x ${mc.layers} layer` : "";
+      return `Ukuran: ${mc.area ?? 0} m²${layers}`;
+    }
+    case "CIRCULAR": {
+      const dims = [mc.diameter, mc.length].filter((v) => v != null && v > 0);
+      return `Ukuran: ⌀${dims[0] ?? 0} x ${dims[1] ?? 0} mm x ${mc.amount} ${mc.uom}`;
+    }
+    case "COUNT":
+      return `Ukuran: ${mc.amount} ${mc.uom}`;
+    case "DIMENSIONAL":
+    default: {
+      const dims = [mc.length, mc.width, mc.thickness].filter(
+        (v) => v != null && v > 0,
+      );
+      const dimsPart = dims.length > 0 ? `${dims.join(" x ")} mm x ` : "";
+      return `Ukuran: ${dimsPart}${mc.amount} ${mc.uom}`;
+    }
+  }
+}
+
 export function calcTotalForMode(
   mode: CalcMode,
   inputs: CalcFieldInputs,
