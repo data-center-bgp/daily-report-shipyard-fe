@@ -4,6 +4,7 @@ import {
   useDashboardData,
   type VesselSummary,
 } from "../../hooks/useDashboardData";
+import UserActivitySummary from "./UserActivitySummary";
 
 // Fixed-order categorical hues (slots 1-3 of the validated 8-hue set) — used
 // for nominal breakdowns where the categories don't have an inherent order.
@@ -361,6 +362,64 @@ export default function Dashboard() {
     );
   };
 
+  // Two independently-scaled horizontal bars, one per row (each sized
+  // against the larger of the two), rather than one bar split
+  // proportionally — lets you compare absolute magnitude directly instead
+  // of just share-of-whole. Label/value columns are fixed-width so both
+  // line up across rows.
+  const ComparisonBars = ({
+    title,
+    subtitle,
+    segments,
+    formatValue,
+  }: {
+    title: string;
+    subtitle?: string;
+    segments: { label: string; value: number; color: string }[];
+    formatValue?: (value: number) => string;
+  }) => {
+    const max = Math.max(...segments.map((s) => s.value), 1);
+    const fmt = formatValue || ((v: number) => v.toLocaleString());
+    return (
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+        {subtitle && <p className="text-xs text-gray-500 mb-3">{subtitle}</p>}
+        <div className={`space-y-4 ${subtitle ? "" : "mt-3"}`}>
+          {segments.map((s) => {
+            const widthPct =
+              s.value > 0 ? Math.max((s.value / max) * 100, 2) : 0;
+            return (
+              <div key={s.label} className="flex items-center gap-3">
+                <span className="w-36 flex-shrink-0 text-xs text-gray-600 text-right">
+                  {s.label}
+                </span>
+                <div className="flex-1 h-6 rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${widthPct}%`,
+                      backgroundColor: s.color,
+                    }}
+                  />
+                </div>
+                <span className="w-24 flex-shrink-0 text-sm font-semibold text-gray-900">
+                  {fmt(s.value)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+    }).format(amount);
+
   return (
     <div className="p-8">
       {/* Header */}
@@ -386,7 +445,8 @@ export default function Dashboard() {
       {/* 1. Vessels still in progress */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          Vessels In Progress ({stats.totalVessels} total)
+          Vessels In Progress ({stats.vesselsInProgressTotal} of{" "}
+          {stats.totalVessels} total)
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <StatCard
@@ -474,31 +534,10 @@ export default function Dashboard() {
             }}
           />
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <StackedBar
-            title="Progress State"
-            subtitle={`Share of all ${stats.totalWorkDetails.toLocaleString()} work details`}
-            segments={[
-              {
-                label: "Completed",
-                value: stats.workDetailsCompleted,
-                color: CATEGORICAL.blue,
-              },
-              {
-                label: "In Progress",
-                value: stats.workDetailsInProgress,
-                color: CATEGORICAL.orange,
-              },
-              {
-                label: "No Progress",
-                value: stats.workDetailsNoProgress,
-                color: CATEGORICAL.aqua,
-              },
-            ]}
-          />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <DonutChart
             title="Progress State"
-            subtitle="Same breakdown, as a donut"
+            subtitle={`Share of all ${stats.totalWorkDetails.toLocaleString()} work details`}
             segments={[
               {
                 label: "Completed",
@@ -543,7 +582,7 @@ export default function Dashboard() {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
           BASTP Pipeline
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <StatCard
             label="Not Made Into BASTP Yet"
             value={stats.workDetailsNotInBastp}
@@ -565,16 +604,6 @@ export default function Dashboard() {
             }}
           />
           <StatCard
-            label="Verified — Awaiting Materials"
-            value={stats.workDetailsBastpVerified}
-            color="text-amber-600"
-            borderColor="border-amber-500"
-            percentOf={{
-              total: stats.totalWorkDetails,
-              ofLabel: "work details",
-            }}
-          />
-          <StatCard
             label="Ready For Invoice"
             value={stats.workDetailsBastpReadyForInvoice}
             color="text-purple-600"
@@ -585,6 +614,22 @@ export default function Dashboard() {
             }}
           />
         </div>
+        <ComparisonBars
+          title="Not Made Into BASTP vs Already Made Into BASTP"
+          subtitle={`Of ${stats.totalWorkDetails.toLocaleString()} work details`}
+          segments={[
+            {
+              label: "Not Made Into BASTP",
+              value: stats.workDetailsNotInBastp,
+              color: CATEGORICAL.orange,
+            },
+            {
+              label: "Already Made Into BASTP",
+              value: stats.totalWorkDetails - stats.workDetailsNotInBastp,
+              color: CATEGORICAL.blue,
+            },
+          ]}
+        />
       </div>
 
       {/* 4. Invoiced */}
@@ -634,11 +679,6 @@ export default function Dashboard() {
                 color: PIPELINE_RAMP[1],
               },
               {
-                label: "Awaiting Materials",
-                value: stats.workDetailsBastpVerified,
-                color: PIPELINE_RAMP[2],
-              },
-              {
                 label: "Ready For Invoice",
                 value: stats.workDetailsBastpReadyForInvoice,
                 color: PIPELINE_RAMP[3],
@@ -652,7 +692,7 @@ export default function Dashboard() {
               },
             ]}
           />
-          <StackedBar
+          <ComparisonBars
             title="Invoiced — Paid vs Unpaid"
             subtitle={`Of ${(
               stats.workDetailsInvoicedPaid + stats.workDetailsInvoicedUnpaid
@@ -666,6 +706,25 @@ export default function Dashboard() {
               {
                 label: "Unpaid",
                 value: stats.workDetailsInvoicedUnpaid,
+                color: STATUS.warning,
+              },
+            ]}
+          />
+        </div>
+        <div className="grid grid-cols-1 mt-6">
+          <ComparisonBars
+            title="Invoiced Value — Paid vs Unpaid"
+            subtitle="Total invoiced amount by payment status"
+            formatValue={formatCurrency}
+            segments={[
+              {
+                label: "Paid",
+                value: stats.workDetailsInvoicedPaidValue,
+                color: STATUS.good,
+              },
+              {
+                label: "Unpaid",
+                value: stats.workDetailsInvoicedUnpaidValue,
                 color: STATUS.warning,
               },
             ]}
@@ -1105,6 +1164,8 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <UserActivitySummary />
     </div>
   );
 }

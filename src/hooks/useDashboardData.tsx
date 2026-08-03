@@ -33,6 +33,7 @@ interface RawBastpLink {
 
 interface RawInvoiceLink {
   id: number;
+  payment_price: number | null;
   invoice_details: { payment_status: boolean } | null;
 }
 
@@ -95,6 +96,8 @@ export interface DashboardStats {
   // 4. Invoiced, split by payment
   workDetailsInvoicedPaid: number;
   workDetailsInvoicedUnpaid: number;
+  workDetailsInvoicedPaidValue: number;
+  workDetailsInvoicedUnpaidValue: number;
 
   // 8. Original vs additional work orders
   workOrdersOriginal: number;
@@ -152,6 +155,8 @@ const emptyStats: DashboardStats = {
   workDetailsBastpReadyForInvoice: 0,
   workDetailsInvoicedPaid: 0,
   workDetailsInvoicedUnpaid: 0,
+  workDetailsInvoicedPaidValue: 0,
+  workDetailsInvoicedUnpaidValue: 0,
   workOrdersOriginal: 0,
   workOrdersAdditional: 0,
   totalWorkDetails: 0,
@@ -202,7 +207,7 @@ function useDashboardDataQuery() {
             actual_close_date,
             work_progress ( progress_percentage, report_date, created_at ),
             bastp_work_details ( id, deleted_at, bastp:bastp_id ( status ) ),
-            invoice_work_details ( id, invoice_details:invoice_details_id ( payment_status ) )
+            invoice_work_details ( id, payment_price, invoice_details:invoice_details_id ( payment_status ) )
           )
         `,
         )
@@ -299,8 +304,14 @@ function useDashboardDataQuery() {
             );
             const isPaid = invoiceLink?.invoice_details?.payment_status ?? null;
             if (bastpStatus === "INVOICED") {
-              if (isPaid) newStats.workDetailsInvoicedPaid++;
-              else newStats.workDetailsInvoicedUnpaid++;
+              const invoicedValue = invoiceLink?.payment_price ?? 0;
+              if (isPaid) {
+                newStats.workDetailsInvoicedPaid++;
+                newStats.workDetailsInvoicedPaidValue += invoicedValue;
+              } else {
+                newStats.workDetailsInvoicedUnpaid++;
+                newStats.workDetailsInvoicedUnpaidValue += invoicedValue;
+              }
             }
 
             if (isMissedDeadline) {
