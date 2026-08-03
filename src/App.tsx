@@ -5,10 +5,11 @@ import {
   Navigate,
 } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
+import { DashboardDataProvider } from "./hooks/useDashboardData";
 
 import Layout from "./components/common/Layout";
 import { Login } from "./components/auth";
-import { Dashboard } from "./components/dashboard";
+import { Dashboard, Alerts } from "./components/dashboard";
 import { ProjectsList, AddProject, ProjectDetails } from "./components/projects";
 import { ReadinessForm, ReadinessQueue } from "./components/readiness";
 import { AdditionalWoApprovals } from "./components/additionalWoApprovals";
@@ -68,11 +69,13 @@ function AppRoutes() {
   }
 
   return (
-    <Layout onLogout={handleLogout}>
-      <Routes>
+    <DashboardDataProvider>
+      <Layout onLogout={handleLogout}>
+        <Routes>
         {/* Dashboard */}
         <Route path="/" element={<Dashboard />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/alerts" element={<Alerts />} />
 
         {/* Projects */}
         <Route path="/projects" element={<ProjectsList />} />
@@ -167,8 +170,9 @@ function AppRoutes() {
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </Layout>
+        </Routes>
+      </Layout>
+    </DashboardDataProvider>
   );
 }
 

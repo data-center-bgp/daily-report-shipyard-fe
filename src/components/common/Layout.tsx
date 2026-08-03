@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import { useDashboardData } from "../../hooks/useDashboardData";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -22,6 +23,7 @@ import {
   Users,
   ClipboardList,
   ClipboardCheck,
+  Bell,
   type LucideIcon,
 } from "lucide-react";
 
@@ -116,6 +118,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { canAccess, profile } = useAuth();
+  const { alerts } = useDashboardData();
 
   useEffect(() => {
     const getUser = async () => {
@@ -353,68 +356,6 @@ export default function Layout({ children, onLogout }: LayoutProps) {
               onNavigate={handleNavigate}
             />
           </nav>
-
-          {/* User Info & Logout */}
-          <div className="relative z-10 flex-shrink-0 p-3 border-t border-white/10 bg-blue-950/60">
-            {!sidebarCollapsed ? (
-              <>
-                <div className="flex items-center space-x-3 mb-4">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center ring-2 ring-blue-400/50 flex-shrink-0">
-                    {profile?.name ? (
-                      <span className="text-white text-sm font-bold">
-                        {profile.name.charAt(0).toUpperCase()}
-                      </span>
-                    ) : (
-                      <User className="w-5 h-5 text-white" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">
-                      {profile?.name || "User"}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={onLogout}
-                  className="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium flex items-center justify-center space-x-2 shadow-md hover:shadow-lg"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>Logout</span>
-                </button>
-              </>
-            ) : (
-              <div className="flex flex-col items-center space-y-3">
-                <div className="relative group">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center ring-2 ring-blue-400/50 cursor-pointer">
-                    {profile?.name ? (
-                      <span className="text-white text-sm font-bold">
-                        {profile.name.charAt(0).toUpperCase()}
-                      </span>
-                    ) : (
-                      <User className="w-5 h-5 text-white" />
-                    )}
-                  </div>
-                  <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white px-2 py-1 rounded text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 pointer-events-none">
-                    {profile?.name || "User"}
-                    <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 rotate-45"></div>
-                  </div>
-                </div>
-
-                <div className="relative group">
-                  <button
-                    onClick={onLogout}
-                    className="w-10 h-10 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center shadow-md hover:shadow-lg"
-                  >
-                    <LogOut className="w-4 h-4" />
-                  </button>
-                  <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white px-2 py-1 rounded text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 pointer-events-none">
-                    Logout
-                    <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 rotate-45"></div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
@@ -460,33 +401,6 @@ export default function Layout({ children, onLogout }: LayoutProps) {
                 }}
               />
             </nav>
-
-            {/* Mobile user info */}
-            <div className="relative z-10 flex-shrink-0 p-4 border-t border-white/10 bg-blue-950/60">
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center ring-2 ring-blue-400/50">
-                  {profile?.name ? (
-                    <span className="text-white text-sm font-bold">
-                      {profile.name.charAt(0).toUpperCase()}
-                    </span>
-                  ) : (
-                    <User className="w-5 h-5 text-white" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">
-                    {profile?.name || "User"}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={onLogout}
-                className="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium flex items-center justify-center space-x-2 shadow-md hover:shadow-lg"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>Logout</span>
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -497,16 +411,16 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
         }`}
       >
-        {/* Mobile header */}
-        <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
+        {/* Top navbar */}
+        <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
           <div className="flex items-center justify-between">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="text-gray-600 hover:text-gray-900 p-2 rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              <Menu className="w-6 h-6" />
-            </button>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 lg:hidden">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="-ml-2 text-gray-600 hover:text-gray-900 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
               <img
                 src="/bgp-icon.jpg"
                 alt="Barokah Galangan Perkasa"
@@ -516,7 +430,47 @@ export default function Layout({ children, onLogout }: LayoutProps) {
                 Shipyard System
               </h1>
             </div>
-            <div className="w-10"></div>
+
+            <div className="flex items-center space-x-1 ml-auto">
+              <button
+                onClick={() => navigate("/alerts")}
+                title="Alerts"
+                className="relative p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+              >
+                <Bell className="w-5 h-5" />
+                {alerts.length > 0 && (
+                  <span className="absolute top-0.5 right-0.5 flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold leading-none">
+                    {alerts.length > 9 ? "9+" : alerts.length}
+                  </span>
+                )}
+              </button>
+
+              <div className="w-px h-6 bg-gray-200 mx-1"></div>
+
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center ring-2 ring-blue-100 flex-shrink-0">
+                  {profile?.name ? (
+                    <span className="text-white text-xs font-bold">
+                      {profile.name.charAt(0).toUpperCase()}
+                    </span>
+                  ) : (
+                    <User className="w-4 h-4 text-white" />
+                  )}
+                </div>
+                <span className="hidden sm:block text-sm font-medium text-gray-700 max-w-[10rem] truncate">
+                  {profile?.name || "User"}
+                </span>
+              </div>
+
+              <button
+                onClick={onLogout}
+                title="Logout"
+                className="flex items-center space-x-1.5 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
+            </div>
           </div>
         </div>
 
