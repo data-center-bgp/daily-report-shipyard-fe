@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { ActivityLogService } from "../../services/activityLogService";
+import { useAuth } from "../../hooks/useAuth";
 import type { ActivityLog } from "../../lib/supabase";
 
 interface ActivityLogListProps {
@@ -39,6 +40,13 @@ export default function ActivityLogList({
   recordId,
   showFilters = true,
 }: ActivityLogListProps) {
+  const { profile, canAccess } = useAuth();
+  // Master/Manager see every user's activity; everyone else only ever sees
+  // their own, enforced by always passing their own user_id as a filter
+  // below — never trust the caller not to pass tableName/recordId here
+  // either, that path is unfiltered by design (a record's full history).
+  const seesEveryone = canAccess("activityLogs");
+
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -54,7 +62,7 @@ export default function ActivityLogList({
 
   useEffect(() => {
     loadLogs();
-  }, [page, tableName, recordId, filters]);
+  }, [page, tableName, recordId, filters, seesEveryone, profile?.id]);
 
   // Format table names to human-readable format
   const formatTableName = (tableName: string): string => {
@@ -121,12 +129,18 @@ export default function ActivityLogList({
         const start = (page - 1) * pageSize;
         setLogs(data.slice(start, start + pageSize));
         setTotalCount(data.length);
+      } else if (!seesEveryone && !profile?.id) {
+        // Profile hasn't resolved yet — never fall through to an
+        // unfiltered fetch for a non-privileged user, even for a moment.
+        setLogs([]);
+        setTotalCount(0);
       } else {
         // Get all logs with pagination
         const { data, count } = await ActivityLogService.getAllActivityLogs(
           page,
           pageSize,
           {
+            userId: seesEveryone ? undefined : profile?.id,
             tableName: filters.tableName || undefined,
             action: filters.action || undefined,
             startDate: filters.startDate || undefined,
@@ -291,9 +305,6 @@ export default function ActivityLogList({
                     <td className="px-4 py-3">
                       <div className="text-gray-900">
                         {generateActivityDescription(log)}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {log.user_email}
                       </div>
                     </td>
                     <td className="px-4 py-3">

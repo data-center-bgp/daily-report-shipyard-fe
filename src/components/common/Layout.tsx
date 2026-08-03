@@ -283,7 +283,10 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           current:
             location.pathname === "/activity-logs" ||
             location.pathname.startsWith("/activity-logs/"),
-          show: canAccess("activityLogs"),
+          // Everyone can see this now — Master/Manager see every user's
+          // activity, everyone else only sees their own (scoped in
+          // ActivityLog.tsx).
+          show: true,
         },
         {
           name: "User Management",
