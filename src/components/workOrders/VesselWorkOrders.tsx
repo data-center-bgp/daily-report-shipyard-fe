@@ -337,7 +337,12 @@ export default function VesselWorkOrders() {
           )
           .eq("vessel_id", vesselId)
           .is("deleted_at", null)
-          .order(sortField, { ascending: sortDirection === "asc" }),
+          .order(sortField, { ascending: sortDirection === "asc" })
+          // Nested work_details has no meaningful ordering of its own —
+          // default to ascending id (insertion order), so the list matches
+          // the order rows were imported in rather than whatever order
+          // Postgres happens to return them.
+          .order("id", { ascending: true, referencedTable: "work_details" }),
       ]);
 
       if (vesselResponse.error) throw vesselResponse.error;

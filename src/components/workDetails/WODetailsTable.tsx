@@ -60,7 +60,17 @@ type WorkDetailsSortField =
   | "planned_start_date"
   | "target_close_date"
   | "created_at"
-  | "description";
+  | "description"
+  | "work_scope"
+  | "location";
+
+// work_scope/location are FK embeds (work_scope_id/location_id), not plain
+// columns on work_details, so ordering by them needs PostgREST's
+// referencedTable option instead of a plain .order(field).
+const EMBEDDED_SORT_FIELDS: Partial<Record<WorkDetailsSortField, string>> = {
+  work_scope: "work_scope",
+  location: "location",
+};
 
 const WORK_DETAILS_SELECT = `
   *,
@@ -269,6 +279,22 @@ export default function WODetailsTable({
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
+  const [workScopes, setWorkScopes] = useState<
+    { id: number; work_scope: string }[]
+  >([]);
+  const [locations, setLocations] = useState<
+    { id: number; location: string }[]
+  >([]);
+  const [selectedWorkScopeId, setSelectedWorkScopeId] = useState<number>(
+    () => {
+      const workScopeId = searchParams.get("workScopeId");
+      return workScopeId ? parseInt(workScopeId) : 0;
+    },
+  );
+  const [selectedLocationId, setSelectedLocationId] = useState<number>(() => {
+    const locationId = searchParams.get("locationId");
+    return locationId ? parseInt(locationId) : 0;
+  });
   const [selectedVesselId, setSelectedVesselId] = useState<number>(() => {
     const vesselId = searchParams.get("vesselId");
     return vesselId ? parseInt(vesselId) : workOrderId || 0;
@@ -391,6 +417,36 @@ export default function WODetailsTable({
 
   // ==================== DATA FETCHING ====================
 
+  const fetchWorkScopes = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("work_scope")
+        .select("id, work_scope")
+        .is("deleted_at", null)
+        .order("work_scope", { ascending: true });
+
+      if (error) throw error;
+      setWorkScopes(data || []);
+    } catch (err) {
+      console.error("Error fetching work scopes:", err);
+    }
+  }, []);
+
+  const fetchLocations = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("location")
+        .select("id, location")
+        .is("deleted_at", null)
+        .order("location", { ascending: true });
+
+      if (error) throw error;
+      setLocations(data || []);
+    } catch (err) {
+      console.error("Error fetching locations:", err);
+    }
+  }, []);
+
   const fetchVessels = useCallback(async () => {
     try {
       setLoadingVessels(true);
@@ -485,6 +541,8 @@ export default function WODetailsTable({
       vesselId: number;
       projectId: number;
       workOrderIdFilter: number;
+      workScopeId: number;
+      locationId: number;
       sortField: WorkDetailsSortField;
       sortDirection: "asc" | "desc";
       page: number;
@@ -504,6 +562,13 @@ export default function WODetailsTable({
           baseQuery = baseQuery.eq("is_additional_wo_details", true);
         } else if (params.additionalWo === "no") {
           baseQuery = baseQuery.eq("is_additional_wo_details", false);
+        }
+
+        if (params.workScopeId > 0) {
+          baseQuery = baseQuery.eq("work_scope_id", params.workScopeId);
+        }
+        if (params.locationId > 0) {
+          baseQuery = baseQuery.eq("location_id", params.locationId);
         }
 
         // Apply filters
@@ -545,11 +610,17 @@ export default function WODetailsTable({
         // Add sorting. id breaks ties so that rows sharing a sort value (most
         // work details share a planned_start_date) keep a stable order and
         // can't be duplicated across pages or skipped entirely.
+        const embeddedTable = EMBEDDED_SORT_FIELDS[params.sortField];
         const rangeStart = (params.page - 1) * ITEMS_PER_PAGE;
-        const query = baseQuery
-          .order(params.sortField, {
-            ascending: params.sortDirection === "asc",
-          })
+        const sortedQuery = embeddedTable
+          ? baseQuery.order(params.sortField, {
+              ascending: params.sortDirection === "asc",
+              referencedTable: embeddedTable,
+            })
+          : baseQuery.order(params.sortField, {
+              ascending: params.sortDirection === "asc",
+            });
+        const query = sortedQuery
           .order("id", { ascending: true })
           .range(rangeStart, rangeStart + ITEMS_PER_PAGE - 1);
 
@@ -625,6 +696,8 @@ export default function WODetailsTable({
         vesselId: selectedVesselId,
         projectId: selectedProjectId,
         workOrderIdFilter: selectedWorkOrderId,
+        workScopeId: selectedWorkScopeId,
+        locationId: selectedLocationId,
         sortField,
         sortDirection,
         page: currentPage,
@@ -636,6 +709,8 @@ export default function WODetailsTable({
       selectedVesselId,
       selectedProjectId,
       selectedWorkOrderId,
+      selectedWorkScopeId,
+      selectedLocationId,
       sortField,
       sortDirection,
       currentPage,
@@ -651,6 +726,8 @@ export default function WODetailsTable({
       vesselIdParam: number,
       projectIdParam: number,
       workOrderIdParam: number,
+      workScopeIdParam: number,
+      locationIdParam: number,
       sortFieldParam: WorkDetailsSortField,
       sortDirectionParam: "asc" | "desc",
       pageParam: number,
@@ -661,6 +738,8 @@ export default function WODetailsTable({
         vesselId: vesselIdParam,
         projectId: projectIdParam,
         workOrderIdFilter: workOrderIdParam,
+        workScopeId: workScopeIdParam,
+        locationId: locationIdParam,
         sortField: sortFieldParam,
         sortDirection: sortDirectionParam,
         page: pageParam,
@@ -839,6 +918,28 @@ export default function WODetailsTable({
     });
   };
 
+  const handleWorkScopeFilterChange = (value: string) => {
+    const id = value ? parseInt(value) : 0;
+    setSelectedWorkScopeId(id);
+    setCurrentPage(1);
+
+    updateUrlParams({
+      workScopeId: id || null,
+      page: 1,
+    });
+  };
+
+  const handleLocationFilterChange = (value: string) => {
+    const id = value ? parseInt(value) : 0;
+    setSelectedLocationId(id);
+    setCurrentPage(1);
+
+    updateUrlParams({
+      locationId: id || null,
+      page: 1,
+    });
+  };
+
   const handleSort = (field: typeof sortField) => {
     const newDirection =
       sortField === field && sortDirection === "asc" ? "desc" : "asc";
@@ -870,6 +971,8 @@ export default function WODetailsTable({
       projectSearch: projectSearchTerm,
       workOrderId: selectedWorkOrderId,
       woSearch: workOrderSearchTerm,
+      workScopeId: selectedWorkScopeId,
+      locationId: selectedLocationId,
       search: workDetailsSearchTerm,
       additionalWo: additionalWoFilter,
       sortField,
@@ -899,6 +1002,8 @@ export default function WODetailsTable({
       projectSearch: projectSearchTerm,
       workOrderId: selectedWorkOrderId,
       woSearch: workOrderSearchTerm,
+      workScopeId: selectedWorkScopeId,
+      locationId: selectedLocationId,
       search: workDetailsSearchTerm,
       additionalWo: additionalWoFilter,
       sortField,
@@ -1182,8 +1287,10 @@ export default function WODetailsTable({
     if (!workOrderId) {
       fetchVessels();
       fetchProjects();
+      fetchWorkScopes();
+      fetchLocations();
     }
-  }, [workOrderId, fetchVessels, fetchProjects]);
+  }, [workOrderId, fetchVessels, fetchProjects, fetchWorkScopes, fetchLocations]);
 
   useEffect(() => {
     if (workOrderId) {
@@ -1228,6 +1335,12 @@ export default function WODetailsTable({
           }
           if (navigationState.additionalWo) {
             setAdditionalWoFilter(navigationState.additionalWo);
+          }
+          if (navigationState.workScopeId) {
+            setSelectedWorkScopeId(navigationState.workScopeId);
+          }
+          if (navigationState.locationId) {
+            setSelectedLocationId(navigationState.locationId);
           }
           if (navigationState.sortField) {
             setSortField(navigationState.sortField);
@@ -1294,6 +1407,8 @@ export default function WODetailsTable({
               navigationState.vesselId || 0,
               navigationState.projectId || 0,
               navigationState.workOrderId || 0,
+              navigationState.workScopeId || 0,
+              navigationState.locationId || 0,
               navigationState.sortField || "planned_start_date",
               navigationState.sortDirection || "asc",
               navigationState.page || 1,
@@ -1372,8 +1487,17 @@ export default function WODetailsTable({
         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
           Details
         </th>
-        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-          Work Scope
+        <th
+          onClick={() => handleSort("work_scope")}
+          className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
+        >
+          Work Scope {getSortIcon("work_scope")}
+        </th>
+        <th
+          onClick={() => handleSort("location")}
+          className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
+        >
+          Location {getSortIcon("location")}
         </th>
         <th
           onClick={() => handleSort("description")}
@@ -1438,6 +1562,14 @@ export default function WODetailsTable({
             </div>
           </td>
 
+          <td className="px-6 py-4 whitespace-nowrap">
+            <div className="text-sm text-gray-900">
+              {detail.location?.location || (
+                <span className="text-gray-400">N/A</span>
+              )}
+            </div>
+          </td>
+
           <td className="px-6 py-4">
             <div className="max-w-md">
               <div className="text-sm text-gray-900" title={detail.description}>
@@ -1449,11 +1581,6 @@ export default function WODetailsTable({
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
                   <User className="w-3 h-3" /> {detail.pic || "Not assigned"}
                 </span>
-                {detail.location && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                    <MapPin className="w-3 h-3" /> {detail.location.location}
-                  </span>
-                )}
                 {detail.is_additional_wo_details && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
                     <AlertTriangle className="w-3 h-3" /> Additional Work
@@ -2232,6 +2359,46 @@ export default function WODetailsTable({
                 <option value="">All</option>
                 <option value="yes">Additional only</option>
                 <option value="no">Original only</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Work Scope Filter */}
+            <div className="flex-1">
+              <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
+                <Wrench className="w-4 h-4" /> Work Scope
+              </label>
+              <select
+                value={selectedWorkScopeId || ""}
+                onChange={(e) => handleWorkScopeFilterChange(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              >
+                <option value="">All Work Scopes</option>
+                {workScopes.map((ws) => (
+                  <option key={ws.id} value={ws.id}>
+                    {ws.work_scope}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Location Filter */}
+            <div className="flex-1">
+              <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
+                <MapPin className="w-4 h-4" /> Location
+              </label>
+              <select
+                value={selectedLocationId || ""}
+                onChange={(e) => handleLocationFilterChange(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              >
+                <option value="">All Locations</option>
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.location}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

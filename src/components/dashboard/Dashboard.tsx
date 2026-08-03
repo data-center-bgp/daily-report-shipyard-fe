@@ -445,8 +445,7 @@ export default function Dashboard() {
       {/* 1. Vessels still in progress */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          Vessels In Progress ({stats.vesselsInProgressTotal} of{" "}
-          {stats.totalVessels} total)
+          Vessels In Progress
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <StatCard
