@@ -51,6 +51,7 @@ interface RawWorkDetail {
 interface RawWorkOrder {
   id: number;
   vessel_id: number;
+  project_id: number | null;
   is_additional_wo: boolean | null;
   work_type: string | null;
   shipyard_wo_number: string | null;
@@ -72,11 +73,24 @@ interface ComputedWorkDetail {
 }
 
 export interface DashboardStats {
-  // 1. Vessels with at least one work order still in progress
-  vesselsInProgressTotal: number;
-  vesselsInProgressDocking: number;
-  vesselsInProgressRepair: number;
+  // 1. Projects with at least one work order not yet completed
+  projectsInProgressTotal: number;
+  projectsInProgressDocking: number;
+  projectsInProgressRepair: number;
+  // Projects whose work orders (in that category) are all completed
+  projectsCompletedTotal: number;
+  projectsCompletedDocking: number;
+  projectsCompletedRepair: number;
+  totalProjects: number;
   totalVessels: number;
+
+  // 1b. Individual work orders, not grouped by project
+  workOrdersInProgressTotal: number;
+  workOrdersInProgressDocking: number;
+  workOrdersInProgressRepair: number;
+  workOrdersCompletedTotal: number;
+  workOrdersCompletedDocking: number;
+  workOrdersCompletedRepair: number;
 
   // 3. Work details already completed
   workDetailsCompleted: number;
@@ -140,10 +154,20 @@ export interface DashboardAlert {
 }
 
 const emptyStats: DashboardStats = {
-  vesselsInProgressTotal: 0,
-  vesselsInProgressDocking: 0,
-  vesselsInProgressRepair: 0,
+  projectsInProgressTotal: 0,
+  projectsInProgressDocking: 0,
+  projectsInProgressRepair: 0,
+  projectsCompletedTotal: 0,
+  projectsCompletedDocking: 0,
+  projectsCompletedRepair: 0,
+  totalProjects: 0,
   totalVessels: 0,
+  workOrdersInProgressTotal: 0,
+  workOrdersInProgressDocking: 0,
+  workOrdersInProgressRepair: 0,
+  workOrdersCompletedTotal: 0,
+  workOrdersCompletedDocking: 0,
+  workOrdersCompletedRepair: 0,
   workDetailsCompleted: 0,
   workDetailsNoProgress: 0,
   workDetailsInProgress: 0,
@@ -194,6 +218,7 @@ function useDashboardDataQuery() {
           `
           id,
           vessel_id,
+          project_id,
           is_additional_wo,
           work_type,
           shipyard_wo_number,
@@ -229,6 +254,9 @@ function useDashboardDataQuery() {
           workOrders: VesselWorkOrderAccumulator[];
         }
       >();
+      // WOs predating the Projects module have project_id = null and are
+      // excluded from project-based tracking below.
+      const projectAccumulators = new Map<number, VesselWorkOrderAccumulator[]>();
 
       rawOrders.forEach((wo) => {
         if (!wo.vessel) return;
@@ -374,6 +402,19 @@ function useDashboardDataQuery() {
             : overallProgress > 0
               ? "inProgress"
               : "notStarted";
+        // Individual work-order completion tally — unlike a project's
+        // rollup, "notStarted" counts as in progress here too (it's simply
+        // not completed yet).
+        if (status === "completed") {
+          newStats.workOrdersCompletedTotal++;
+          if (category === "DOCKING") newStats.workOrdersCompletedDocking++;
+          else newStats.workOrdersCompletedRepair++;
+        } else {
+          newStats.workOrdersInProgressTotal++;
+          if (category === "DOCKING") newStats.workOrdersInProgressDocking++;
+          else newStats.workOrdersInProgressRepair++;
+        }
+
         const hasOverdue = computedDetails.some((d) => d.isMissedDeadline);
         const readyForInvoiceCount = computedDetails.filter(
           (d) => d.bastpStatus === "READY_FOR_INVOICE",
@@ -399,13 +440,55 @@ function useDashboardDataQuery() {
           readyForInvoiceCount,
           lastActivity,
         });
+
+        if (wo.project_id != null) {
+          if (!projectAccumulators.has(wo.project_id)) {
+            projectAccumulators.set(wo.project_id, []);
+          }
+          projectAccumulators.get(wo.project_id)!.push({
+            category,
+            overallProgress,
+            status,
+            hasOverdue,
+            readyForInvoiceCount,
+            lastActivity,
+          });
+        }
       });
 
       newStats.totalVessels = vesselAccumulators.size;
 
-      const inProgressVesselIds = new Set<number>();
-      const inProgressDockingVesselIds = new Set<number>();
-      const inProgressRepairVesselIds = new Set<number>();
+      // A project is "in progress" while any of its work orders (in that
+      // category) isn't completed yet; only once every work order in the
+      // category is completed does the project count as completed there.
+      newStats.totalProjects = projectAccumulators.size;
+      const isIncomplete = (wos: VesselWorkOrderAccumulator[]) =>
+        wos.length > 0 && !wos.every((w) => w.status === "completed");
+      let projectsInProgressTotal = 0;
+      let projectsInProgressDocking = 0;
+      let projectsInProgressRepair = 0;
+      let projectsCompletedTotal = 0;
+      let projectsCompletedDocking = 0;
+      let projectsCompletedRepair = 0;
+      projectAccumulators.forEach((workOrders) => {
+        const dockingWOs = workOrders.filter((w) => w.category === "DOCKING");
+        const repairWOs = workOrders.filter((w) => w.category === "REPAIR");
+
+        if (isIncomplete(workOrders)) projectsInProgressTotal++;
+        else projectsCompletedTotal++;
+
+        if (isIncomplete(dockingWOs)) projectsInProgressDocking++;
+        else if (dockingWOs.length > 0) projectsCompletedDocking++;
+
+        if (isIncomplete(repairWOs)) projectsInProgressRepair++;
+        else if (repairWOs.length > 0) projectsCompletedRepair++;
+      });
+      newStats.projectsInProgressTotal = projectsInProgressTotal;
+      newStats.projectsInProgressDocking = projectsInProgressDocking;
+      newStats.projectsInProgressRepair = projectsInProgressRepair;
+      newStats.projectsCompletedTotal = projectsCompletedTotal;
+      newStats.projectsCompletedDocking = projectsCompletedDocking;
+      newStats.projectsCompletedRepair = projectsCompletedRepair;
 
       const newVesselSummaries: VesselSummary[] = Array.from(
         vesselAccumulators.entries(),
@@ -418,16 +501,6 @@ function useDashboardDataQuery() {
 
         const dockingWOs = workOrders.filter((w) => w.category === "DOCKING");
         const repairWOs = workOrders.filter((w) => w.category === "REPAIR");
-
-        if (workOrders.some((w) => w.status === "inProgress")) {
-          inProgressVesselIds.add(vesselId);
-        }
-        if (dockingWOs.some((w) => w.status === "inProgress")) {
-          inProgressDockingVesselIds.add(vesselId);
-        }
-        if (repairWOs.some((w) => w.status === "inProgress")) {
-          inProgressRepairVesselIds.add(vesselId);
-        }
 
         const lastActivity = workOrders
           .map((w) => w.lastActivity)
@@ -456,10 +529,6 @@ function useDashboardDataQuery() {
           lastActivity,
         };
       });
-
-      newStats.vesselsInProgressTotal = inProgressVesselIds.size;
-      newStats.vesselsInProgressDocking = inProgressDockingVesselIds.size;
-      newStats.vesselsInProgressRepair = inProgressRepairVesselIds.size;
 
       newAlerts.sort((a, b) => {
         const priorityOrder = { high: 2, medium: 1 };

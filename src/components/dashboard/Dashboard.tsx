@@ -14,13 +14,7 @@ const STATUS = { good: "#0ca30c", warning: "#fab219", critical: "#d03b3b" };
 // One-hue ordinal ramp (light -> dark) for the BASTP pipeline, where the
 // stage order carries meaning. Steps 250/350/450/550/650 of the sequential
 // blue ramp — the lightest step still clears 2:1 on a light surface.
-const PIPELINE_RAMP = [
-  "#86b6ef",
-  "#5598e7",
-  "#2a78d6",
-  "#1c5cab",
-  "#104281",
-];
+const PIPELINE_RAMP = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281"];
 
 const pct = (part: number, total: number) =>
   total > 0 ? Math.round((part / total) * 100) : 0;
@@ -113,9 +107,8 @@ export default function Dashboard() {
   const vesselFilterCounts = useMemo(
     () => ({
       all: vesselSummaries.length,
-      active: vesselSummaries.filter(
-        (v) => v.inProgress > 0 || v.planned > 0,
-      ).length,
+      active: vesselSummaries.filter((v) => v.inProgress > 0 || v.planned > 0)
+        .length,
       completed: vesselSummaries.filter((v) => v.completed > 0).length,
       alerts: vesselSummaries.filter(
         (v) => v.hasOverdue || v.readyForInvoiceCount > 0,
@@ -181,9 +174,7 @@ export default function Dashboard() {
     // When set, shows "N% of <percentOf.total>" underneath the value.
     percentOf?: { total: number; ofLabel: string };
   }) => (
-    <div
-      className={`bg-white rounded-lg shadow p-6 border-l-4 ${borderColor}`}
-    >
+    <div className={`bg-white rounded-lg shadow p-6 border-l-4 ${borderColor}`}>
       <p className="text-sm font-medium text-gray-600">{label}</p>
       <p className={`text-2xl font-bold ${color || "text-gray-900"}`}>
         {value}
@@ -213,9 +204,7 @@ export default function Dashboard() {
     return (
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        {subtitle && (
-          <p className="text-xs text-gray-500 mb-3">{subtitle}</p>
-        )}
+        {subtitle && <p className="text-xs text-gray-500 mb-3">{subtitle}</p>}
         <div
           className={`w-full h-6 rounded-full bg-gray-100 flex gap-[2px] overflow-hidden ${subtitle ? "" : "mt-3"}`}
         >
@@ -351,9 +340,7 @@ export default function Dashboard() {
                 <span className="font-semibold text-gray-900 ml-auto">
                   {s.value.toLocaleString()}
                 </span>
-                <span className="text-gray-400">
-                  ({pct(s.value, total)}%)
-                </span>
+                <span className="text-gray-400">({pct(s.value, total)}%)</span>
               </div>
             ))}
           </div>
@@ -442,32 +429,82 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* 1. Vessels still in progress */}
+      {/* 1. Vessel projects, grouped by project — a project is "in progress"
+             while any of its work orders isn't completed yet, and
+             "completed" once every work order in it is done. */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          Vessels In Progress
+          Vessel Projects
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <StatCard
-            label="All Work Types"
-            value={stats.vesselsInProgressTotal}
+            label="All Projects"
+            value={stats.totalProjects}
+            color="text-gray-900"
+            borderColor="border-gray-400"
+          />
+          <StatCard
+            label="Projects In Progress"
+            value={stats.projectsInProgressTotal}
             color="text-blue-600"
             borderColor="border-blue-500"
-            percentOf={{ total: stats.totalVessels, ofLabel: "vessels" }}
+          />
+          <StatCard
+            label="Completed"
+            value={stats.projectsCompletedTotal}
+            color="text-green-600"
+            borderColor="border-green-500"
+          />
+        </div>
+      </div>
+
+      {/* 1b. Individual work orders — separate from the project rollup above,
+             since a project can still be "in progress" overall while some of
+             its own work orders are already done. */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">
+          Work Orders ({stats.totalWorkOrders} total)
+        </h2>
+        <p className="text-sm font-medium text-gray-500 mb-2">In Progress</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <StatCard
+            label="All Work Types"
+            value={stats.workOrdersInProgressTotal}
+            color="text-blue-600"
+            borderColor="border-blue-500"
           />
           <StatCard
             label="Docking Work"
-            value={stats.vesselsInProgressDocking}
+            value={stats.workOrdersInProgressDocking}
             color="text-indigo-600"
             borderColor="border-indigo-500"
-            percentOf={{ total: stats.totalVessels, ofLabel: "vessels" }}
           />
           <StatCard
             label="Repair Work"
-            value={stats.vesselsInProgressRepair}
+            value={stats.workOrdersInProgressRepair}
             color="text-teal-600"
             borderColor="border-teal-500"
-            percentOf={{ total: stats.totalVessels, ofLabel: "vessels" }}
+          />
+        </div>
+        <p className="text-sm font-medium text-gray-500 mb-2">Completed</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <StatCard
+            label="All Work Types"
+            value={stats.workOrdersCompletedTotal}
+            color="text-green-600"
+            borderColor="border-green-500"
+          />
+          <StatCard
+            label="Docking Work"
+            value={stats.workOrdersCompletedDocking}
+            color="text-green-600"
+            borderColor="border-green-500"
+          />
+          <StatCard
+            label="Repair Work"
+            value={stats.workOrdersCompletedRepair}
+            color="text-green-600"
+            borderColor="border-green-500"
           />
         </div>
       </div>
@@ -483,54 +520,30 @@ export default function Dashboard() {
             value={stats.workDetailsCompleted}
             color="text-green-600"
             borderColor="border-green-500"
-            percentOf={{
-              total: stats.totalWorkDetails,
-              ofLabel: "work details",
-            }}
           />
           <StatCard
             label="In Progress"
             value={stats.workDetailsInProgress}
             color="text-blue-600"
             borderColor="border-blue-500"
-            percentOf={{
-              total: stats.totalWorkDetails,
-              ofLabel: "work details",
-            }}
           />
           <StatCard
             label="No Progress At All"
             value={stats.workDetailsNoProgress}
             color="text-gray-600"
             borderColor="border-gray-400"
-            percentOf={{
-              total: stats.totalWorkDetails,
-              ofLabel: "work details",
-            }}
           />
           <StatCard
             label="Missed Deadline"
             value={stats.workDetailsMissedDeadline}
             color="text-red-600"
             borderColor="border-red-500"
-            percentOf={{
-              total:
-                stats.workDetailsMissedDeadline +
-                stats.workDetailsOnTimeOrEarly,
-              ofLabel: "judged deadlines",
-            }}
           />
           <StatCard
             label="On Time / Early"
             value={stats.workDetailsOnTimeOrEarly}
             color="text-emerald-600"
             borderColor="border-emerald-500"
-            percentOf={{
-              total:
-                stats.workDetailsMissedDeadline +
-                stats.workDetailsOnTimeOrEarly,
-              ofLabel: "judged deadlines",
-            }}
           />
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -644,8 +657,7 @@ export default function Dashboard() {
             borderColor="border-green-500"
             percentOf={{
               total:
-                stats.workDetailsInvoicedPaid +
-                stats.workDetailsInvoicedUnpaid,
+                stats.workDetailsInvoicedPaid + stats.workDetailsInvoicedUnpaid,
               ofLabel: "invoiced work details",
             }}
           />
@@ -656,8 +668,7 @@ export default function Dashboard() {
             borderColor="border-red-500"
             percentOf={{
               total:
-                stats.workDetailsInvoicedPaid +
-                stats.workDetailsInvoicedUnpaid,
+                stats.workDetailsInvoicedPaid + stats.workDetailsInvoicedUnpaid,
               ofLabel: "invoiced work details",
             }}
           />
