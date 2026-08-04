@@ -104,6 +104,9 @@ export default function ProjectDetails() {
   const [assigning, setAssigning] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
 
+  const [removingWOId, setRemovingWOId] = useState<number | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+
   const fetchProject = useCallback(async () => {
     if (!projectId) return;
     try {
@@ -243,6 +246,35 @@ export default function ProjectDetails() {
       setAssignError(err instanceof Error ? err.message : "Failed to assign work orders");
     } finally {
       setAssigning(false);
+    }
+  };
+
+  const handleRemoveWorkOrder = async (wo: WorkOrderRow) => {
+    if (!project) return;
+    const confirmed = window.confirm(
+      `Remove ${wo.shipyard_wo_number} from this project?\n\nThe work order and its data won't be deleted — it becomes unassigned and can be re-assigned to a project later.`,
+    );
+    if (!confirmed) return;
+
+    setRemovingWOId(wo.id);
+    setRemoveError(null);
+    try {
+      const { error: updateError } = await supabase
+        .from("work_order")
+        .update({ project_id: null })
+        .eq("id", wo.id)
+        .eq("project_id", project.id);
+
+      if (updateError) throw updateError;
+
+      await fetchProject();
+      setShowSuccessMessage(true);
+    } catch (err) {
+      setRemoveError(
+        err instanceof Error ? err.message : "Failed to remove work order from project",
+      );
+    } finally {
+      setRemovingWOId(null);
     }
   };
 
@@ -419,6 +451,11 @@ export default function ProjectDetails() {
             Work Orders in this Project ({workOrders.length})
           </h2>
         </div>
+        {removeError && (
+          <div className="mx-6 mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
+            <p className="text-red-600 text-sm">{removeError}</p>
+          </div>
+        )}
         {workOrders.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -482,12 +519,23 @@ export default function ProjectDetails() {
                         {overallProgress(wo)}%
                       </td>
                       <td className="px-6 py-4 text-sm">
-                        <button
-                          onClick={() => navigate(`/edit-work-order/${wo.id}`)}
-                          className="text-blue-600 hover:text-blue-800"
-                        >
-                          Edit
-                        </button>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => navigate(`/edit-work-order/${wo.id}`)}
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            Edit
+                          </button>
+                          {!isOperationsReadOnly && (
+                            <button
+                              onClick={() => handleRemoveWorkOrder(wo)}
+                              disabled={removingWOId === wo.id}
+                              className="text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {removingWOId === wo.id ? "Removing..." : "Remove"}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -553,9 +601,24 @@ export default function ProjectDetails() {
                         </div>
                         <div className="text-xs text-gray-500">
                           {new Date(wo.shipyard_wo_date).toLocaleDateString()}
-                          {wo.work_type ? ` — ${wo.work_type}` : ""}
                         </div>
                       </div>
+                      {wo.work_type ? (
+                        <span
+                          title={wo.work_type}
+                          className={`inline-flex px-2 py-1 rounded text-xs font-medium cursor-help ${
+                            wo.work_type.startsWith("Docking")
+                              ? "bg-indigo-100 text-indigo-700"
+                              : "bg-teal-100 text-teal-700"
+                          }`}
+                        >
+                          {wo.work_type.startsWith("Docking") ? "Docking" : "Repair"}
+                        </span>
+                      ) : (
+                        <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-500">
+                          Type unknown
+                        </span>
+                      )}
                       {wo.is_additional_wo ? (
                         <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-700">
                           Additional
