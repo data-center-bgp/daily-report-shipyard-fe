@@ -1,4 +1,4 @@
-import { Fragment, useState, useRef } from "react";
+import { Fragment, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Upload,
@@ -62,9 +62,19 @@ function downloadXLSX(buffer: Uint8Array, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+// Error rows first (stable within each group, by original row order) so a
+// handful of errors in thousands of rows don't require scrolling to find.
+// The Row column still shows each row's real spreadsheet row number.
+function withErrorsFirst<T extends { errors: string[] }>(rows: T[]): T[] {
+  return [...rows].sort(
+    (a, b) => Number(b.errors.length > 0) - Number(a.errors.length > 0),
+  );
+}
+
 // ─── Sub-component: Preview Table for Work Orders ─────────────────────────────
 
 function WOPreviewTable({ rows }: { rows: ValidatedWORow[] }) {
+  const sortedRows = useMemo(() => withErrorsFirst(rows), [rows]);
   return (
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
@@ -93,7 +103,7 @@ function WOPreviewTable({ rows }: { rows: ValidatedWORow[] }) {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-100">
-            {rows.map((row) => {
+            {sortedRows.map((row) => {
               const hasErrors = row.errors.length > 0;
               return (
                 <Fragment key={row.rowNumber}>
@@ -165,6 +175,7 @@ function WOPreviewTable({ rows }: { rows: ValidatedWORow[] }) {
 // ─── Sub-component: Preview Table for Work Details ────────────────────────────
 
 function WDPreviewTable({ rows }: { rows: ValidatedImportRow[] }) {
+  const sortedRows = useMemo(() => withErrorsFirst(rows), [rows]);
   return (
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
@@ -196,7 +207,7 @@ function WDPreviewTable({ rows }: { rows: ValidatedImportRow[] }) {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-100">
-            {rows.map((row) => {
+            {sortedRows.map((row) => {
               const hasErrors = row.errors.length > 0;
               return (
                 <Fragment key={row.rowNumber}>
@@ -301,6 +312,7 @@ function ActionBadge({ row }: { row: ValidatedProgressRow }) {
 }
 
 function WPPreviewTable({ rows }: { rows: ValidatedProgressRow[] }) {
+  const sortedRows = useMemo(() => withErrorsFirst(rows), [rows]);
   return (
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
@@ -328,7 +340,7 @@ function WPPreviewTable({ rows }: { rows: ValidatedProgressRow[] }) {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-100">
-            {rows.map((row) => {
+            {sortedRows.map((row) => {
               const hasErrors = row.errors.length > 0;
               return (
                 <Fragment key={row.rowNumber}>
