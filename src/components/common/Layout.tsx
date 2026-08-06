@@ -24,6 +24,7 @@ import {
   ClipboardList,
   ClipboardCheck,
   Bell,
+  Database,
   type LucideIcon,
 } from "lucide-react";
 
@@ -294,6 +295,13 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           icon: Users,
           current: location.pathname === "/user-management",
           show: canAccess("userManagement"),
+        },
+        {
+          name: "Master Data",
+          href: "/master-data",
+          icon: Database,
+          current: location.pathname === "/master-data",
+          show: canAccess("masterData"),
         },
       ],
     },

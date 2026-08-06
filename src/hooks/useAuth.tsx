@@ -134,6 +134,10 @@ const FEATURE_ACCESS = {
   // to change anything.
   userManagement: ["MASTER", "MANAGER"],
   systemSettings: ["MASTER", "MANAGER"],
+  // MANAGER gets view-only access here too (see isReadOnly) — actual
+  // writes (add/edit/soft-delete) are MASTER/PPIC only, matching the RLS
+  // policies on vessel/location/work_scope.
+  masterData: ["MASTER", "PPIC", "MANAGER"],
   reports: [
     "MASTER",
     "PPIC",

@@ -43,6 +43,7 @@ import BASTPDetails from "./components/bastp/BASTPDetails";
 import BASTPMaterialsPage from "./components/bastp/BASTPMaterialsPage";
 import ActivityLogPage from "./components/activityLog/ActivityLogPage";
 import UserManagementPage from "./components/userManagement/UserManagementPage";
+import MasterDataPage from "./components/masterData/MasterDataPage";
 
 function AppRoutes() {
   const { user, loading, signOut } = useAuth();
@@ -163,6 +164,9 @@ function AppRoutes() {
 
         {/* User Management Routes */}
         <Route path="/user-management" element={<UserManagementPage />} />
+
+        {/* Master Data Routes */}
+        <Route path="/master-data" element={<MasterDataPage />} />
 
         {/* Import/Export Routes */}
         <Route path="/export-data" element={<ExportData />} />
