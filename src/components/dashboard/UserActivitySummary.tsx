@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 
 interface RawActivityLog {
+  user_id: number;
   user_name: string;
   action: "create" | "update" | "delete";
   created_at: string;
@@ -21,63 +23,162 @@ interface UserRow {
   days: Map<string, DayCell>;
 }
 
-const RANGE_OPTIONS = [7, 14, 30] as const;
+// The only roles this breakdown tracks — excludes MASTER/MANAGER (see
+// comments below) as well as OP_HEAD/ADMIN, which aren't relevant here.
+const INCLUDED_ROLES = [
+  "PPIC",
+  "PRODUCTION",
+  "FINANCE",
+  "HSSE",
+  "ADMIN_SHIPPING",
+];
 
-// The shared master account (run directly by the owner, not a tracked
-// employee) dominates the counts and isn't useful in a per-user breakdown.
-const EXCLUDED_USER_NAMES = ["CGA Barokah Perkasa Group"];
+// Monday-start week containing the given date, at local midnight.
+const startOfWeek = (date: Date) => {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = (day === 0 ? -6 : 1) - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const dayKeyOf = (d: Date) =>
+  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 // Groups by local calendar day (not UTC) so "today" lines up with what the
 // person viewing the dashboard actually considers today.
-const dayKey = (iso: string) => {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
-};
+const dayKey = (iso: string) => dayKeyOf(new Date(iso));
 
 const dayLabel = (key: string) => {
   const [y, m, d] = key.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+    weekday: "short",
     month: "short",
     day: "numeric",
   });
 };
 
+const formatDate = (d: Date, includeYear: boolean) =>
+  d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(includeYear ? { year: "numeric" } : {}),
+  });
+
+// e.g. "Jul 27 – Aug 2, 2026", or "Dec 29, 2025 – Jan 4, 2026" across a
+// year boundary.
+const formatRange = (start: Date, end: Date) => {
+  const sameYear = start.getFullYear() === end.getFullYear();
+  return `${formatDate(start, !sameYear)} – ${formatDate(end, true)}`;
+};
+
+// The Monday of the selected week, `offset` weeks back from the current
+// week (offset 0 = this week).
+const selectedMonday = (offset: number): Date => {
+  const monday = startOfWeek(new Date());
+  monday.setDate(monday.getDate() - offset * 7);
+  return monday;
+};
+
+// The 7 day keys (Monday through Sunday) of the selected week.
+const buildDays = (offset: number): string[] => {
+  const monday = selectedMonday(offset);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return dayKeyOf(d);
+  });
+};
+
+// [start, end) bounds covering exactly the selected week.
+const fetchDateRange = (offset: number) => {
+  const monday = selectedMonday(offset);
+  const end = new Date(monday);
+  end.setDate(monday.getDate() + 7);
+  return { start: monday, end };
+};
+
 export default function UserActivitySummary() {
   const { canAccess } = useAuth();
-  const allowed = canAccess("activityLogs");
+  // Master/Manager see every user's activity here (per the activity_logs RLS
+  // policy); everyone else only gets their own row back, same scoping as
+  // ActivityLogPage.tsx — but the section itself is no longer hidden from them.
+  const seesEveryone = canAccess("activityLogs");
 
-  const [rangeDays, setRangeDays] =
-    useState<(typeof RANGE_OPTIONS)[number]>(7);
+  // Which week is selected, in weeks back from the current week.
+  const [offset, setOffset] = useState(0);
   const [logs, setLogs] = useState<RawActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Profile ids in one of INCLUDED_ROLES — this view is scoped to that set
+  // of tracked-employee roles, not the owner's master account, manager
+  // oversight accounts, or roles like OP_HEAD/ADMIN that aren't relevant
+  // here. Only fetched when the viewer can see everyone's logs in the first
+  // place (admin_list_all_profiles itself is MASTER/MANAGER-only; for
+  // anyone else, activity_logs RLS already limits results to their own row,
+  // which is never one of INCLUDED_ROLES's concern to filter further).
+  const [includedIds, setIncludedIds] = useState<Set<number>>(new Set());
+  // Every active user in INCLUDED_ROLES — seeded as a zero-activity row so
+  // someone who did nothing in the selected week still shows up, instead of
+  // silently disappearing from the table.
+  const [roster, setRoster] = useState<string[]>([]);
+  // Gates the logs fetch until the role lookup (if needed) has resolved, so
+  // out-of-scope rows never flash in before being filtered out.
+  const [rolesReady, setRolesReady] = useState(!seesEveryone);
 
   useEffect(() => {
-    if (!allowed) {
-      setLoading(false);
+    if (!seesEveryone) {
+      setRolesReady(true);
       return;
     }
+    setRolesReady(false);
+    supabase
+      .rpc("admin_list_all_profiles")
+      .then(({ data, error: rpcError }) => {
+        if (!rpcError && data) {
+          const profiles = data as {
+            id: number;
+            name: string;
+            role: string;
+            deleted_at: string | null;
+          }[];
+          const included = profiles.filter((p) =>
+            INCLUDED_ROLES.includes(p.role),
+          );
+          setIncludedIds(new Set(included.map((p) => p.id)));
+          setRoster(included.filter((p) => !p.deleted_at).map((p) => p.name));
+        }
+        setRolesReady(true);
+      });
+  }, [seesEveryone]);
+
+  useEffect(() => {
+    if (!rolesReady) return;
 
     const fetchLogs = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        const start = new Date();
-        start.setDate(start.getDate() - (rangeDays - 1));
-        start.setHours(0, 0, 0, 0);
+        const { start, end } = fetchDateRange(offset);
 
         const { data, error: fetchError } = await supabase
           .from("activity_logs")
-          .select("user_name, action, created_at")
-          .gte("created_at", start.toISOString());
+          .select("user_id, user_name, action, created_at")
+          .gte("created_at", start.toISOString())
+          .lt("created_at", end.toISOString());
 
         if (fetchError) throw fetchError;
         const rows = (data || []) as RawActivityLog[];
+        // Non-privileged viewers only ever get their own row back from RLS
+        // regardless of their role, so the INCLUDED_ROLES filter only
+        // applies to the admin ("sees everyone") view.
         setLogs(
-          rows.filter((row) => !EXCLUDED_USER_NAMES.includes(row.user_name)),
+          seesEveryone
+            ? rows.filter((row) => includedIds.has(row.user_id))
+            : rows,
         );
       } catch (err) {
         setError(err instanceof Error ? err.message : "An error occurred");
@@ -87,23 +188,15 @@ export default function UserActivitySummary() {
     };
 
     fetchLogs();
-  }, [rangeDays, allowed]);
+  }, [offset, includedIds, rolesReady, seesEveryone]);
 
   const { days, users, maxCell } = useMemo(() => {
-    const start = new Date();
-    start.setDate(start.getDate() - (rangeDays - 1));
-    const dayList: string[] = [];
-    for (let i = 0; i < rangeDays; i++) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      dayList.push(
-        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-          d.getDate(),
-        ).padStart(2, "0")}`,
-      );
-    }
+    const dayList = buildDays(offset);
 
     const byUser = new Map<string, Map<string, DayCell>>();
+    roster.forEach((name) => {
+      if (!byUser.has(name)) byUser.set(name, new Map());
+    });
     logs.forEach((log) => {
       const key = dayKey(log.created_at);
       if (!byUser.has(log.user_name)) byUser.set(log.user_name, new Map());
@@ -122,7 +215,7 @@ export default function UserActivitySummary() {
         days: dayMap,
         total: Array.from(dayMap.values()).reduce((s, c) => s + c.total, 0),
       }))
-      .sort((a, b) => b.total - a.total);
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
 
     let max = 0;
     userList.forEach((u) =>
@@ -132,9 +225,14 @@ export default function UserActivitySummary() {
     );
 
     return { days: dayList, users: userList, maxCell: max };
-  }, [logs, rangeDays]);
+  }, [logs, offset, roster]);
 
-  if (!allowed) return null;
+  const rangeLabel = useMemo(() => {
+    const monday = selectedMonday(offset);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    return formatRange(monday, sunday);
+  }, [offset]);
 
   return (
     <div className="mb-8">
@@ -144,23 +242,30 @@ export default function UserActivitySummary() {
             User Activity
           </h2>
           <p className="text-sm text-gray-600">
-            Create / update / delete actions logged per user, per day
+            {seesEveryone
+              ? "Create / update / delete actions logged per user, per day"
+              : "Your create / update / delete actions, per day"}
           </p>
         </div>
-        <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg self-start">
-          {RANGE_OPTIONS.map((opt) => (
-            <button
-              key={opt}
-              onClick={() => setRangeDays(opt)}
-              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                rangeDays === opt
-                  ? "bg-white text-gray-900 shadow"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              {opt}d
-            </button>
-          ))}
+        <div className="flex items-center gap-1 self-start">
+          <button
+            onClick={() => setOffset((o) => o + 1)}
+            title="Previous week"
+            className="p-1.5 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-sm text-gray-600 whitespace-nowrap px-2">
+            {rangeLabel}
+          </span>
+          <button
+            onClick={() => setOffset((o) => Math.max(0, o - 1))}
+            disabled={offset === 0}
+            title="Next week"
+            className="p-1.5 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
