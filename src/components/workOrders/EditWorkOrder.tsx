@@ -274,16 +274,6 @@ export default function EditWorkOrder() {
       }
     }
 
-    if (formData.customer_wo_date && formData.shipyard_wo_date) {
-      const customerDate = new Date(formData.customer_wo_date);
-      const shipyardDate = new Date(formData.shipyard_wo_date);
-
-      if (shipyardDate < customerDate) {
-        setError("Shipyard WO date cannot be before Customer WO date");
-        return false;
-      }
-    }
-
     setError(null);
     return true;
   };
