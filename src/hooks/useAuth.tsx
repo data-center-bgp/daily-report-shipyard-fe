@@ -148,6 +148,18 @@ const FEATURE_ACCESS = {
     "MANAGER",
   ],
   exportData: ["MASTER", "PPIC", "PRODUCTION", "OP_HEAD", "ADMIN", "MANAGER"],
+  // Separate from exportData so ADMIN_SHIPPING gets Import (its create-only
+  // scope covers bulk-creating work orders/details) without also gaining
+  // Export Data, which it was never meant to have.
+  importData: [
+    "MASTER",
+    "PPIC",
+    "PRODUCTION",
+    "OP_HEAD",
+    "ADMIN",
+    "MANAGER",
+    "ADMIN_SHIPPING",
+  ],
   activityLogs: ["MASTER", "MANAGER"],
   additionalWoApprovals: ["MASTER", "OP_HEAD", "MANAGER"],
   readinessQueue: ["MASTER", "HSSE", "MANAGER"],
@@ -178,11 +190,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // all, so lumping it into that flag would be meaningless there.
   const isBastpReadOnly =
     isReadOnly || profile?.role === "FINANCE" || profile?.role === "OP_HEAD";
-  // ADMIN_SHIPPING exists to CREATE Projects/Work Orders/Work Details — it
-  // must never edit or delete one afterward. Distinct from
-  // isOperationsReadOnly (which also hides the Add/Create entry points,
-  // wrong for this role) — this flag only gates edit/delete surfaces.
-  const isShippingCreateOnly = profile?.role === "ADMIN_SHIPPING";
+  // ADMIN_SHIPPING exists to CREATE Projects/Work Orders/Work Details, and
+  // was meant to never edit or delete one afterward (that's PPIC's job).
+  // TEMPORARY: while the ADMIN_SHIPPING workflow is still being established,
+  // that restriction is switched off below — this role gets full edit/
+  // delete on Work Orders/Work Details too, same as PPIC, no separate UI.
+  // Once the workflow is stable, flip SHIPPING_CREATE_ONLY_ENABLED back to
+  // `true` to restore it — every consumer of isShippingCreateOnly (badges,
+  // banners, redirects) already keys off this one flag.
+  const SHIPPING_CREATE_ONLY_ENABLED = false;
+  const isShippingCreateOnly =
+    SHIPPING_CREATE_ONLY_ENABLED && profile?.role === "ADMIN_SHIPPING";
 
   const fetchProfile = useCallback(
     async (userId: string, retryCount = 0): Promise<UserProfile | null> => {

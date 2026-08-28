@@ -270,7 +270,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           href: "/import-data",
           icon: Upload,
           current: location.pathname === "/import-data",
-          show: canAccess("exportData"),
+          show: canAccess("importData"),
         },
       ],
     },

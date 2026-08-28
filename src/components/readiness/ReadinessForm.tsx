@@ -71,7 +71,13 @@ export default function ReadinessForm() {
   const navigate = useNavigate();
   const { isReadOnly, profile } = useAuth();
 
-  const canFillAsAdmin = profile?.role === "PPIC" || profile?.role === "MASTER";
+  // ADMIN_SHIPPING can fill/submit/resubmit the readiness form for a project
+  // it created, same as PPIC/MASTER — it's part of the same create-only
+  // scope (see isShippingCreateOnly in useAuth.tsx).
+  const canFillAsAdmin =
+    profile?.role === "PPIC" ||
+    profile?.role === "MASTER" ||
+    profile?.role === "ADMIN_SHIPPING";
   const canReviewAsHsse = profile?.role === "HSSE" || profile?.role === "MASTER";
 
   const [project, setProject] = useState<ProjectInfo | null>(null);

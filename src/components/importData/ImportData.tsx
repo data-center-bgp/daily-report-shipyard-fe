@@ -603,14 +603,21 @@ export default function ImportData() {
   const [wpParseError, setWpParseError] = useState<string | null>(null);
 
   // Role check
-  const canImport = profile?.role === "PPIC" || profile?.role === "MASTER";
+  const canImport =
+    profile?.role === "PPIC" ||
+    profile?.role === "MASTER" ||
+    profile?.role === "ADMIN_SHIPPING";
+  // ADMIN_SHIPPING can import Work Orders/Work Details (its create-only
+  // scope) but never Progress — matches its restriction everywhere else in
+  // the app (see isShippingCreateOnly in useAuth.tsx).
+  const canImportProgress = profile?.role === "PPIC" || profile?.role === "MASTER";
 
   if (!canImport) {
     return (
       <div className="p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-700">
-            Only PPIC and MASTER users can import data.
+            Only PPIC, MASTER, and ADMIN_SHIPPING users can import data.
           </p>
         </div>
       </div>
@@ -1067,27 +1074,29 @@ export default function ImportData() {
             </span>
           )}
         </button>
-        <button
-          onClick={() => setActiveTab("work-progress")}
-          className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === "work-progress"
-              ? "border-blue-600 text-blue-600"
-              : "border-transparent text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          Work Progress
-          {wpStep === "preview" && (
-            <span
-              className={`ml-2 px-1.5 py-0.5 rounded-full text-xs font-semibold ${
-                wpInvalid > 0
-                  ? "bg-yellow-100 text-yellow-700"
-                  : "bg-green-100 text-green-700"
-              }`}
-            >
-              {wpRows.length}
-            </span>
-          )}
-        </button>
+        {canImportProgress && (
+          <button
+            onClick={() => setActiveTab("work-progress")}
+            className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "work-progress"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Work Progress
+            {wpStep === "preview" && (
+              <span
+                className={`ml-2 px-1.5 py-0.5 rounded-full text-xs font-semibold ${
+                  wpInvalid > 0
+                    ? "bg-yellow-100 text-yellow-700"
+                    : "bg-green-100 text-green-700"
+                }`}
+              >
+                {wpRows.length}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* ── WORK ORDERS TAB ─────────────────────────────────────────────────── */}
@@ -1408,7 +1417,7 @@ export default function ImportData() {
       )}
 
       {/* ── WORK PROGRESS TAB ───────────────────────────────────────────────── */}
-      {activeTab === "work-progress" && (
+      {activeTab === "work-progress" && canImportProgress && (
         <div className="space-y-6">
           {wpStep === "upload" && (
             <>
