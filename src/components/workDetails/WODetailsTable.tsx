@@ -228,11 +228,13 @@ export default function WODetailsTable({
   // also covers PPIC editing its own work-detail planning fields.
   const canWriteProgress =
     profile?.role === "MASTER" || profile?.role === "PRODUCTION";
-  // Cancelling a work detail is PPIC's call (MASTER keeps the usual
-  // superuser override) — separate from canEditWorkDetails since
-  // ADMIN_SHIPPING can edit/create but shouldn't decide cancellations.
+  // Cancelling a work detail is PPIC's call, and PRODUCTION's too (MASTER
+  // keeps the usual superuser override) — separate from canEditWorkDetails
+  // since ADMIN_SHIPPING can edit/create but shouldn't decide cancellations.
   const canCancelWorkDetail =
-    profile?.role === "PPIC" || profile?.role === "MASTER";
+    profile?.role === "PPIC" ||
+    profile?.role === "PRODUCTION" ||
+    profile?.role === "MASTER";
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
