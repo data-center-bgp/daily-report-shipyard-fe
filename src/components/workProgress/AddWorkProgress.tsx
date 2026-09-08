@@ -682,7 +682,17 @@ export default function AddWorkProgress({
       // generic progress list.
       const returnTo = location.state?.returnTo;
       if (returnTo) {
-        navigate(returnTo);
+        // Forward highlightWorkOrderId/highlightWorkDetailId so the vessel
+        // work-orders page (if that's where we came from) re-expands and
+        // scrolls straight back to this exact work detail, instead of
+        // landing fully collapsed — or expanded but still buried in a long
+        // list (100+ details on one WO isn't unusual).
+        navigate(returnTo, {
+          state: {
+            highlightWorkOrderId: location.state?.highlightWorkOrderId,
+            highlightWorkDetailId: location.state?.highlightWorkDetailId,
+          },
+        });
       } else if (effectiveWorkDetailsId) {
         navigate(`/work-details/${effectiveWorkDetailsId}/progress`);
       } else {

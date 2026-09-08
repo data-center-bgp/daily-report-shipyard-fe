@@ -104,6 +104,12 @@ export default function VesselWorkOrders() {
   const [highlightedWorkOrderId, setHighlightedWorkOrderId] = useState<
     number | null
   >(null);
+  // Set (and scrolled to) when returning from Add Progress, so a work
+  // detail buried deep in a long list (100+ details isn't unusual) doesn't
+  // require scrolling all the way back down to find it again.
+  const [highlightedWorkDetailId, setHighlightedWorkDetailId] = useState<
+    number | null
+  >(null);
   const [expandedWorkOrders, setExpandedWorkOrders] = useState<Set<number>>(
     new Set(),
   );
@@ -466,12 +472,19 @@ export default function VesselWorkOrders() {
     }
   }, [fetchVesselWorkOrders, vesselId]);
 
-  // Arriving here from a work-order-number search elsewhere: expand and
-  // scroll to the specific work order that was searched for, then clear the
-  // nav state so a later refresh doesn't keep re-triggering it.
+  // Arriving here from a work-order-number search elsewhere, or back from
+  // Add Progress: expand and scroll to the specific work order (and, if
+  // returning from Add Progress, the specific work detail row within it —
+  // otherwise a WO with 100+ details still leaves the user scrolling to
+  // find the one they were just updating). Then clear the nav state so a
+  // later refresh doesn't keep re-triggering it.
   useEffect(() => {
-    const targetId = (location.state as { highlightWorkOrderId?: number })
-      ?.highlightWorkOrderId;
+    const state = location.state as {
+      highlightWorkOrderId?: number;
+      highlightWorkDetailId?: number;
+    } | null;
+    const targetId = state?.highlightWorkOrderId;
+    const targetDetailId = state?.highlightWorkDetailId;
     if (!targetId || workOrders.length === 0) return;
     const targetWo = workOrders.find((wo) => wo.id === targetId);
     if (!targetWo) return;
@@ -484,17 +497,25 @@ export default function VesselWorkOrders() {
 
     setExpandedWorkOrders((prev) => new Set(prev).add(targetId));
     setHighlightedWorkOrderId(targetId);
+    if (targetDetailId) setHighlightedWorkDetailId(targetDetailId);
 
+    // Clearing the nav state via a replace-navigate right away raced with
+    // the scroll below (it could land before the smooth-scroll animation
+    // finished and reset the position), so it now happens after the scroll
+    // is kicked off instead of in parallel with it.
     const timer = setTimeout(() => {
+      const elementId = targetDetailId
+        ? `work-detail-row-${targetDetailId}`
+        : `work-order-row-${targetId}`;
       document
-        .getElementById(`work-order-row-${targetId}`)
+        .getElementById(elementId)
         ?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 100);
 
-    navigate(location.pathname, {
-      replace: true,
-      state: { vesselName: (location.state as { vesselName?: string })?.vesselName },
-    });
+      navigate(location.pathname, {
+        replace: true,
+        state: { vesselName: (location.state as { vesselName?: string })?.vesselName },
+      });
+    }, 100);
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1399,7 +1420,12 @@ export default function VesselWorkOrders() {
                                   {visibleDetails.map((detail) => (
                                     <div
                                       key={detail.id}
-                                      className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow"
+                                      id={`work-detail-row-${detail.id}`}
+                                      className={`bg-white rounded-lg border p-4 hover:shadow-sm transition-shadow ${
+                                        highlightedWorkDetailId === detail.id
+                                          ? "border-yellow-400 ring-2 ring-inset ring-yellow-400 bg-yellow-50"
+                                          : "border-gray-200"
+                                      }`}
                                     >
                                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                                         <div className="lg:col-span-2">
@@ -1600,6 +1626,19 @@ export default function VesselWorkOrders() {
                                                 {
                                                   state: {
                                                     returnTo: `/vessel/${vesselId}/work-orders`,
+                                                    // Reused by the effect
+                                                    // below on the way back
+                                                    // so this work order
+                                                    // re-expands and scrolls
+                                                    // straight to this exact
+                                                    // work detail, instead of
+                                                    // the page landing fully
+                                                    // collapsed (or the WO
+                                                    // expanded but still
+                                                    // requiring a scroll
+                                                    // through a long list).
+                                                    highlightWorkOrderId: wo.id,
+                                                    highlightWorkDetailId: detail.id,
                                                   },
                                                 },
                                               )
