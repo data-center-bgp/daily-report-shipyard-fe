@@ -18,6 +18,7 @@ interface DayCell {
 }
 
 interface UserRow {
+  userId: number;
   name: string;
   total: number;
   days: Map<string, DayCell>;
@@ -101,7 +102,7 @@ const fetchDateRange = (offset: number) => {
 };
 
 export default function UserActivitySummary() {
-  const { canAccess } = useAuth();
+  const { canAccess, profile } = useAuth();
   // Master/Manager see every user's activity here (per the activity_logs RLS
   // policy); everyone else only gets their own row back, same scoping as
   // ActivityLogPage.tsx — but the section itself is no longer hidden from them.
@@ -120,10 +121,18 @@ export default function UserActivitySummary() {
   // anyone else, activity_logs RLS already limits results to their own row,
   // which is never one of INCLUDED_ROLES's concern to filter further).
   const [includedIds, setIncludedIds] = useState<Set<number>>(new Set());
-  // Every active user in INCLUDED_ROLES — seeded as a zero-activity row so
-  // someone who did nothing in the selected week still shows up, instead of
-  // silently disappearing from the table.
-  const [roster, setRoster] = useState<string[]>([]);
+  // Current display name for every profile id in INCLUDED_ROLES (including
+  // deactivated ones, so a log row from someone since deactivated still has
+  // a name to show). activity_logs.user_name is a snapshot taken at the
+  // time of the action — if a person is renamed mid-week, their older rows
+  // and newer rows carry different strings, which used to split one
+  // person's activity into two separate table rows. Grouping by user_id
+  // below and looking up the name here (always the current one) fixes that.
+  const [nameById, setNameById] = useState<Map<number, string>>(new Map());
+  // Active (non-deactivated) user ids in INCLUDED_ROLES — seeded as a
+  // zero-activity row so someone who did nothing in the selected week still
+  // shows up, instead of silently disappearing from the table.
+  const [activeIds, setActiveIds] = useState<number[]>([]);
   // Gates the logs fetch until the role lookup (if needed) has resolved, so
   // out-of-scope rows never flash in before being filtered out.
   const [rolesReady, setRolesReady] = useState(!seesEveryone);
@@ -148,7 +157,8 @@ export default function UserActivitySummary() {
             INCLUDED_ROLES.includes(p.role),
           );
           setIncludedIds(new Set(included.map((p) => p.id)));
-          setRoster(included.filter((p) => !p.deleted_at).map((p) => p.name));
+          setNameById(new Map(included.map((p) => [p.id, p.name])));
+          setActiveIds(included.filter((p) => !p.deleted_at).map((p) => p.id));
         }
         setRolesReady(true);
       });
@@ -193,14 +203,22 @@ export default function UserActivitySummary() {
   const { days, users, maxCell } = useMemo(() => {
     const dayList = buildDays(offset);
 
-    const byUser = new Map<string, Map<string, DayCell>>();
-    roster.forEach((name) => {
-      if (!byUser.has(name)) byUser.set(name, new Map());
+    // Grouped by user_id (stable) rather than the logged user_name (a
+    // snapshot that changes if the person is renamed), so one person's
+    // activity never splits into two rows within the same week.
+    const byUser = new Map<number, Map<string, DayCell>>();
+    // Fallback display name straight from the logs, for the rare case a
+    // row's user_id isn't in nameById (e.g. a role outside INCLUDED_ROLES
+    // slipping through, or the self-view path below).
+    const latestNameByUserId = new Map<number, string>();
+    activeIds.forEach((id) => {
+      if (!byUser.has(id)) byUser.set(id, new Map());
     });
     logs.forEach((log) => {
+      latestNameByUserId.set(log.user_id, log.user_name);
       const key = dayKey(log.created_at);
-      if (!byUser.has(log.user_name)) byUser.set(log.user_name, new Map());
-      const dayMap = byUser.get(log.user_name)!;
+      if (!byUser.has(log.user_id)) byUser.set(log.user_id, new Map());
+      const dayMap = byUser.get(log.user_id)!;
       if (!dayMap.has(key)) {
         dayMap.set(key, { total: 0, create: 0, update: 0, delete: 0 });
       }
@@ -209,9 +227,16 @@ export default function UserActivitySummary() {
       cell[log.action]++;
     });
 
+    const nameFor = (id: number) =>
+      nameById.get(id) ??
+      (profile?.id === id ? profile?.name : undefined) ??
+      latestNameByUserId.get(id) ??
+      "Unknown";
+
     const userList: UserRow[] = Array.from(byUser.entries())
-      .map(([name, dayMap]) => ({
-        name,
+      .map(([id, dayMap]) => ({
+        userId: id,
+        name: nameFor(id),
         days: dayMap,
         total: Array.from(dayMap.values()).reduce((s, c) => s + c.total, 0),
       }))
@@ -225,7 +250,7 @@ export default function UserActivitySummary() {
     );
 
     return { days: dayList, users: userList, maxCell: max };
-  }, [logs, offset, roster]);
+  }, [logs, offset, activeIds, nameById, profile]);
 
   const rangeLabel = useMemo(() => {
     const monday = selectedMonday(offset);
@@ -302,7 +327,7 @@ export default function UserActivitySummary() {
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.name} className="border-t border-gray-100">
+                <tr key={u.userId} className="border-t border-gray-100">
                   <td className="py-2 pr-4 font-medium text-gray-900 whitespace-nowrap sticky left-0 bg-white">
                     {u.name}
                   </td>
