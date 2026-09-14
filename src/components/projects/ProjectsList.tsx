@@ -55,6 +55,7 @@ export default function ProjectsList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   const navigate = useNavigate();
@@ -109,6 +110,9 @@ export default function ProjectsList() {
   }, [location, navigate]);
 
   const filteredProjects = projects.filter((p) => {
+    if (statusFilter && (p.readiness_form?.status || "NONE") !== statusFilter) {
+      return false;
+    }
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
     return (
@@ -190,7 +194,7 @@ export default function ProjectsList() {
       )}
 
       <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-6 py-4 border-b border-gray-200 space-y-3">
           <input
             type="text"
             placeholder="Search by project name, vessel, or company..."
@@ -198,6 +202,31 @@ export default function ProjectsList() {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full sm:w-96 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setStatusFilter("")}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                statusFilter === ""
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              All
+            </button>
+            {Object.entries(STATUS_BADGE).map(([key, { label }]) => (
+              <button
+                key={key}
+                onClick={() => setStatusFilter(key)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  statusFilter === key
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="p-6">
@@ -257,9 +286,11 @@ export default function ProjectsList() {
             <div className="text-center py-12">
               <FolderKanban className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-500 text-lg mb-2">
-                {searchTerm ? "No projects match your search" : "No projects yet"}
+                {searchTerm || statusFilter
+                  ? "No projects match your filters"
+                  : "No projects yet"}
               </p>
-              {!searchTerm && !isOperationsReadOnly && (
+              {!searchTerm && !statusFilter && !isOperationsReadOnly && (
                 <button
                   onClick={() => navigate("/projects/add")}
                   className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"
