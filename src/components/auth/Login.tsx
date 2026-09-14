@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { Navigate } from "react-router-dom";
 import { Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { motion } from "motion/react";
+import Iridescence from "./Iridescence";
+import BlurText from "./BlurText";
 
 function ShipyardIllustration() {
   return (
@@ -118,10 +121,16 @@ export default function Login() {
   return (
     <div className="min-h-screen w-full flex bg-slate-50">
       {/* Left — brand / illustration panel */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950">
-        <div className="absolute -top-24 -left-24 w-96 h-96 bg-blue-500/25 rounded-full blur-3xl" />
-        <div className="absolute bottom-10 -right-16 w-80 h-80 bg-indigo-400/20 rounded-full blur-3xl" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.08)_1px,transparent_0)] bg-[size:28px_28px]" />
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-blue-950">
+        <div className="absolute inset-0">
+          <Iridescence
+            color={[0.15, 0.25, 0.6]}
+            speed={0.8}
+            amplitude={0.1}
+            mouseReact={false}
+          />
+        </div>
+        <div className="absolute inset-0 bg-gradient-to-b from-blue-950/50 via-blue-950/10 to-blue-950/60" />
 
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           <div className="flex items-center gap-3">
@@ -141,15 +150,20 @@ export default function Login() {
           </div>
 
           <div className="max-w-md">
-            <h1 className="text-4xl font-bold text-white leading-tight mb-4">
-              Keeping every vessel
-              <br />
-              on schedule.
-            </h1>
-            <p className="text-blue-200/80 text-lg">
+            <BlurText
+              text="Keeping every vessel on schedule."
+              className="text-4xl font-bold text-white leading-tight mb-4"
+              delay={80}
+            />
+            <motion.p
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.9, duration: 0.6 }}
+              className="text-blue-200/80 text-lg"
+            >
               Track work orders, verify progress, and manage handovers — all
               in one place.
-            </p>
+            </motion.p>
           </div>
 
           <div className="h-48 -mx-12 -mb-12">
@@ -160,7 +174,12 @@ export default function Login() {
 
       {/* Right — login form */}
       <div className="flex-1 flex items-center justify-center p-6 sm:p-12">
-        <div className="w-full max-w-md">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="w-full max-w-md"
+        >
           <div className="lg:hidden flex flex-col items-center text-center mb-8">
             <img
               src="/bgp-icon.jpg"
@@ -275,7 +294,7 @@ export default function Login() {
           <p className="mt-10 text-center text-slate-400 text-xs">
             © 2026 Daily Report Shipyard. All rights reserved.
           </p>
-        </div>
+        </motion.div>
       </div>
     </div>
   );
