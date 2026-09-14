@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Filter, X } from "lucide-react";
 import {
   useDashboardData,
   type VesselSummary,
 } from "../../hooks/useDashboardData";
 import UserActivitySummary from "./UserActivitySummary";
+import SearchableSelect from "../common/SearchableSelect";
 
 // Fixed-order categorical hues (slots 1-3 of the validated 8-hue set) — used
 // for nominal breakdowns where the categories don't have an inherent order.
@@ -19,9 +21,34 @@ const PIPELINE_RAMP = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281"];
 const pct = (part: number, total: number) =>
   total > 0 ? Math.round((part / total) * 100) : 0;
 
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
 export default function Dashboard() {
-  const { stats, vesselSummaries, loading, error, refetch } =
-    useDashboardData();
+  const {
+    stats,
+    vesselSummaries,
+    workOrderRecords,
+    workDetailRecords,
+    loading,
+    error,
+    refetch,
+  } = useDashboardData();
+  // 0 means "All" for both — matches SearchableSelect's own "cleared" value.
+  const [woVesselFilterId, setWoVesselFilterId] = useState<number>(0);
+  const [woMonthFilterId, setWoMonthFilterId] = useState<number>(0);
   const [vesselViewMode, setVesselViewMode] = useState<"grid" | "list">("grid");
   const [vesselFilter, setVesselFilter] = useState<
     "all" | "active" | "completed" | "alerts"
@@ -34,6 +61,162 @@ export default function Dashboard() {
   const [vesselsPerPage] = useState(12);
 
   const navigate = useNavigate();
+
+  // Distinct vessels present among work orders, alphabetical — the option
+  // list for the Work Orders vessel filter. `id` doubles as the value
+  // SearchableSelect reports (0 is reserved there for "cleared" / "All").
+  const woVesselOptions = useMemo(() => {
+    const byId = new Map<number, string>();
+    workOrderRecords.forEach((wo) => {
+      if (!byId.has(wo.vesselId)) byId.set(wo.vesselId, wo.vesselName);
+    });
+    return Array.from(byId.entries())
+      .map(([id, name]) => ({ id, label: name }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [workOrderRecords]);
+
+  // Distinct "YYYY-MM" months present among work orders' shipyard WO date,
+  // newest first. SearchableSelect needs a numeric id per option, so months
+  // get a synthetic 1-based id (0 stays reserved for "All").
+  const woMonthOptions = useMemo(() => {
+    const months = new Set<string>();
+    workOrderRecords.forEach((wo) => {
+      if (wo.shipyardWoDate) months.add(wo.shipyardWoDate.slice(0, 7));
+    });
+    return Array.from(months)
+      .sort((a, b) => b.localeCompare(a))
+      .map((month, index) => {
+        const [year, monthNum] = month.split("-");
+        return {
+          id: index + 1,
+          value: month,
+          label: `${MONTH_NAMES[Number(monthNum) - 1]} ${year}`,
+        };
+      });
+  }, [workOrderRecords]);
+
+  const woMonthFilterValue =
+    woMonthOptions.find((m) => m.id === woMonthFilterId)?.value ?? null;
+
+  const filteredWorkOrderRecords = useMemo(() => {
+    return workOrderRecords.filter((wo) => {
+      if (woVesselFilterId !== 0 && wo.vesselId !== woVesselFilterId) {
+        return false;
+      }
+      if (
+        woMonthFilterValue &&
+        wo.shipyardWoDate?.slice(0, 7) !== woMonthFilterValue
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [workOrderRecords, woVesselFilterId, woMonthFilterValue]);
+
+  // Re-derives the "work order" slice of DashboardStats from the filtered
+  // records. Vessel Projects and Vessel Summary keep showing unfiltered
+  // totals — only the sections driven by work orders/work details
+  // (Work Orders, Work Detail Progress, BASTP Pipeline, Invoiced) filter.
+  const filteredWorkOrderStats = useMemo(() => {
+    const inProgress = filteredWorkOrderRecords.filter(
+      (wo) => wo.status !== "completed",
+    );
+    const completed = filteredWorkOrderRecords.filter(
+      (wo) => wo.status === "completed",
+    );
+    const countCategory = (
+      list: typeof filteredWorkOrderRecords,
+      category: "DOCKING" | "REPAIR",
+    ) => list.filter((wo) => wo.category === category).length;
+
+    return {
+      totalWorkOrders: filteredWorkOrderRecords.length,
+      workOrdersInProgressTotal: inProgress.length,
+      workOrdersInProgressDocking: countCategory(inProgress, "DOCKING"),
+      workOrdersInProgressRepair: countCategory(inProgress, "REPAIR"),
+      workOrdersCompletedTotal: completed.length,
+      workOrdersCompletedDocking: countCategory(completed, "DOCKING"),
+      workOrdersCompletedRepair: countCategory(completed, "REPAIR"),
+      workOrdersOriginal: filteredWorkOrderRecords.filter(
+        (wo) => !wo.isAdditional,
+      ).length,
+      workOrdersAdditional: filteredWorkOrderRecords.filter(
+        (wo) => wo.isAdditional,
+      ).length,
+    };
+  }, [filteredWorkOrderRecords]);
+
+  // Same vessel/month filter, applied at the work-detail level — drives
+  // Work Detail Progress, BASTP Pipeline, and Invoiced Work Details.
+  const filteredWorkDetailRecords = useMemo(() => {
+    return workDetailRecords.filter((wd) => {
+      if (woVesselFilterId !== 0 && wd.vesselId !== woVesselFilterId) {
+        return false;
+      }
+      if (
+        woMonthFilterValue &&
+        wd.shipyardWoDate?.slice(0, 7) !== woMonthFilterValue
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [workDetailRecords, woVesselFilterId, woMonthFilterValue]);
+
+  const filteredWorkDetailStats = useMemo(() => {
+    const notInvoiced = filteredWorkDetailRecords.filter(
+      (wd) => wd.bastpStatus !== "INVOICED",
+    );
+    const invoicedPaid = filteredWorkDetailRecords.filter(
+      (wd) => wd.bastpStatus === "INVOICED" && wd.isPaid,
+    );
+    const invoicedUnpaid = filteredWorkDetailRecords.filter(
+      (wd) => wd.bastpStatus === "INVOICED" && !wd.isPaid,
+    );
+
+    return {
+      totalWorkDetails: filteredWorkDetailRecords.length,
+      workDetailsCompleted: filteredWorkDetailRecords.filter(
+        (wd) => wd.isCompleted,
+      ).length,
+      workDetailsInProgress: filteredWorkDetailRecords.filter(
+        (wd) => wd.isInProgress,
+      ).length,
+      workDetailsNoProgress: filteredWorkDetailRecords.filter(
+        (wd) => wd.isNoProgress,
+      ).length,
+      workDetailsMissedDeadline: filteredWorkDetailRecords.filter(
+        (wd) => wd.isMissedDeadline,
+      ).length,
+      workDetailsOnTimeOrEarly: filteredWorkDetailRecords.filter(
+        (wd) => wd.isOnTimeOrEarly,
+      ).length,
+      workDetailsNotInBastp: notInvoiced.filter((wd) => wd.bastpStatus === null)
+        .length,
+      workDetailsBastpDraft: notInvoiced.filter(
+        (wd) => wd.bastpStatus === "DRAFT",
+      ).length,
+      workDetailsBastpVerified: notInvoiced.filter(
+        (wd) => wd.bastpStatus === "VERIFIED",
+      ).length,
+      workDetailsBastpReadyForInvoice: notInvoiced.filter(
+        (wd) => wd.bastpStatus === "READY_FOR_INVOICE",
+      ).length,
+      workDetailsInvoicedPaid: invoicedPaid.length,
+      workDetailsInvoicedUnpaid: invoicedUnpaid.length,
+      workDetailsInvoicedPaidValue: invoicedPaid.reduce(
+        (sum, wd) => sum + wd.invoicedValue,
+        0,
+      ),
+      workDetailsInvoicedUnpaidValue: invoicedUnpaid.reduce(
+        (sum, wd) => sum + wd.invoicedValue,
+        0,
+      ),
+    };
+  }, [filteredWorkDetailRecords]);
+
+  const isWorkOrderFilterActive =
+    woVesselFilterId !== 0 || woMonthFilterId !== 0;
 
   const filteredVessels = useMemo(() => {
     let filtered = vesselSummaries;
@@ -458,30 +641,83 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Vessel/month filter — drives Work Orders, Work Detail Progress,
+             BASTP Pipeline, and Invoiced Work Details below. Pulled out as
+             its own prominent panel since it now spans several sections,
+             not just the one it happens to sit above. */}
+      <div
+        className={`mb-8 rounded-lg shadow p-4 border-2 transition-colors ${
+          isWorkOrderFilterActive
+            ? "bg-blue-50 border-blue-300"
+            : "bg-white border-gray-200"
+        }`}
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-gray-700 font-semibold text-sm shrink-0">
+            <Filter className="w-4 h-4 text-blue-600" />
+            Filter Work Orders &amp; Progress
+          </div>
+          <SearchableSelect
+            value={woVesselFilterId}
+            onChange={setWoVesselFilterId}
+            options={woVesselOptions}
+            placeholder="All Vessels"
+            className="w-full sm:w-56"
+          />
+          <SearchableSelect
+            value={woMonthFilterId}
+            onChange={setWoMonthFilterId}
+            options={woMonthOptions}
+            placeholder="All Months"
+            className="w-full sm:w-48"
+          />
+          {isWorkOrderFilterActive && (
+            <button
+              onClick={() => {
+                setWoVesselFilterId(0);
+                setWoMonthFilterId(0);
+              }}
+              className="flex items-center gap-1 text-sm text-blue-700 hover:text-blue-900 font-medium sm:ml-auto"
+            >
+              <X className="w-3.5 h-3.5" />
+              Clear filter
+            </button>
+          )}
+        </div>
+        {isWorkOrderFilterActive && (
+          <p className="text-xs text-blue-700/80 mt-2">
+            Applied to Work Orders, Work Detail Progress, BASTP Pipeline, and
+            Invoiced Work Details below.
+          </p>
+        )}
+      </div>
+
       {/* 1b. Individual work orders — separate from the project rollup above,
              since a project can still be "in progress" overall while some of
              its own work orders are already done. */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          Work Orders ({stats.totalWorkOrders} total)
+          Work Orders ({filteredWorkOrderStats.totalWorkOrders}
+          {isWorkOrderFilterActive ? ` of ${stats.totalWorkOrders}` : ""}{" "}
+          total)
         </h2>
         <p className="text-sm font-medium text-gray-500 mb-2">In Progress</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <StatCard
             label="All Work Types"
-            value={stats.workOrdersInProgressTotal}
+            value={filteredWorkOrderStats.workOrdersInProgressTotal}
             color="text-blue-600"
             borderColor="border-blue-500"
           />
           <StatCard
             label="Docking Work"
-            value={stats.workOrdersInProgressDocking}
+            value={filteredWorkOrderStats.workOrdersInProgressDocking}
             color="text-indigo-600"
             borderColor="border-indigo-500"
           />
           <StatCard
             label="Repair Work"
-            value={stats.workOrdersInProgressRepair}
+            value={filteredWorkOrderStats.workOrdersInProgressRepair}
             color="text-teal-600"
             borderColor="border-teal-500"
           />
@@ -490,19 +726,19 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <StatCard
             label="All Work Types"
-            value={stats.workOrdersCompletedTotal}
+            value={filteredWorkOrderStats.workOrdersCompletedTotal}
             color="text-green-600"
             borderColor="border-green-500"
           />
           <StatCard
             label="Docking Work"
-            value={stats.workOrdersCompletedDocking}
+            value={filteredWorkOrderStats.workOrdersCompletedDocking}
             color="text-green-600"
             borderColor="border-green-500"
           />
           <StatCard
             label="Repair Work"
-            value={stats.workOrdersCompletedRepair}
+            value={filteredWorkOrderStats.workOrdersCompletedRepair}
             color="text-green-600"
             borderColor="border-green-500"
           />
@@ -512,36 +748,43 @@ export default function Dashboard() {
       {/* 3 & 7. Work detail progress */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          Work Detail Progress ({stats.totalWorkDetails} total)
+          Work Detail Progress ({filteredWorkDetailStats.totalWorkDetails}
+          {isWorkOrderFilterActive ? ` of ${stats.totalWorkDetails}` : ""}{" "}
+          total)
+          {isWorkOrderFilterActive && (
+            <span className="ml-2 text-sm font-normal text-gray-400">
+              (filtered)
+            </span>
+          )}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
           <StatCard
             label="Completed"
-            value={stats.workDetailsCompleted}
+            value={filteredWorkDetailStats.workDetailsCompleted}
             color="text-green-600"
             borderColor="border-green-500"
           />
           <StatCard
             label="In Progress"
-            value={stats.workDetailsInProgress}
+            value={filteredWorkDetailStats.workDetailsInProgress}
             color="text-blue-600"
             borderColor="border-blue-500"
           />
           <StatCard
             label="No Progress At All"
-            value={stats.workDetailsNoProgress}
+            value={filteredWorkDetailStats.workDetailsNoProgress}
             color="text-gray-600"
             borderColor="border-gray-400"
           />
           <StatCard
             label="Missed Deadline"
-            value={stats.workDetailsMissedDeadline}
+            value={filteredWorkDetailStats.workDetailsMissedDeadline}
             color="text-red-600"
             borderColor="border-red-500"
           />
           <StatCard
             label="On Time / Early"
-            value={stats.workDetailsOnTimeOrEarly}
+            value={filteredWorkDetailStats.workDetailsOnTimeOrEarly}
             color="text-emerald-600"
             borderColor="border-emerald-500"
           />
@@ -549,21 +792,21 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <DonutChart
             title="Progress State"
-            subtitle={`Share of all ${stats.totalWorkDetails.toLocaleString()} work details`}
+            subtitle={`Share of all ${filteredWorkDetailStats.totalWorkDetails.toLocaleString()} work details`}
             segments={[
               {
                 label: "Completed",
-                value: stats.workDetailsCompleted,
+                value: filteredWorkDetailStats.workDetailsCompleted,
                 color: CATEGORICAL.blue,
               },
               {
                 label: "In Progress",
-                value: stats.workDetailsInProgress,
+                value: filteredWorkDetailStats.workDetailsInProgress,
                 color: CATEGORICAL.orange,
               },
               {
                 label: "No Progress",
-                value: stats.workDetailsNoProgress,
+                value: filteredWorkDetailStats.workDetailsNoProgress,
                 color: CATEGORICAL.aqua,
               },
             ]}
@@ -571,17 +814,18 @@ export default function Dashboard() {
           <StackedBar
             title="Deadline Performance"
             subtitle={`Of ${(
-              stats.workDetailsMissedDeadline + stats.workDetailsOnTimeOrEarly
+              filteredWorkDetailStats.workDetailsMissedDeadline +
+              filteredWorkDetailStats.workDetailsOnTimeOrEarly
             ).toLocaleString()} work details with a judged deadline`}
             segments={[
               {
                 label: "On Time / Early",
-                value: stats.workDetailsOnTimeOrEarly,
+                value: filteredWorkDetailStats.workDetailsOnTimeOrEarly,
                 color: STATUS.good,
               },
               {
                 label: "Missed Deadline",
-                value: stats.workDetailsMissedDeadline,
+                value: filteredWorkDetailStats.workDetailsMissedDeadline,
                 color: STATUS.critical,
               },
             ]}
@@ -593,51 +837,58 @@ export default function Dashboard() {
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
           BASTP Pipeline
+          {isWorkOrderFilterActive && (
+            <span className="ml-2 text-sm font-normal text-gray-400">
+              (filtered)
+            </span>
+          )}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <StatCard
             label="Not Made Into BASTP Yet"
-            value={stats.workDetailsNotInBastp}
+            value={filteredWorkDetailStats.workDetailsNotInBastp}
             color="text-gray-600"
             borderColor="border-gray-400"
             percentOf={{
-              total: stats.totalWorkDetails,
+              total: filteredWorkDetailStats.totalWorkDetails,
               ofLabel: "work details",
             }}
           />
           <StatCard
             label="In BASTP — Awaiting Verification"
-            value={stats.workDetailsBastpDraft}
+            value={filteredWorkDetailStats.workDetailsBastpDraft}
             color="text-orange-600"
             borderColor="border-orange-500"
             percentOf={{
-              total: stats.totalWorkDetails,
+              total: filteredWorkDetailStats.totalWorkDetails,
               ofLabel: "work details",
             }}
           />
           <StatCard
             label="Ready For Invoice"
-            value={stats.workDetailsBastpReadyForInvoice}
+            value={filteredWorkDetailStats.workDetailsBastpReadyForInvoice}
             color="text-purple-600"
             borderColor="border-purple-500"
             percentOf={{
-              total: stats.totalWorkDetails,
+              total: filteredWorkDetailStats.totalWorkDetails,
               ofLabel: "work details",
             }}
           />
         </div>
         <ComparisonBars
           title="Not Made Into BASTP vs Already Made Into BASTP"
-          subtitle={`Of ${stats.totalWorkDetails.toLocaleString()} work details`}
+          subtitle={`Of ${filteredWorkDetailStats.totalWorkDetails.toLocaleString()} work details`}
           segments={[
             {
               label: "Not Made Into BASTP",
-              value: stats.workDetailsNotInBastp,
+              value: filteredWorkDetailStats.workDetailsNotInBastp,
               color: CATEGORICAL.orange,
             },
             {
               label: "Already Made Into BASTP",
-              value: stats.totalWorkDetails - stats.workDetailsNotInBastp,
+              value:
+                filteredWorkDetailStats.totalWorkDetails -
+                filteredWorkDetailStats.workDetailsNotInBastp,
               color: CATEGORICAL.blue,
             },
           ]}
@@ -648,27 +899,34 @@ export default function Dashboard() {
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
           Invoiced Work Details
+          {isWorkOrderFilterActive && (
+            <span className="ml-2 text-sm font-normal text-gray-400">
+              (filtered)
+            </span>
+          )}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <StatCard
             label="Paid"
-            value={stats.workDetailsInvoicedPaid}
+            value={filteredWorkDetailStats.workDetailsInvoicedPaid}
             color="text-green-600"
             borderColor="border-green-500"
             percentOf={{
               total:
-                stats.workDetailsInvoicedPaid + stats.workDetailsInvoicedUnpaid,
+                filteredWorkDetailStats.workDetailsInvoicedPaid +
+                filteredWorkDetailStats.workDetailsInvoicedUnpaid,
               ofLabel: "invoiced work details",
             }}
           />
           <StatCard
             label="Unpaid"
-            value={stats.workDetailsInvoicedUnpaid}
+            value={filteredWorkDetailStats.workDetailsInvoicedUnpaid}
             color="text-red-600"
             borderColor="border-red-500"
             percentOf={{
               total:
-                stats.workDetailsInvoicedPaid + stats.workDetailsInvoicedUnpaid,
+                filteredWorkDetailStats.workDetailsInvoicedPaid +
+                filteredWorkDetailStats.workDetailsInvoicedUnpaid,
               ofLabel: "invoiced work details",
             }}
           />
@@ -676,28 +934,28 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <StackedBar
             title="BASTP Pipeline Stage"
-            subtitle={`Every one of ${stats.totalWorkDetails.toLocaleString()} work details, from not-yet-BASTP to invoiced`}
+            subtitle={`Every one of ${filteredWorkDetailStats.totalWorkDetails.toLocaleString()} work details, from not-yet-BASTP to invoiced`}
             segments={[
               {
                 label: "Not in BASTP",
-                value: stats.workDetailsNotInBastp,
+                value: filteredWorkDetailStats.workDetailsNotInBastp,
                 color: PIPELINE_RAMP[0],
               },
               {
                 label: "Awaiting Verification",
-                value: stats.workDetailsBastpDraft,
+                value: filteredWorkDetailStats.workDetailsBastpDraft,
                 color: PIPELINE_RAMP[1],
               },
               {
                 label: "Ready For Invoice",
-                value: stats.workDetailsBastpReadyForInvoice,
+                value: filteredWorkDetailStats.workDetailsBastpReadyForInvoice,
                 color: PIPELINE_RAMP[3],
               },
               {
                 label: "Invoiced",
                 value:
-                  stats.workDetailsInvoicedPaid +
-                  stats.workDetailsInvoicedUnpaid,
+                  filteredWorkDetailStats.workDetailsInvoicedPaid +
+                  filteredWorkDetailStats.workDetailsInvoicedUnpaid,
                 color: PIPELINE_RAMP[4],
               },
             ]}
@@ -705,17 +963,18 @@ export default function Dashboard() {
           <ComparisonBars
             title="Invoiced — Paid vs Unpaid"
             subtitle={`Of ${(
-              stats.workDetailsInvoicedPaid + stats.workDetailsInvoicedUnpaid
+              filteredWorkDetailStats.workDetailsInvoicedPaid +
+              filteredWorkDetailStats.workDetailsInvoicedUnpaid
             ).toLocaleString()} invoiced work details`}
             segments={[
               {
                 label: "Paid",
-                value: stats.workDetailsInvoicedPaid,
+                value: filteredWorkDetailStats.workDetailsInvoicedPaid,
                 color: STATUS.good,
               },
               {
                 label: "Unpaid",
-                value: stats.workDetailsInvoicedUnpaid,
+                value: filteredWorkDetailStats.workDetailsInvoicedUnpaid,
                 color: STATUS.warning,
               },
             ]}
@@ -729,12 +988,12 @@ export default function Dashboard() {
             segments={[
               {
                 label: "Paid",
-                value: stats.workDetailsInvoicedPaidValue,
+                value: filteredWorkDetailStats.workDetailsInvoicedPaidValue,
                 color: STATUS.good,
               },
               {
                 label: "Unpaid",
-                value: stats.workDetailsInvoicedUnpaidValue,
+                value: filteredWorkDetailStats.workDetailsInvoicedUnpaidValue,
                 color: STATUS.warning,
               },
             ]}
@@ -745,43 +1004,50 @@ export default function Dashboard() {
       {/* 8. Work order composition */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          Work Orders ({stats.totalWorkOrders} total)
+          Work Orders ({filteredWorkOrderStats.totalWorkOrders}
+          {isWorkOrderFilterActive ? ` of ${stats.totalWorkOrders}` : ""}{" "}
+          total)
+          {isWorkOrderFilterActive && (
+            <span className="ml-2 text-sm font-normal text-gray-400">
+              (filtered)
+            </span>
+          )}
         </h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="grid grid-cols-2 gap-6">
             <StatCard
               label="Original"
-              value={stats.workOrdersOriginal}
+              value={filteredWorkOrderStats.workOrdersOriginal}
               color="text-blue-600"
               borderColor="border-blue-500"
               percentOf={{
-                total: stats.totalWorkOrders,
+                total: filteredWorkOrderStats.totalWorkOrders,
                 ofLabel: "work orders",
               }}
             />
             <StatCard
               label="Additional"
-              value={stats.workOrdersAdditional}
+              value={filteredWorkOrderStats.workOrdersAdditional}
               color="text-purple-600"
               borderColor="border-purple-500"
               percentOf={{
-                total: stats.totalWorkOrders,
+                total: filteredWorkOrderStats.totalWorkOrders,
                 ofLabel: "work orders",
               }}
             />
           </div>
           <StackedBar
             title="Original vs Additional"
-            subtitle={`Share of all ${stats.totalWorkOrders.toLocaleString()} work orders`}
+            subtitle={`Share of all ${filteredWorkOrderStats.totalWorkOrders.toLocaleString()} work orders`}
             segments={[
               {
                 label: "Original",
-                value: stats.workOrdersOriginal,
+                value: filteredWorkOrderStats.workOrdersOriginal,
                 color: CATEGORICAL.blue,
               },
               {
                 label: "Additional",
-                value: stats.workOrdersAdditional,
+                value: filteredWorkOrderStats.workOrdersAdditional,
                 color: CATEGORICAL.orange,
               },
             ]}

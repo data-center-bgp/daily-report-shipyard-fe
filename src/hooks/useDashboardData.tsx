@@ -56,6 +56,7 @@ interface RawWorkOrder {
   work_type: string | null;
   shipyard_wo_number: string | null;
   customer_wo_number: string | null;
+  shipyard_wo_date: string | null;
   vessel: { id: number; name: string; type: string; company: string } | null;
   work_details: RawWorkDetail[];
 }
@@ -119,6 +120,39 @@ export interface DashboardStats {
 
   totalWorkDetails: number;
   totalWorkOrders: number;
+}
+
+// Lightweight per-work-order record — enough for the Dashboard's Work
+// Orders section to re-derive its own counts under a vessel/month filter
+// without re-fetching (the aggregated DashboardStats below are always
+// unfiltered, and stay that way for every other consumer of this hook).
+export interface WorkOrderRecord {
+  id: number;
+  vesselId: number;
+  vesselName: string;
+  category: WorkTypeCategory;
+  status: WorkOrderStatus;
+  isAdditional: boolean;
+  shipyardWoDate: string | null;
+}
+
+// Lightweight per-work-detail record — same idea as WorkOrderRecord, but for
+// the Work Detail Progress / BASTP Pipeline / Invoiced Work Details
+// sections, which need to filter and recount at the work-detail level
+// rather than the work-order level. Vessel and date are inherited from the
+// parent work order, since a work detail has neither of its own.
+export interface WorkDetailRecord {
+  id: number;
+  vesselId: number;
+  shipyardWoDate: string | null;
+  isCompleted: boolean;
+  isNoProgress: boolean;
+  isInProgress: boolean;
+  isMissedDeadline: boolean;
+  isOnTimeOrEarly: boolean;
+  bastpStatus: BastpStatus | null;
+  isPaid: boolean | null;
+  invoicedValue: number;
 }
 
 export interface VesselSummary {
@@ -204,6 +238,12 @@ function useDashboardDataQuery() {
   const [stats, setStats] = useState<DashboardStats>(emptyStats);
   const [alerts, setAlerts] = useState<DashboardAlert[]>([]);
   const [vesselSummaries, setVesselSummaries] = useState<VesselSummary[]>([]);
+  const [workOrderRecords, setWorkOrderRecords] = useState<WorkOrderRecord[]>(
+    [],
+  );
+  const [workDetailRecords, setWorkDetailRecords] = useState<
+    WorkDetailRecord[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -223,6 +263,7 @@ function useDashboardDataQuery() {
           work_type,
           shipyard_wo_number,
           customer_wo_number,
+          shipyard_wo_date,
           vessel:vessel_id ( id, name, type, company ),
           work_details (
             id,
@@ -245,6 +286,8 @@ function useDashboardDataQuery() {
 
       const newStats: DashboardStats = { ...emptyStats };
       const newAlerts: DashboardAlert[] = [];
+      const newWorkOrderRecords: WorkOrderRecord[] = [];
+      const newWorkDetailRecords: WorkDetailRecord[] = [];
       const vesselAccumulators = new Map<
         number,
         {
@@ -331,8 +374,8 @@ function useDashboardDataQuery() {
               (i) => i.invoice_details,
             );
             const isPaid = invoiceLink?.invoice_details?.payment_status ?? null;
+            const invoicedValue = invoiceLink?.payment_price ?? 0;
             if (bastpStatus === "INVOICED") {
-              const invoicedValue = invoiceLink?.payment_price ?? 0;
               if (isPaid) {
                 newStats.workDetailsInvoicedPaid++;
                 newStats.workDetailsInvoicedPaidValue += invoicedValue;
@@ -341,6 +384,20 @@ function useDashboardDataQuery() {
                 newStats.workDetailsInvoicedUnpaidValue += invoicedValue;
               }
             }
+
+            newWorkDetailRecords.push({
+              id: d.id,
+              vesselId: wo.vessel_id,
+              shipyardWoDate: wo.shipyard_wo_date,
+              isCompleted,
+              isNoProgress,
+              isInProgress,
+              isMissedDeadline,
+              isOnTimeOrEarly,
+              bastpStatus,
+              isPaid,
+              invoicedValue,
+            });
 
             if (isMissedDeadline) {
               newAlerts.push({
@@ -439,6 +496,16 @@ function useDashboardDataQuery() {
           hasOverdue,
           readyForInvoiceCount,
           lastActivity,
+        });
+
+        newWorkOrderRecords.push({
+          id: wo.id,
+          vesselId: wo.vessel_id,
+          vesselName: wo.vessel.name,
+          category,
+          status,
+          isAdditional: !!wo.is_additional_wo,
+          shipyardWoDate: wo.shipyard_wo_date,
         });
 
         if (wo.project_id != null) {
@@ -550,6 +617,8 @@ function useDashboardDataQuery() {
       setStats(newStats);
       setAlerts(newAlerts);
       setVesselSummaries(newVesselSummaries);
+      setWorkOrderRecords(newWorkOrderRecords);
+      setWorkDetailRecords(newWorkDetailRecords);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -565,6 +634,8 @@ function useDashboardDataQuery() {
     stats,
     alerts,
     vesselSummaries,
+    workOrderRecords,
+    workDetailRecords,
     loading,
     error,
     refetch: fetchDashboardData,
