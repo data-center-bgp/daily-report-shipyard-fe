@@ -18,11 +18,16 @@ import {
   FileCheck,
   FileText,
   Calendar,
+  ClipboardList,
 } from "lucide-react";
+import CompletedWorkDetails from "./CompletedWorkDetails";
+
+type PageTab = "records" | "completedWork";
 
 export default function BASTP() {
   const navigate = useNavigate();
   const { isBastpReadOnly } = useAuth();
+  const [pageTab, setPageTab] = useState<PageTab>("records");
   const [bastps, setBastps] = useState<BASTPWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -324,6 +329,36 @@ export default function BASTP() {
         </div>
       )}
 
+      {/* Tabs */}
+      <div className="border-b border-gray-200">
+        <nav className="flex gap-6">
+          <button
+            onClick={() => setPageTab("records")}
+            className={`flex items-center gap-2 pb-3 border-b-2 text-sm font-medium transition-colors ${
+              pageTab === "records"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <FileText className="w-4 h-4" /> BASTP Records
+          </button>
+          <button
+            onClick={() => setPageTab("completedWork")}
+            className={`flex items-center gap-2 pb-3 border-b-2 text-sm font-medium transition-colors ${
+              pageTab === "completedWork"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <ClipboardList className="w-4 h-4" /> Completed Work Details
+          </button>
+        </nav>
+      </div>
+
+      {pageTab === "completedWork" && <CompletedWorkDetails />}
+
+      {pageTab === "records" && (
+        <>
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="bg-white p-4 rounded-lg shadow border-l-4 border-gray-500">
@@ -528,6 +563,8 @@ export default function BASTP() {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }
