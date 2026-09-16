@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Plus, Search, Loader2, XCircle, X } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import { supabase } from "../../lib/supabase";
-import Pagination, { PAGE_SIZE } from "./Pagination";
+import Pagination, { PAGE_SIZE } from "../common/Pagination";
 
 interface VesselRow {
   id: number;

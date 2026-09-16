@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import SearchableSelect from "../common/SearchableSelect";
+import Pagination from "../common/Pagination";
 import {
   Search,
   CheckCircle2,
@@ -46,6 +47,8 @@ const MONTH_NAMES = [
 
 type BastpFilter = "ALL" | "IN_BASTP" | "NOT_IN_BASTP";
 
+const PAGE_SIZE = 25;
+
 export default function CompletedWorkDetails() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<CompletedWorkDetailRow[]>([]);
@@ -56,6 +59,7 @@ export default function CompletedWorkDetails() {
   const [vesselFilterId, setVesselFilterId] = useState(0);
   const [monthFilterId, setMonthFilterId] = useState(0);
   const [bastpFilter, setBastpFilter] = useState<BastpFilter>("ALL");
+  const [page, setPage] = useState(1);
 
   const fetchCompletedWorkDetails = useCallback(async () => {
     try {
@@ -202,6 +206,20 @@ export default function CompletedWorkDetails() {
       r.customerWoNumber?.toLowerCase().includes(q)
     );
   });
+
+  // Any filter change can shrink the result set below the current page —
+  // reset to page 1 whenever the filters themselves change, not on every
+  // render (a page 1 -> effect -> page 1 loop would be harmless but wasteful).
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, vesselFilterId, monthFilterId, bastpFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedRows = filteredRows.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "-";
@@ -355,7 +373,7 @@ export default function CompletedWorkDetails() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredRows.map((wd) => (
+                {paginatedRows.map((wd) => (
                   <tr key={wd.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <div className="text-sm font-medium text-gray-900 max-w-xs">
@@ -409,6 +427,13 @@ export default function CompletedWorkDetails() {
           </div>
         )}
       </div>
+
+      <Pagination
+        page={currentPage}
+        totalItems={filteredRows.length}
+        onPageChange={setPage}
+        pageSize={PAGE_SIZE}
+      />
     </div>
   );
 }

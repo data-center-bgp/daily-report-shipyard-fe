@@ -1,24 +1,27 @@
 export const PAGE_SIZE = 10;
 
-// Shared by every Master Data tab (Vessels, Locations, Work Scopes) — all
-// paginate the same client-side-filtered list the same way.
+// Shared by every client-side-filtered list that paginates the same way —
+// Master Data (Vessels, Locations, Work Scopes) at the default PAGE_SIZE,
+// and any denser table that passes its own pageSize.
 export default function Pagination({
   page,
   totalItems,
   onPageChange,
+  pageSize = PAGE_SIZE,
 }: {
   page: number;
   totalItems: number;
   onPageChange: (page: number) => void;
+  pageSize?: number;
 }) {
-  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+  const totalPages = Math.ceil(totalItems / pageSize);
   if (totalPages <= 1) return null;
 
   return (
     <div className="mt-4 flex items-center justify-between">
       <div className="text-sm text-gray-600">
-        Showing {(page - 1) * PAGE_SIZE + 1} to{" "}
-        {Math.min(page * PAGE_SIZE, totalItems)} of {totalItems}
+        Showing {(page - 1) * pageSize + 1} to{" "}
+        {Math.min(page * pageSize, totalItems)} of {totalItems}
       </div>
 
       <div className="flex items-center gap-2">
