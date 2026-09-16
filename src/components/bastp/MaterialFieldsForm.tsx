@@ -190,8 +190,10 @@ export default function MaterialFieldsForm({
       )}
 
       {/* Material Density Type — only relevant when the calculation uses a
-          density factor (Dimensional / Circular). */}
-      {(values.calc_mode === "DIMENSIONAL" || values.calc_mode === "CIRCULAR") && (
+          density factor (Dimensional / Circular / Repair). */}
+      {(values.calc_mode === "DIMENSIONAL" ||
+        values.calc_mode === "CIRCULAR" ||
+        values.calc_mode === "REPAIR") && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Material Density Type
@@ -331,7 +333,7 @@ export default function MaterialFieldsForm({
         </div>
       )}
 
-      {values.calc_mode === "DIMENSIONAL" && (
+      {(values.calc_mode === "DIMENSIONAL" || values.calc_mode === "REPAIR") && (
         <div>
           <div className="text-xs text-gray-500 mb-1">
             Dimensions in <span className="font-medium">mm</span> (auto-converted
@@ -434,8 +436,34 @@ export default function MaterialFieldsForm({
         </div>
       )}
 
-      {/* Density (separate row, different unit) — Dimensional/Circular only */}
-      {(values.calc_mode === "DIMENSIONAL" || values.calc_mode === "CIRCULAR") && (
+      {values.calc_mode === "PIPE_LENGTH" && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Length (mm) <span className="text-red-600">*</span>
+          </label>
+          <input
+            type="number"
+            step="0.0001"
+            value={values.length || ""}
+            onChange={(e) =>
+              onFieldChange("length", parseFloat(e.target.value) || 0)
+            }
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="0"
+            min="0"
+          />
+          <p className="text-xs text-gray-400 mt-1">
+            Under 1000mm bills per piece (pcs); 1000mm and above bills per
+            meter (m).
+          </p>
+        </div>
+      )}
+
+      {/* Density (separate row, different unit) — Dimensional/Circular/Repair
+          only */}
+      {(values.calc_mode === "DIMENSIONAL" ||
+        values.calc_mode === "CIRCULAR" ||
+        values.calc_mode === "REPAIR") && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Density (kg/m³)

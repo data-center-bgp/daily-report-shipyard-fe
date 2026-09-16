@@ -639,6 +639,13 @@ export default function MaterialControl({
       if (fields.amount <= 0) {
         return `${label}: Amount must be greater than 0`;
       }
+    } else if (fields.calc_mode === "PIPE_LENGTH") {
+      if (fields.length <= 0) {
+        return `${label}: Length is required`;
+      }
+      if (fields.amount <= 0) {
+        return `${label}: Amount must be greater than 0`;
+      }
     } else if (fields.amount <= 0) {
       return `${label}: Amount must be greater than 0`;
     }

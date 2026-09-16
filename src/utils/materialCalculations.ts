@@ -15,6 +15,10 @@ const DIM_FACTOR = 0.001;
 // piece count the user entered instead.
 const WEIGHT_THRESHOLD_KG = 10;
 
+// PIPE_LENGTH only: below this, a pipe is short enough to just count by the
+// piece; at or above it, it's billed by the meter instead.
+const PIPE_LENGTH_THRESHOLD_MM = 1000;
+
 export interface CalcModeOption {
   value: CalcMode;
   label: string;
@@ -43,6 +47,18 @@ export const CALC_MODE_OPTIONS: CalcModeOption[] = [
     value: "COUNT",
     label: "Count",
     description: "Amount only, in Ls or pcs — no dimensions involved.",
+  },
+  {
+    value: "PIPE_LENGTH",
+    label: "Pipe Length",
+    description:
+      "Length × Amount. Billed per piece (pcs) under 1 meter, per meter (m) at 1 meter or above.",
+  },
+  {
+    value: "REPAIR",
+    label: "Repair",
+    description:
+      "Length × Width × (Thickness, optional) × Density × Amount, same as Dimensional, but always billed in Ls — a repair is a service, priced by the job done rather than by material weight.",
   },
 ];
 
@@ -99,6 +115,22 @@ export function calcCountTotal(amount: number): number {
   return amount > 0 ? amount : 0;
 }
 
+// PIPE_LENGTH: unlike the other length-bearing modes, the unit itself
+// depends on the length, not on a computed weight — short offcuts are
+// counted by the piece, long stock is billed by the meter run (length x
+// amount, same "multiply identical batched rows" convention as
+// Dimensional/Circular).
+function calcPipeLengthTotal(
+  length: number,
+  amount: number,
+): { total: number; uom: string } {
+  const a = amount > 0 ? amount : 0;
+  if (length >= PIPE_LENGTH_THRESHOLD_MM) {
+    return { total: (length * DIM_FACTOR) * a, uom: "m" };
+  }
+  return { total: a, uom: "pcs" };
+}
+
 // DIMENSIONAL/CIRCULAR only: pick the computed weight once it clears the
 // threshold, otherwise fall back to the manually-entered amount in pcs.
 function resolveWeightBasedTotal(
@@ -151,7 +183,10 @@ export function formatMaterialDimensionDisplay(
     }
     case "COUNT":
       return `Ukuran: ${mc.amount} ${mc.uom}`;
+    case "PIPE_LENGTH":
+      return `Ukuran: ${mc.length ?? 0} mm x ${mc.amount} ${mc.uom}`;
     case "DIMENSIONAL":
+    case "REPAIR":
     default: {
       const dims = [mc.length, mc.width, mc.thickness].filter(
         (v) => v != null && v > 0,
@@ -184,6 +219,19 @@ export function calcTotalForMode(
       );
     case "COUNT":
       return { total: calcCountTotal(inputs.amount), uom: null };
+    case "PIPE_LENGTH":
+      return calcPipeLengthTotal(inputs.length, inputs.amount);
+    case "REPAIR":
+      return {
+        total: calcDimensionalTotal(
+          inputs.length,
+          inputs.width,
+          inputs.thickness,
+          inputs.density,
+          inputs.amount,
+        ),
+        uom: "Ls",
+      };
     case "DIMENSIONAL":
     default:
       return resolveWeightBasedTotal(

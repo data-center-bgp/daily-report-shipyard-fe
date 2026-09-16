@@ -1,6 +1,12 @@
 // Calculation formula used to derive a material_control row's total_amount.
 // See src/utils/materialCalculations.ts for the actual formulas.
-export type CalcMode = "AREA" | "DIMENSIONAL" | "CIRCULAR" | "COUNT";
+export type CalcMode =
+  | "AREA"
+  | "DIMENSIONAL"
+  | "CIRCULAR"
+  | "COUNT"
+  | "PIPE_LENGTH"
+  | "REPAIR";
 
 // Material density lookup table
 export interface MaterialDensity {
