@@ -62,61 +62,72 @@ export default function CompletedWorkDetails() {
       setLoading(true);
       setError(null);
 
+      // Queried from work_order (a few hundred rows) rather than work_details
+      // directly (thousands of rows) — Supabase/PostgREST caps a single
+      // request at 1000 rows, and a work_details-rooted query would silently
+      // truncate well before covering every vessel. Matches the same shape
+      // useDashboardData.tsx uses for exactly this reason.
       const { data, error: fetchError } = await supabase
-        .from("work_details")
+        .from("work_order")
         .select(
           `
-          id,
-          description,
-          quantity,
-          uom,
-          work_order!inner (
-            shipyard_wo_number,
-            customer_wo_number,
-            vessel:vessel_id!inner ( id, name, company )
-          ),
-          work_progress ( progress_percentage, report_date, created_at ),
-          bastp_work_details ( id, deleted_at, bastp:bastp_id ( id, number, status ) )
+          vessel:vessel_id ( id, name, company ),
+          shipyard_wo_number,
+          customer_wo_number,
+          work_details (
+            id,
+            description,
+            quantity,
+            uom,
+            cancelled_at,
+            work_progress ( progress_percentage, report_date, created_at ),
+            bastp_work_details ( id, deleted_at, bastp:bastp_id ( id, number, status ) )
+          )
         `,
         )
-        .is("deleted_at", null)
-        .is("cancelled_at", null);
+        .is("deleted_at", null);
 
       if (fetchError) throw fetchError;
 
-      const completed: CompletedWorkDetailRow[] = (data || [])
-        .map((wd: any) => {
-          const progressRecords: {
-            progress_percentage: number;
-            report_date: string;
-            created_at: string;
-          }[] = wd.work_progress || [];
-          const latest = getLatestProgressRecord(progressRecords);
-          const progress = latest?.progress_percentage ?? 0;
-          const bastpLink = (wd.bastp_work_details || []).find(
-            (bwd: any) => !bwd.deleted_at,
-          );
+      const completed: CompletedWorkDetailRow[] = [];
 
-          return {
-            id: wd.id,
-            description: wd.description,
-            quantity: wd.quantity,
-            uom: wd.uom,
-            vesselId: wd.work_order?.vessel?.id,
-            vesselName: wd.work_order?.vessel?.name ?? "Unknown",
-            vesselCompany: wd.work_order?.vessel?.company ?? "",
-            shipyardWoNumber: wd.work_order?.shipyard_wo_number ?? null,
-            customerWoNumber: wd.work_order?.customer_wo_number ?? null,
-            completedOn: latest?.report_date ?? null,
-            inBastp: !!bastpLink,
-            bastpId: bastpLink?.bastp?.id ?? null,
-            bastpNumber: bastpLink?.bastp?.number ?? null,
-            bastpStatus: bastpLink?.bastp?.status ?? null,
-            _progress: progress,
-          };
-        })
-        .filter((wd: any) => wd._progress === 100 && wd.vesselId)
-        .map(({ _progress, ...wd }: any) => wd);
+      (data || []).forEach((wo: any) => {
+        if (!wo.vessel) return;
+
+        (wo.work_details || [])
+          .filter((wd: any) => !wd.cancelled_at)
+          .forEach((wd: any) => {
+            const progressRecords: {
+              progress_percentage: number;
+              report_date: string;
+              created_at: string;
+            }[] = wd.work_progress || [];
+            const latest = getLatestProgressRecord(progressRecords);
+            const progress = latest?.progress_percentage ?? 0;
+            if (progress !== 100) return;
+
+            const bastpLink = (wd.bastp_work_details || []).find(
+              (bwd: any) => !bwd.deleted_at,
+            );
+
+            completed.push({
+              id: wd.id,
+              description: wd.description,
+              quantity: wd.quantity,
+              uom: wd.uom,
+              vesselId: wo.vessel.id,
+              vesselName: wo.vessel.name ?? "Unknown",
+              vesselCompany: wo.vessel.company ?? "",
+              shipyardWoNumber: wo.shipyard_wo_number ?? null,
+              customerWoNumber: wo.customer_wo_number ?? null,
+              completedOn: latest?.report_date ?? null,
+              inBastp: !!bastpLink,
+              bastpId: bastpLink?.bastp?.id ?? null,
+              bastpNumber: bastpLink?.bastp?.number ?? null,
+              bastpStatus: bastpLink?.bastp?.status ?? null,
+            });
+          });
+      });
 
       setRows(completed);
     } catch (err) {
