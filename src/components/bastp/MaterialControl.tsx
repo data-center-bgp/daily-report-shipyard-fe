@@ -119,6 +119,17 @@ export default function MaterialControl({
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const formRef = useRef<HTMLDivElement>(null);
+
+  // The Add/Edit form renders above the materials table — for a work detail
+  // with many materials already listed, opening it (Add, or Edit on a row
+  // further down) would otherwise appear off the top of the viewport with
+  // no indication to scroll up and find it.
+  useEffect(() => {
+    if (showForm) {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [showForm]);
 
   // Multiple material entries for batch addition
   const [materialEntries, setMaterialEntries] = useState<MaterialEntry[]>([]);
@@ -1013,7 +1024,10 @@ export default function MaterialControl({
 
       {/* Add/Edit Form */}
       {showForm && canEditMaterials && (
-        <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+        <div
+          ref={formRef}
+          className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm"
+        >
           <div className="flex items-center justify-between mb-4">
             <h4 className="text-md font-semibold text-gray-900">
               {editingId ? "Edit Material" : "Add Materials"}

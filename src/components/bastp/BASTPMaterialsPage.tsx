@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import MaterialControl from "./MaterialControl";
@@ -41,6 +41,19 @@ export default function BASTPMaterialsPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedWorkDetail, setSelectedWorkDetail] =
     useState<WorkDetail | null>(null);
+  const materialControlRef = useRef<HTMLDivElement>(null);
+
+  // The Material Control panel renders above the (often long) Work Details
+  // table — picking "Manage" on a row further down would otherwise open the
+  // panel off the top of the viewport with no cue to scroll back up to it.
+  useEffect(() => {
+    if (selectedWorkDetail) {
+      materialControlRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [selectedWorkDetail?.id]);
 
   // Once a BASTP is ready for (or already) invoicing, its materials are
   // financially committed and shouldn't change anymore.
@@ -267,7 +280,10 @@ export default function BASTPMaterialsPage() {
 
       {/* Material Control for Selected Work Detail */}
       {selectedWorkDetail && (
-        <div className="bg-white border-2 border-blue-300 rounded-lg p-6 shadow-lg">
+        <div
+          ref={materialControlRef}
+          className="bg-white border-2 border-blue-300 rounded-lg p-6 shadow-lg"
+        >
           <MaterialControl
             bastpId={parseInt(bastpId!)}
             workDetailsId={selectedWorkDetail.id}
