@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import MaterialControl from "./MaterialControl";
@@ -177,6 +177,25 @@ export default function BASTPMaterialsPage() {
     }
   };
 
+  // Work details still waiting on their materials float to the top — they're
+  // the only ones holding the BASTP back from going ready-for-invoice, and on
+  // a BASTP with dozens of items the last few are otherwise scattered through
+  // an otherwise-finished list. Sort is stable, so each group keeps its
+  // original order.
+  const sortedWorkDetails = useMemo(
+    () =>
+      [...workDetails].sort(
+        (a, b) =>
+          Number(a.materials_status === "SUBMITTED") -
+          Number(b.materials_status === "SUBMITTED"),
+      ),
+    [workDetails],
+  );
+
+  const pendingCount = workDetails.filter(
+    (wd) => wd.materials_status !== "SUBMITTED",
+  ).length;
+
   const handleManageMaterials = (workDetail: WorkDetail) => {
     setSelectedWorkDetail(workDetail);
   };
@@ -312,6 +331,8 @@ export default function BASTPMaterialsPage() {
             </h2>
             <p className="text-sm text-gray-600 mt-1">
               Select a work detail to manage materials
+              {pendingCount > 0 &&
+                ` — ${pendingCount} still awaiting submission, listed first`}
             </p>
           </div>
 
@@ -340,7 +361,7 @@ export default function BASTPMaterialsPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {workDetails.map((workDetail) => (
+                {sortedWorkDetails.map((workDetail) => (
                   <tr
                     key={workDetail.id}
                     className={`hover:bg-gray-50 transition-colors ${
