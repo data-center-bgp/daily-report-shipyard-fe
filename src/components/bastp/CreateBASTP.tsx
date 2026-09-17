@@ -978,36 +978,49 @@ export default function CreateBASTP() {
 
         if (bastpError) throw bastpError;
 
-        // Insert work details
-        const workDetailsToInsert = uniqueWorkDetailIds.map((id) => ({
-          bastp_id: bastpData.id,
-          work_details_id: id,
-        }));
-
-        const { error: workDetailsError } = await supabase
-          .from("bastp_work_details")
-          .insert(workDetailsToInsert);
-
-        if (workDetailsError) throw workDetailsError;
-
-        // Insert general services (required in create mode)
-        if (selectedServices.length > 0) {
-          const servicesToInsert = selectedServices.map((service) => ({
+        // The BASTP header is now committed on its own — if either insert
+        // below fails, roll it back rather than leaving an orphaned, empty
+        // BASTP under this document number (exactly what happened before
+        // bastp.number had a uniqueness constraint: a failed create left a
+        // phantom header behind, and each retry created another one).
+        // Nothing else can reference bastpData.id yet, so a hard delete is
+        // safe here — there's no history to preserve for a row that was
+        // never actually usable.
+        try {
+          // Insert work details
+          const workDetailsToInsert = uniqueWorkDetailIds.map((id) => ({
             bastp_id: bastpData.id,
-            service_type_id: service.service_type_id,
-            start_date: service.start_date,
-            close_date: service.close_date,
-            total_days: service.total_days,
-            unit_price: 0,
-            payment_price: 0,
-            remarks: service.remarks || null,
+            work_details_id: id,
           }));
 
-          const { error: servicesError } = await supabase
-            .from("general_services")
-            .insert(servicesToInsert);
+          const { error: workDetailsError } = await supabase
+            .from("bastp_work_details")
+            .insert(workDetailsToInsert);
 
-          if (servicesError) throw servicesError;
+          if (workDetailsError) throw workDetailsError;
+
+          // Insert general services (required in create mode)
+          if (selectedServices.length > 0) {
+            const servicesToInsert = selectedServices.map((service) => ({
+              bastp_id: bastpData.id,
+              service_type_id: service.service_type_id,
+              start_date: service.start_date,
+              close_date: service.close_date,
+              total_days: service.total_days,
+              unit_price: 0,
+              payment_price: 0,
+              remarks: service.remarks || null,
+            }));
+
+            const { error: servicesError } = await supabase
+              .from("general_services")
+              .insert(servicesToInsert);
+
+            if (servicesError) throw servicesError;
+          }
+        } catch (linkError) {
+          await supabase.from("bastp").delete().eq("id", bastpData.id);
+          throw linkError;
         }
 
         // Log the activity for create
@@ -1023,7 +1036,22 @@ export default function CreateBASTP() {
       }
     } catch (err) {
       console.error("Error saving BASTP:", err);
-      setError(err instanceof Error ? err.message : "Failed to save BASTP");
+      const isDuplicateNumber =
+        typeof err === "object" &&
+        err !== null &&
+        "code" in err &&
+        (err as { code?: string }).code === "23505" &&
+        "message" in err &&
+        String((err as { message?: string }).message).includes(
+          "bastp_unique_number_active",
+        );
+      setError(
+        isDuplicateNumber
+          ? `BASTP number "${formData.number}" is already in use — pick a different date or edit the number.`
+          : err instanceof Error
+            ? err.message
+            : "Failed to save BASTP",
+      );
     } finally {
       setSubmitting(false);
     }
