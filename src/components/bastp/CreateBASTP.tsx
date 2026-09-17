@@ -623,7 +623,15 @@ export default function CreateBASTP() {
 
   // Handle add work detail
   const handleAddWorkDetail = (workDetail: WorkDetailsWithProgress) => {
-    setSelectedWorkDetails((prev) => [...prev, workDetail]);
+    // Guard against the same work detail landing in the list twice — the
+    // available list is refetched asynchronously whenever the selection
+    // changes, so a stale copy can briefly still be clickable. A duplicate
+    // here becomes a duplicate bastp_work_details row, which then shows the
+    // work detail twice everywhere and makes it need submitting twice
+    // before the BASTP can go ready-for-invoice.
+    setSelectedWorkDetails((prev) =>
+      prev.some((wd) => wd.id === workDetail.id) ? prev : [...prev, workDetail],
+    );
     setAvailableWorkDetails((prev) =>
       prev.filter((wd) => wd.id !== workDetail.id),
     );
@@ -834,6 +842,14 @@ export default function CreateBASTP() {
 
       if (!userProfile) throw new Error("User profile not found");
 
+      // One bastp_work_details row per work detail, always — the table has a
+      // unique index on (bastp_id, work_details_id) for non-deleted rows, and
+      // a duplicate would otherwise double-list the item and require
+      // submitting its materials twice.
+      const uniqueWorkDetailIds = [
+        ...new Set(selectedWorkDetails.map((wd) => wd.id)),
+      ];
+
       if (isEditMode && bastpId) {
         // ========== UPDATE MODE ==========
         // If the work-detail composition changed, the BASTP needs to go
@@ -850,7 +866,7 @@ export default function CreateBASTP() {
             number: formData.number,
             date: formData.date,
             vessel_id: formData.vessel_id,
-            total_work_details: selectedWorkDetails.length,
+            total_work_details: uniqueWorkDetailIds.length,
             tanggal_sandar: formData.tanggal_sandar || null,
             tanggal_naik_docking: formData.tanggal_naik_docking || null,
             tanggal_turun_docking: formData.tanggal_turun_docking || null,
@@ -948,7 +964,7 @@ export default function CreateBASTP() {
             user_id: userProfile.id,
             status: "DRAFT",
             is_invoiced: false,
-            total_work_details: selectedWorkDetails.length,
+            total_work_details: uniqueWorkDetailIds.length,
             tanggal_sandar: formData.tanggal_sandar || null,
             tanggal_naik_docking: formData.tanggal_naik_docking || null,
             tanggal_turun_docking: formData.tanggal_turun_docking || null,
@@ -963,9 +979,9 @@ export default function CreateBASTP() {
         if (bastpError) throw bastpError;
 
         // Insert work details
-        const workDetailsToInsert = selectedWorkDetails.map((wd) => ({
+        const workDetailsToInsert = uniqueWorkDetailIds.map((id) => ({
           bastp_id: bastpData.id,
-          work_details_id: wd.id,
+          work_details_id: id,
         }));
 
         const { error: workDetailsError } = await supabase
