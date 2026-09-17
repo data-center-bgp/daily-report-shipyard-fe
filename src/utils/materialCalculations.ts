@@ -60,6 +60,12 @@ export const CALC_MODE_OPTIONS: CalcModeOption[] = [
     description:
       "Length × Width × (Thickness, optional) × Density × Amount, same as Dimensional, but always billed in Ls — a repair is a service, priced by the job done rather than by material weight.",
   },
+  {
+    value: "PEMBUBUTAN",
+    label: "Pembubutan",
+    description:
+      "Amount only, always billed in Ls — lathing/turning work priced by quantity of pieces machined.",
+  },
 ];
 
 // AREA and the weight-threshold modes (DIMENSIONAL/CIRCULAR) resolve their
@@ -182,6 +188,7 @@ export function formatMaterialDimensionDisplay(
       return `Ukuran: ⌀${dims[0] ?? 0} x ${dims[1] ?? 0} mm x ${mc.amount} ${mc.uom}`;
     }
     case "COUNT":
+    case "PEMBUBUTAN":
       return `Ukuran: ${mc.amount} ${mc.uom}`;
     case "PIPE_LENGTH":
       return `Ukuran: ${mc.length ?? 0} mm x ${mc.amount} ${mc.uom}`;
@@ -232,6 +239,8 @@ export function calcTotalForMode(
         ),
         uom: "Ls",
       };
+    case "PEMBUBUTAN":
+      return { total: calcCountTotal(inputs.amount), uom: "Ls" };
     case "DIMENSIONAL":
     default:
       return resolveWeightBasedTotal(

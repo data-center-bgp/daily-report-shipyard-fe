@@ -6,7 +6,8 @@ export type CalcMode =
   | "CIRCULAR"
   | "COUNT"
   | "PIPE_LENGTH"
-  | "REPAIR";
+  | "REPAIR"
+  | "PEMBUBUTAN";
 
 // Material density lookup table
 export interface MaterialDensity {
