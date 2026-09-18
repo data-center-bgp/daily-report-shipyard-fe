@@ -175,6 +175,7 @@ export default function ManageInvoice() {
             ),
             bastp_work_details (
               id,
+              deleted_at,
               work_details_id,
               work_details:work_details_id (
                 id,
@@ -240,6 +241,17 @@ export default function ManageInvoice() {
         .single();
 
       if (fetchError) throw fetchError;
+
+      // Soft-deleted duplicate bastp_work_details rows (from the dedupe
+      // migration, or leftover on BASTPs invoiced before it ran) must be
+      // excluded here too — otherwise the pricing table renders that work
+      // detail twice and its price gets doubled in the invoice total, same
+      // as the bug this caused on the BASTP page itself.
+      if (data.bastp?.bastp_work_details) {
+        data.bastp.bastp_work_details = data.bastp.bastp_work_details.filter(
+          (bwd: { deleted_at: string | null }) => !bwd.deleted_at,
+        );
+      }
 
       // Some BASTPs have leftover duplicate general_services rows for the
       // same service_type_id (pre-existing data issue) — without this, the
@@ -353,6 +365,7 @@ export default function ManageInvoice() {
         ),
         bastp_work_details (
           id,
+          deleted_at,
           work_details_id,
           work_details:work_details_id (
             id,
@@ -407,6 +420,14 @@ export default function ManageInvoice() {
         setError("This BASTP is not ready for invoicing");
         setLoading(false);
         return;
+      }
+
+      // Exclude soft-deleted duplicate bastp_work_details rows (see
+      // fetchExistingInvoice for why) before anything below counts them.
+      if (data.bastp_work_details) {
+        data.bastp_work_details = data.bastp_work_details.filter(
+          (bwd: { deleted_at: string | null }) => !bwd.deleted_at,
+        );
       }
 
       // Dedupe leftover duplicate general_services rows for the same
