@@ -703,7 +703,7 @@ export default function ManageInvoice() {
           description: `Updated invoice ${formData.invoice_number}`,
         });
 
-        setSuccess("✅ Invoice updated successfully!");
+        setSuccess("Invoice updated successfully!");
         setTimeout(() => navigate(`/invoices/${invoiceId}`), 1500);
       } else if (isCreateMode && bastpId) {
         // CREATE NEW INVOICE
@@ -810,7 +810,7 @@ export default function ManageInvoice() {
           description: `Created invoice ${invoiceData.invoice_number}`,
         });
 
-        setSuccess("✅ Invoice created successfully!");
+        setSuccess("Invoice created successfully!");
         setTimeout(() => navigate(`/invoices/${invoiceData.id}`), 1500);
       }
     } catch (err) {
@@ -1133,7 +1133,7 @@ export default function ManageInvoice() {
           <div className="flex items-center gap-2">
             {bastp?.storage_path ? (
               <>
-                <span className="text-green-600">✓</span>
+                <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
                 <span className="text-sm text-blue-800">
                   BASTP document uploaded on{" "}
                   {bastp.bastp_upload_date
@@ -1150,7 +1150,7 @@ export default function ManageInvoice() {
               </>
             ) : (
               <>
-                <span className="text-yellow-600">⚠️</span>
+                <AlertTriangle className="w-4 h-4 text-yellow-600 flex-shrink-0" />
                 <span className="text-sm text-blue-800">
                   No BASTP document uploaded yet
                 </span>
@@ -1160,7 +1160,7 @@ export default function ManageInvoice() {
           <div className="flex items-center gap-2">
             {bastp?.form_penawaran_storage_path ? (
               <>
-                <span className="text-green-600">✓</span>
+                <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
                 <span className="text-sm text-blue-800">
                   Form Penawaran uploaded on{" "}
                   {bastp.form_penawaran_uploaded_at
@@ -1176,7 +1176,7 @@ export default function ManageInvoice() {
               </>
             ) : (
               <>
-                <span className="text-yellow-600">⚠️</span>
+                <AlertTriangle className="w-4 h-4 text-yellow-600 flex-shrink-0" />
                 <span className="text-sm text-blue-800">
                   No Form Penawaran uploaded yet
                 </span>

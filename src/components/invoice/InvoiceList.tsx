@@ -10,6 +10,7 @@ import {
   Plus,
   ArrowRight,
   CheckCircle2,
+  Clock,
   X,
   Lock,
   ExternalLink,
@@ -532,13 +533,21 @@ export default function InvoiceList() {
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-2">
                             <span
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                 invoice.payment_status
                                   ? "bg-green-100 text-green-800"
                                   : "bg-red-100 text-red-800"
                               }`}
                             >
-                              {invoice.payment_status ? "✓ Paid" : "⏳ Unpaid"}
+                              {invoice.payment_status ? (
+                                <>
+                                  <CheckCircle2 className="w-3 h-3" /> Paid
+                                </>
+                              ) : (
+                                <>
+                                  <Clock className="w-3 h-3" /> Unpaid
+                                </>
+                              )}
                             </span>
                             {invoice.payment_date && (
                               <div className="text-xs text-gray-500">
