@@ -1,5 +1,6 @@
 import { forwardRef } from "react";
 import type { Invoice } from "../../types/invoiceTypes";
+import { formatMaterialDimensionDisplay } from "../../utils/materialCalculations";
 import { CheckCircle2 } from "lucide-react";
 
 interface InvoicePrintProps {
@@ -393,6 +394,26 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
                                     }
                                   </div>
                                 )}
+                                {(item.work_details?.material_control || [])
+                                  .filter((mc) => !mc.deleted_at)
+                                  .map((mc) => (
+                                    <div
+                                      key={mc.id}
+                                      className="text-gray-600 mt-0.5 pl-2"
+                                    >
+                                      -{" "}
+                                      {mc.material_list?.material ||
+                                        "Material"}
+                                      {mc.material_list?.specification
+                                        ? ` ${mc.material_list.specification}`
+                                        : ""}{" "}
+                                      <span className="italic">
+                                        ({formatMaterialDimensionDisplay(mc)})
+                                      </span>{" "}
+                                      — {mc.total_amount ?? mc.amount}{" "}
+                                      {mc.uom}
+                                    </div>
+                                  ))}
                               </td>
                               <td className="border border-gray-300 px-2 py-1">
                                 {item.work_details?.location?.location || "-"}

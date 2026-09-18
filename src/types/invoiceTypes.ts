@@ -1,4 +1,5 @@
 import type { GeneralService } from "./generalService.types";
+import type { MaterialControlWithDetails } from "./materialControl.types";
 
 export interface InvoiceWorkDetails {
   id: number;
@@ -31,6 +32,7 @@ export interface InvoiceWorkDetails {
       shipyard_wo_number?: string | null;
       customer_wo_number?: string | null;
     };
+    material_control?: MaterialControlWithDetails[];
   };
 }
 

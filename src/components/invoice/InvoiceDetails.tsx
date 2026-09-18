@@ -7,6 +7,7 @@ import InvoicePrint from "./InvoicePrint";
 import BastpPrintButton from "../bastp/BastpPrintButton";
 import { useAuth } from "../../hooks/useAuth";
 import { ActivityLogService } from "../../services/activityLogService";
+import { formatMaterialDimensionDisplay } from "../../utils/materialCalculations";
 import {
   ArrowLeft,
   FileText,
@@ -136,6 +137,28 @@ export default function InvoiceDetails() {
                 id,
                 shipyard_wo_number,
                 customer_wo_number
+              ),
+              material_control (
+                id,
+                material_id,
+                calc_mode,
+                length,
+                width,
+                thickness,
+                area,
+                layers,
+                diameter,
+                density,
+                amount,
+                total_amount,
+                uom,
+                deleted_at,
+                material_list:material_id (
+                  id,
+                  material,
+                  specification,
+                  category
+                )
               )
             )
           )
@@ -822,6 +845,37 @@ export default function InvoiceDetails() {
                               {item.work_details.pic}
                             </div>
                           )}
+                          {(() => {
+                            const materials = (
+                              item.work_details?.material_control || []
+                            ).filter((mc) => !mc.deleted_at);
+                            return (
+                              materials.length > 0 && (
+                                <div className="mt-1.5 space-y-1 border-l-2 border-blue-100 pl-2">
+                                  {materials.map((mc) => (
+                                    <div
+                                      key={mc.id}
+                                      className="text-xs text-gray-600"
+                                    >
+                                      {mc.material_list?.material ||
+                                        "Material"}
+                                      {mc.material_list?.specification
+                                        ? ` ${mc.material_list.specification}`
+                                        : ""}{" "}
+                                      <span className="italic text-gray-500">
+                                        ({formatMaterialDimensionDisplay(mc)})
+                                      </span>{" "}
+                                      —{" "}
+                                      <span className="font-medium">
+                                        {mc.total_amount ?? mc.amount}{" "}
+                                        {mc.uom}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )
+                            );
+                          })()}
                         </div>
                       </td>
                       <td className="px-4 py-4">
