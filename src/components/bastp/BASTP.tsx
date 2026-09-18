@@ -74,6 +74,7 @@ export default function BASTP() {
     ),
     bastp_work_details (
       id,
+      deleted_at,
       materials_status,
       work_details (
         id,
@@ -100,9 +101,17 @@ export default function BASTP() {
 
       if (fetchError) throw fetchError;
 
-      // Attach profiles from map
+      // Attach profiles from map, and drop soft-deleted bastp_work_details
+      // rows (e.g. a duplicate link removed by a data-cleanup pass) — left
+      // in, a stale DRAFT row from a since-removed duplicate would block the
+      // VERIFIED -> READY_FOR_INVOICE check below forever, since it has no
+      // way to ever become SUBMITTED again. Matches the same cleanup
+      // BASTPDetails.tsx already does for its own copy of this data.
       const bastpsWithProfiles = (data || []).map((bastp) => ({
         ...bastp,
+        bastp_work_details: (bastp.bastp_work_details || []).filter(
+          (bwd: { deleted_at: string | null }) => !bwd.deleted_at,
+        ),
         profiles: bastp.user_id ? profilesMap[bastp.user_id] : undefined,
       }));
 
