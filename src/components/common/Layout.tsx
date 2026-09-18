@@ -118,7 +118,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
   const [_user, setUser] = useState<any>(null);
   const location = useLocation();
   const navigate = useNavigate();
-  const { canAccess, profile } = useAuth();
+  const { canAccess, profile, canVerifyExternalVesselWork } = useAuth();
   const { alerts } = useDashboardData();
 
   useEffect(() => {
@@ -227,7 +227,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           current:
             location.pathname === "/work-verification" ||
             location.pathname.startsWith("/work-verification/"),
-          show: canAccess("verification"),
+          show: canAccess("verification") || canVerifyExternalVesselWork,
         },
       ],
     },

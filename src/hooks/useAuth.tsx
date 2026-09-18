@@ -56,6 +56,11 @@ interface AuthContextType {
   // ADMIN_SHIPPING only — can create Projects/Work Orders/Work Details but
   // never edit or delete one. Does not affect Add/Create visibility.
   isShippingCreateOnly: boolean;
+  // Hendra Muzaki (PPIC — acting as PPIC Manager) can review work verification
+  // for vessels outside our own fleet (vessel.fleet_number is null), since
+  // OP_HEAD's coverage doesn't extend to them. Scoped to this one person by
+  // id, not by role — PPIC otherwise has no verification access at all.
+  canVerifyExternalVesselWork: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -201,6 +206,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const SHIPPING_CREATE_ONLY_ENABLED = false;
   const isShippingCreateOnly =
     SHIPPING_CREATE_ONLY_ENABLED && profile?.role === "ADMIN_SHIPPING";
+
+  // See canVerifyExternalVesselWork above — matched on both id and
+  // auth_user_id so this doesn't silently transfer if id 63 is ever reused.
+  const EXTERNAL_VESSEL_VERIFIER_PROFILE_ID = 63;
+  const EXTERNAL_VESSEL_VERIFIER_AUTH_USER_ID =
+    "5d884b47-bb53-48ac-8d58-ee1d7f57451f";
+  const canVerifyExternalVesselWork =
+    profile?.id === EXTERNAL_VESSEL_VERIFIER_PROFILE_ID &&
+    profile?.auth_user_id === EXTERNAL_VESSEL_VERIFIER_AUTH_USER_ID;
 
   const fetchProfile = useCallback(
     async (userId: string, retryCount = 0): Promise<UserProfile | null> => {
@@ -423,6 +437,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isOperationsReadOnly,
         isBastpReadOnly,
         isShippingCreateOnly,
+        canVerifyExternalVesselWork,
       }}
     >
       {children}

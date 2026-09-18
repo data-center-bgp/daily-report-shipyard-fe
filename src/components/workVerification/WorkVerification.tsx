@@ -57,13 +57,21 @@ interface WorkDetailsWithProgress extends WorkDetails {
   latest_progress_date?: string;
   latest_progress_created_at?: string;
   work_order?: WorkOrder & {
-    vessel?: Vessel;
+    vessel?: Vessel & { fleet_number?: number | null };
     project?: ProjectOption;
   };
   location?: {
     id: number;
     location: string;
   };
+}
+
+// Outside our own fleet roster (see the useAuth fleet_number comment) — the
+// external-vessel verifier's whole scope is defined by this one check.
+function isExternalVessel(wd?: {
+  work_order?: { vessel?: { fleet_number?: number | null } };
+}): boolean {
+  return (wd?.work_order?.vessel?.fleet_number ?? null) === null;
 }
 
 interface VerificationWithDetails extends VerificationRecord {
@@ -108,8 +116,9 @@ interface BrowseState {
 export default function WorkVerification() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isReadOnly, canAccess } = useAuth();
-  const canReview = canAccess("verification") && !isReadOnly;
+  const { isReadOnly, canAccess, canVerifyExternalVesselWork } = useAuth();
+  const canReviewAll = canAccess("verification") && !isReadOnly;
+  const canReview = canReviewAll || canVerifyExternalVesselWork;
 
   const browseState = location.state?.browseState as
     | Partial<BrowseState>
@@ -321,7 +330,8 @@ export default function WorkVerification() {
               id,
               name,
               type,
-              company
+              company,
+              fleet_number
             ),
             project:project_id (
               id,
@@ -377,7 +387,12 @@ export default function WorkVerification() {
       const completed = workDetailsWithProgress.filter(
         (wd) => wd.current_progress === 100 && !wd.cancelled_at,
       );
-      setCompletedWorkDetails(completed);
+      // The external-vessel verifier only handles vessels outside our own
+      // fleet — scope their whole view down to that instead of showing the
+      // full internal-fleet queue they have no role-based access to.
+      setCompletedWorkDetails(
+        canReviewAll ? completed : completed.filter(isExternalVessel),
+      );
 
       const { data: verificationData, error: verError } = await supabase
         .from("work_verification")
@@ -400,7 +415,8 @@ export default function WorkVerification() {
                 id,
                 name,
                 type,
-                company
+                company,
+                fleet_number
               ),
               project:project_id (
                 id,
@@ -419,7 +435,13 @@ export default function WorkVerification() {
         .order("created_at", { ascending: false });
 
       if (verError) throw verError;
-      setVerifications((verificationData as unknown as VerificationWithDetails[]) || []);
+      const verificationsTyped =
+        (verificationData as unknown as VerificationWithDetails[]) || [];
+      setVerifications(
+        canReviewAll
+          ? verificationsTyped
+          : verificationsTyped.filter((v) => isExternalVessel(v.work_details)),
+      );
 
       // Real BASTP linkage lives in bastp_work_details — work_details'
       // own is_in_bastp/bastp_id columns are legacy and nothing writes to
@@ -471,14 +493,21 @@ export default function WorkVerification() {
         .order("name", { ascending: true });
 
       if (vesselError) throw vesselError;
-      setVessels(vesselData || []);
+      setVessels(
+        canReviewAll
+          ? vesselData || []
+          : (vesselData || []).filter(
+              (v: Vessel & { fleet_number?: number | null }) =>
+                v.fleet_number == null,
+            ),
+      );
     } catch (err) {
       console.error("Error fetching verification data:", err);
       setError(err instanceof Error ? err.message : "Failed to load data");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canReviewAll]);
 
   useEffect(() => {
     fetchData();

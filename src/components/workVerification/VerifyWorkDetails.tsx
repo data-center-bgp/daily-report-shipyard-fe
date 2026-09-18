@@ -41,7 +41,7 @@ interface WorkDetailsWithProgress extends WorkDetails {
   latest_progress_date?: string;
   latest_progress_created_at?: string;
   work_order?: WorkOrder & {
-    vessel?: Vessel;
+    vessel?: Vessel & { fleet_number?: number | null };
     customer_wo_date?: string;
   };
   location?: {
@@ -50,6 +50,13 @@ interface WorkDetailsWithProgress extends WorkDetails {
   };
   work_location: string;
   work_progress?: WorkProgressItem[];
+}
+
+// Outside our own fleet roster — matches the same check in WorkVerification.tsx.
+function isExternalVessel(wd?: {
+  work_order?: { vessel?: { fleet_number?: number | null } };
+}): boolean {
+  return (wd?.work_order?.vessel?.fleet_number ?? null) === null;
 }
 
 interface WorkProgressItem {
@@ -70,8 +77,9 @@ export default function VerifyWorkDetails() {
   const navigate = useNavigate();
   const location = useLocation();
   const { workDetailsId } = useParams<{ workDetailsId: string }>();
-  const { canAccess, isReadOnly } = useAuth();
-  const canReview = canAccess("verification") && !isReadOnly;
+  const { canAccess, isReadOnly, canVerifyExternalVesselWork } = useAuth();
+  const canReviewAll = canAccess("verification") && !isReadOnly;
+  const canReview = canReviewAll || canVerifyExternalVesselWork;
 
   // Carried over from the list page so we can put it back exactly how it was
   // — same tab, filters, expanded groups, and scroll position — regardless
@@ -92,7 +100,7 @@ export default function VerifyWorkDetails() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [blockedReason, setBlockedReason] = useState<
-    "approved" | "awaitingRework" | "cancelled" | null
+    "approved" | "awaitingRework" | "cancelled" | "notPermitted" | null
   >(null);
   const [verificationDate, setVerificationDate] = useState(
     new Date().toISOString().split("T")[0],
@@ -128,7 +136,8 @@ export default function VerifyWorkDetails() {
         id,
         name,
         type,
-        company
+        company,
+        fleet_number
       )
     ),
     location:location_id (
@@ -156,6 +165,20 @@ export default function VerifyWorkDetails() {
       if (wdError) throw wdError;
       if (!workDetailsData) {
         throw new Error("Work details not found");
+      }
+
+      // The external-vessel verifier can only act on vessels outside our
+      // own fleet — guard the direct URL, not just the list page's filter.
+      if (!canReviewAll && canVerifyExternalVesselWork) {
+        if (!isExternalVessel(workDetailsData)) {
+          setBlockedReason("notPermitted");
+          setWorkDetails({
+            ...workDetailsData,
+            current_progress: 0,
+          });
+          setLoading(false);
+          return;
+        }
       }
 
       if (workDetailsData.cancelled_at) {
@@ -232,7 +255,7 @@ export default function VerifyWorkDetails() {
     } finally {
       setLoading(false);
     }
-  }, [workDetailsId]);
+  }, [workDetailsId, canReviewAll, canVerifyExternalVesselWork]);
 
   useEffect(() => {
     if (workDetailsId) {
@@ -770,7 +793,28 @@ export default function VerifyWorkDetails() {
 
           {/* Sidebar - 1/3 */}
           <div className="lg:col-span-1">
-            {blockedReason === "cancelled" ? (
+            {blockedReason === "notPermitted" ? (
+              <div className="bg-white rounded-xl shadow-lg border border-slate-200/50 sticky top-24 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-gray-50">
+                  <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                    <Lock className="w-5 h-5 text-slate-500" /> Not Permitted
+                  </h3>
+                </div>
+                <div className="p-4 text-sm text-slate-600 space-y-3">
+                  <p>
+                    This work detail belongs to a vessel in our own fleet.
+                    Your account can only review work on vessels outside our
+                    fleet.
+                  </p>
+                  <button
+                    onClick={goBackToList}
+                    className="w-full px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all duration-200 text-sm font-medium"
+                  >
+                    Back to Verification List
+                  </button>
+                </div>
+              </div>
+            ) : blockedReason === "cancelled" ? (
               <div className="bg-white rounded-xl shadow-lg border border-slate-200/50 sticky top-24 overflow-hidden">
                 <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-gray-50">
                   <h3 className="font-semibold text-slate-800 flex items-center gap-2">
