@@ -147,6 +147,23 @@ export default function InvoiceDetails() {
 
       if (fetchError) throw fetchError;
 
+      // Some invoices already have duplicate invoice_work_details rows for
+      // the same work_details_id — saved before ManageInvoice started
+      // excluding soft-deleted bastp_work_details links — so the same work
+      // detail rendered (and was priced) twice. Keep the first occurrence
+      // here so this read-only view and the print view it feeds both show
+      // each item once, regardless of what's still sitting in the table.
+      if (data.invoice_work_details) {
+        const seenWorkDetailIds = new Set<number>();
+        data.invoice_work_details = data.invoice_work_details.filter(
+          (item: { work_details_id: number }) => {
+            if (seenWorkDetailIds.has(item.work_details_id)) return false;
+            seenWorkDetailIds.add(item.work_details_id);
+            return true;
+          },
+        );
+      }
+
       setInvoice(data);
 
       // Names come from the get_all_profiles RPC rather than an embedded
