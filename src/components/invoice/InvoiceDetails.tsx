@@ -781,14 +781,8 @@ export default function InvoiceDetails() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                       Location & Scope
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Schedule
-                    </th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                      Quantity
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                      UOM
+                      Qty
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       Unit Price
@@ -876,6 +870,26 @@ export default function InvoiceDetails() {
                               )
                             );
                           })()}
+                          {(item.work_details?.planned_start_date ||
+                            item.work_details?.target_close_date) && (
+                            <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                              <Calendar className="w-3 h-3 flex-shrink-0" />
+                              Planned:{" "}
+                              {formatDate(item.work_details.planned_start_date)}
+                              {" – "}
+                              {formatDate(item.work_details.target_close_date)}
+                            </div>
+                          )}
+                          {(item.work_details?.actual_start_date ||
+                            item.work_details?.actual_close_date) && (
+                            <div className="text-xs text-green-600 mt-0.5 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
+                              Actual:{" "}
+                              {formatDate(item.work_details.actual_start_date)}
+                              {" – "}
+                              {formatDate(item.work_details.actual_close_date)}
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-4">
@@ -892,66 +906,11 @@ export default function InvoiceDetails() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-4">
-                        <div className="text-xs space-y-1">
-                          {/* Planned Schedule */}
-                          {(item.work_details?.planned_start_date ||
-                            item.work_details?.target_close_date) && (
-                            <div className="text-gray-600">
-                              <div className="font-medium text-gray-700 mb-1 flex items-center gap-1">
-                                <Calendar className="w-3 h-3" /> Planned:
-                              </div>
-                              <div>
-                                Start:{" "}
-                                {formatDate(
-                                  item.work_details.planned_start_date,
-                                )}
-                              </div>
-                              <div>
-                                Target:{" "}
-                                {formatDate(
-                                  item.work_details.target_close_date,
-                                )}
-                              </div>
-                            </div>
-                          )}
-                          {/* Actual Schedule */}
-                          {(item.work_details?.actual_start_date ||
-                            item.work_details?.actual_close_date) && (
-                            <div className="text-green-600 mt-2">
-                              <div className="font-medium mb-1 flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3" /> Actual:
-                              </div>
-                              <div>
-                                Start:{" "}
-                                {formatDate(
-                                  item.work_details.actual_start_date,
-                                )}
-                              </div>
-                              <div>
-                                Close:{" "}
-                                {formatDate(
-                                  item.work_details.actual_close_date,
-                                )}
-                              </div>
-                            </div>
-                          )}
-                          {/* If no dates available */}
-                          {!item.work_details?.planned_start_date &&
-                            !item.work_details?.target_close_date &&
-                            !item.work_details?.actual_start_date &&
-                            !item.work_details?.actual_close_date && (
-                              <div className="text-gray-400 text-center">-</div>
-                            )}
-                        </div>
-                      </td>
                       <td className="px-4 py-4 text-center">
                         <div className="text-sm font-medium text-gray-900">
                           {item.work_details?.quantity}
                         </div>
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        <div className="text-sm text-gray-600">
+                        <div className="text-xs text-gray-500">
                           {item.work_details?.uom || "-"}
                         </div>
                       </td>
@@ -981,7 +940,7 @@ export default function InvoiceDetails() {
                 <tfoot className="bg-gray-50">
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={4}
                       className="px-4 py-4 text-right font-semibold text-gray-900"
                     >
                       Subtotal (Work Details):
