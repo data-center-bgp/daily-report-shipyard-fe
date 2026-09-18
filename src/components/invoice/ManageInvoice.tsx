@@ -6,7 +6,10 @@ import type { BASTPWithDetails } from "../../types/bastp.types";
 import type { Invoice } from "../../types/invoiceTypes";
 import { ActivityLogService } from "../../services/activityLogService";
 import { suggestInvoiceNumber } from "../../utils/invoiceNumbering";
-import { formatMaterialDimensionDisplay } from "../../utils/materialCalculations";
+import {
+  formatMaterialDimensionDisplay,
+  formatMaterialTotal,
+} from "../../utils/materialCalculations";
 import BastpPrintButton from "../bastp/BastpPrintButton";
 import {
   AlertTriangle,
@@ -1659,7 +1662,10 @@ export default function ManageInvoice() {
                                     </span>{" "}
                                     —{" "}
                                     <span className="font-medium">
-                                      {mc.total_amount ?? mc.amount} {mc.uom}
+                                      {formatMaterialTotal(
+                                        mc.total_amount ?? mc.amount,
+                                      )}{" "}
+                                      {mc.uom}
                                     </span>
                                   </div>
                                 ))}

@@ -160,6 +160,15 @@ export interface CalcFieldInputs {
   amount: number;
 }
 
+// total_amount is stored with up to 6 decimal places of floating-point
+// unit-conversion noise (e.g. 24.145919999999997) — round to 2 decimals for
+// display wherever a material's total is shown as plain text (the stored
+// value itself, and the more precise MaterialControl/BASTPDetails tables
+// which already format their own way, are untouched).
+export function formatMaterialTotal(value: number): string {
+  return (Math.round(value * 100) / 100).toString();
+}
+
 // Single entry point used by the material-entry form: computes the total
 // and, for modes with an auto-resolved unit, the uom to store alongside it.
 // COUNT returns uom: null since that choice stays with the user (Ls/pcs).

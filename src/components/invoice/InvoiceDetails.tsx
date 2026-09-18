@@ -7,7 +7,10 @@ import InvoicePrint from "./InvoicePrint";
 import BastpPrintButton from "../bastp/BastpPrintButton";
 import { useAuth } from "../../hooks/useAuth";
 import { ActivityLogService } from "../../services/activityLogService";
-import { formatMaterialDimensionDisplay } from "../../utils/materialCalculations";
+import {
+  formatMaterialDimensionDisplay,
+  formatMaterialTotal,
+} from "../../utils/materialCalculations";
 import {
   ArrowLeft,
   FileText,
@@ -861,7 +864,9 @@ export default function InvoiceDetails() {
                                       </span>{" "}
                                       —{" "}
                                       <span className="font-medium">
-                                        {mc.total_amount ?? mc.amount}{" "}
+                                        {formatMaterialTotal(
+                                          mc.total_amount ?? mc.amount,
+                                        )}{" "}
                                         {mc.uom}
                                       </span>
                                     </div>

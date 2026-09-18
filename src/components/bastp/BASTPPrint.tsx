@@ -1,6 +1,9 @@
 import { forwardRef, Fragment } from "react";
 import type { BASTPWithDetails } from "../../types/bastp.types";
-import { formatMaterialDimensionDisplay } from "../../utils/materialCalculations";
+import {
+  formatMaterialDimensionDisplay,
+  formatMaterialTotal,
+} from "../../utils/materialCalculations";
 
 interface BASTPPrintProps {
   bastp: BASTPWithDetails;
@@ -487,7 +490,10 @@ const BASTPPrint = forwardRef<HTMLDivElement, BASTPPrintProps>(
                                     </span>
                                   </td>
                                   <td className="border border-gray-400 px-2 py-1 text-center">
-                                    {mc.total_amount ?? mc.amount} {mc.uom}
+                                    {formatMaterialTotal(
+                                      mc.total_amount ?? mc.amount,
+                                    )}{" "}
+                                    {mc.uom}
                                   </td>
                                   <td className="border border-gray-400 px-2 py-1"></td>
                                 </tr>

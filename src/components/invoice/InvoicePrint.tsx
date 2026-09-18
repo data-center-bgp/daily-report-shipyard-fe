@@ -1,6 +1,9 @@
 import { forwardRef } from "react";
 import type { Invoice } from "../../types/invoiceTypes";
-import { formatMaterialDimensionDisplay } from "../../utils/materialCalculations";
+import {
+  formatMaterialDimensionDisplay,
+  formatMaterialTotal,
+} from "../../utils/materialCalculations";
 import { CheckCircle2 } from "lucide-react";
 
 interface InvoicePrintProps {
@@ -410,7 +413,10 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
                                       <span className="italic">
                                         ({formatMaterialDimensionDisplay(mc)})
                                       </span>{" "}
-                                      — {mc.total_amount ?? mc.amount}{" "}
+                                      —{" "}
+                                      {formatMaterialTotal(
+                                        mc.total_amount ?? mc.amount,
+                                      )}{" "}
                                       {mc.uom}
                                     </div>
                                   ))}
