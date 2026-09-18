@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   supabase,
   type WorkDetails,
@@ -68,9 +68,22 @@ interface WorkProgressItem {
 
 export default function VerifyWorkDetails() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { workDetailsId } = useParams<{ workDetailsId: string }>();
   const { canAccess, isReadOnly } = useAuth();
   const canReview = canAccess("verification") && !isReadOnly;
+
+  // Carried over from the list page so we can put it back exactly how it was
+  // — same tab, filters, expanded groups, and scroll position — regardless
+  // of whether the review was approved, rejected, or just cancelled.
+  const browseState = location.state?.browseState;
+  const goBackToList = useCallback(
+    () =>
+      navigate("/work-verification", {
+        state: browseState ? { browseState } : undefined,
+      }),
+    [navigate, browseState],
+  );
 
   const [workDetails, setWorkDetails] =
     useState<WorkDetailsWithProgress | null>(null);
@@ -314,6 +327,7 @@ export default function VerifyWorkDetails() {
 
       navigate("/work-verification", {
         state: {
+          browseState,
           successMessage: `${outcomeLine}\n\nWork: "${workDetails.description.substring(
             0,
             50,
@@ -398,7 +412,7 @@ export default function VerifyWorkDetails() {
             </p>
             <div className="flex gap-3">
               <button
-                onClick={() => navigate("/work-verification")}
+                onClick={goBackToList}
                 className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-2 rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 text-sm font-medium shadow-md"
               >
                 ← Back
@@ -423,7 +437,7 @@ export default function VerifyWorkDetails() {
           <span className="text-slate-400 text-4xl mb-4 block">📋</span>
           <p className="text-slate-500 text-lg mb-4">Work details not found</p>
           <button
-            onClick={() => navigate("/work-verification")}
+            onClick={goBackToList}
             className="text-blue-600 hover:text-blue-800 transition-colors font-medium"
           >
             ← Back to Verification List
@@ -441,7 +455,7 @@ export default function VerifyWorkDetails() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
               <button
-                onClick={() => navigate("/work-verification")}
+                onClick={goBackToList}
                 className="text-slate-400 hover:text-slate-600 transition-colors p-2 rounded-lg hover:bg-slate-100"
               >
                 <ArrowLeft className="w-5 h-5" />
@@ -769,7 +783,7 @@ export default function VerifyWorkDetails() {
                     needs review.
                   </p>
                   <button
-                    onClick={() => navigate("/work-verification")}
+                    onClick={goBackToList}
                     className="w-full px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all duration-200 text-sm font-medium"
                   >
                     Back to Verification List
@@ -790,7 +804,7 @@ export default function VerifyWorkDetails() {
                     for BASTP. No further action is needed here.
                   </p>
                   <button
-                    onClick={() => navigate("/work-verification")}
+                    onClick={goBackToList}
                     className="w-full px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all duration-200 text-sm font-medium"
                   >
                     Back to Verification List
@@ -811,7 +825,7 @@ export default function VerifyWorkDetails() {
                     queue automatically once a new progress report is logged.
                   </p>
                   <button
-                    onClick={() => navigate("/work-verification")}
+                    onClick={goBackToList}
                     className="w-full px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all duration-200 text-sm font-medium"
                   >
                     Back to Verification List
@@ -828,7 +842,7 @@ export default function VerifyWorkDetails() {
                 <div className="p-4 text-sm text-slate-600 space-y-3">
                   <p>You don't have permission to review work details.</p>
                   <button
-                    onClick={() => navigate("/work-verification")}
+                    onClick={goBackToList}
                     className="w-full px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all duration-200 text-sm font-medium"
                   >
                     Back to Verification List
@@ -919,7 +933,7 @@ export default function VerifyWorkDetails() {
                     </button>
 
                     <button
-                      onClick={() => navigate("/work-verification")}
+                      onClick={goBackToList}
                       disabled={submitting}
                       className="w-full px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-gradient-to-r hover:from-slate-50 hover:to-gray-50 transition-all duration-200 disabled:opacity-50 text-sm font-medium shadow-sm"
                     >

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   supabase,
   type WorkDetails,
@@ -90,10 +90,31 @@ interface BASTPs {
   };
 }
 
+// Everything needed to put the list page back exactly how it looked before
+// the user drilled into a single work detail to review it.
+interface BrowseState {
+  activeTab: "pending" | "pendingWithBastp" | "needsRework" | "verified";
+  searchTerm: string;
+  selectedVesselId: number;
+  selectedProjectId: number;
+  selectedWorkOrderId: number;
+  vesselSearchTerm: string;
+  projectSearchTerm: string;
+  workOrderSearchTerm: string;
+  expandedGroups: (number | "no-bastp")[];
+  scrollY: number;
+}
+
 export default function WorkVerification() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isReadOnly, canAccess } = useAuth();
   const canReview = canAccess("verification") && !isReadOnly;
+
+  const browseState = location.state?.browseState as
+    | Partial<BrowseState>
+    | undefined;
+  const pendingScrollYRef = useRef(browseState?.scrollY);
 
   const [completedWorkDetails, setCompletedWorkDetails] = useState<
     WorkDetailsWithProgress[]
@@ -109,33 +130,45 @@ export default function WorkVerification() {
   const [bastps, setBastps] = useState<BASTPs[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(browseState?.searchTerm ?? "");
   const [activeTab, setActiveTab] = useState<
     "pending" | "pendingWithBastp" | "needsRework" | "verified"
-  >("pending");
+  >(browseState?.activeTab ?? "pending");
 
   // Filter states
   const [vessels, setVessels] = useState<Vessel[]>([]);
-  const [selectedVesselId, setSelectedVesselId] = useState<number>(0);
-  const [selectedProjectId, setSelectedProjectId] = useState<number>(0);
-  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<number>(0);
+  const [selectedVesselId, setSelectedVesselId] = useState<number>(
+    browseState?.selectedVesselId ?? 0,
+  );
+  const [selectedProjectId, setSelectedProjectId] = useState<number>(
+    browseState?.selectedProjectId ?? 0,
+  );
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<number>(
+    browseState?.selectedWorkOrderId ?? 0,
+  );
 
   // Search dropdown states
-  const [vesselSearchTerm, setVesselSearchTerm] = useState("");
+  const [vesselSearchTerm, setVesselSearchTerm] = useState(
+    browseState?.vesselSearchTerm ?? "",
+  );
   const [showVesselDropdown, setShowVesselDropdown] = useState(false);
   const vesselDropdownRef = useRef<HTMLDivElement>(null);
 
-  const [projectSearchTerm, setProjectSearchTerm] = useState("");
+  const [projectSearchTerm, setProjectSearchTerm] = useState(
+    browseState?.projectSearchTerm ?? "",
+  );
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const projectDropdownRef = useRef<HTMLDivElement>(null);
 
-  const [workOrderSearchTerm, setWorkOrderSearchTerm] = useState("");
+  const [workOrderSearchTerm, setWorkOrderSearchTerm] = useState(
+    browseState?.workOrderSearchTerm ?? "",
+  );
   const [showWorkOrderDropdown, setShowWorkOrderDropdown] = useState(false);
   const workOrderDropdownRef = useRef<HTMLDivElement>(null);
 
   const [expandedGroups, setExpandedGroups] = useState<
     Set<number | "no-bastp">
-  >(new Set(["no-bastp"]));
+  >(new Set(browseState?.expandedGroups ?? ["no-bastp"]));
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -250,7 +283,21 @@ export default function WorkVerification() {
       alert("❌ You don't have permission to review work details.");
       return;
     }
-    navigate(`/work-verification/verify/${workDetailsId}`);
+    const browseStateToCarry: BrowseState = {
+      activeTab,
+      searchTerm,
+      selectedVesselId,
+      selectedProjectId,
+      selectedWorkOrderId,
+      vesselSearchTerm,
+      projectSearchTerm,
+      workOrderSearchTerm,
+      expandedGroups: Array.from(expandedGroups),
+      scrollY: window.scrollY,
+    };
+    navigate(`/work-verification/verify/${workDetailsId}`, {
+      state: { browseState: browseStateToCarry },
+    });
   };
 
   const fetchData = useCallback(async () => {
@@ -436,6 +483,15 @@ export default function WorkVerification() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Restore scroll position once, after the returning-from-review data has
+  // finished loading and the previously expanded groups are rendered again.
+  useEffect(() => {
+    if (!loading && pendingScrollYRef.current !== undefined) {
+      window.scrollTo({ top: pendingScrollYRef.current });
+      pendingScrollYRef.current = undefined;
+    }
+  }, [loading]);
 
   // Auto-approve completed work details the Operation Head hasn't reviewed
   // within 2 days, so they don't block BASTP/invoicing indefinitely. There's
