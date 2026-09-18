@@ -64,6 +64,8 @@ export interface Invoice {
     status: string;
     storage_path?: string | null;
     bastp_upload_date?: string | null;
+    form_penawaran_storage_path?: string | null;
+    form_penawaran_uploaded_at?: string | null;
     vessel?: {
       id: number;
       name: string;

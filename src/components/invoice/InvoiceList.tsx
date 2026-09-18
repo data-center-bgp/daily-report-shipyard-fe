@@ -42,6 +42,8 @@ export default function InvoiceList() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [currentBastpNumber, setCurrentBastpNumber] = useState<string>("");
   const [currentStoragePath, setCurrentStoragePath] = useState<string>("");
+  const [currentDocumentLabel, setCurrentDocumentLabel] =
+    useState<string>("BASTP Document");
 
   const fetchInvoices = useCallback(async () => {
     try {
@@ -60,6 +62,8 @@ export default function InvoiceList() {
             status,
             storage_path,
             bastp_upload_date,
+            form_penawaran_storage_path,
+            form_penawaran_uploaded_at,
             vessel:vessel_id (
               id,
               name,
@@ -231,10 +235,12 @@ export default function InvoiceList() {
     }).format(amount);
   };
 
-  // View document with modal
+  // View document with modal — reused for both the BASTP's own uploaded
+  // document and its Form Penawaran, which live in the same storage bucket.
   const handleViewDocument = async (
     storagePath: string | null,
     bastpNumber: string,
+    documentLabel: string = "BASTP Document",
   ) => {
     if (!storagePath) {
       setError("No document available");
@@ -246,6 +252,7 @@ export default function InvoiceList() {
       setError(null);
       setCurrentBastpNumber(bastpNumber);
       setCurrentStoragePath(storagePath);
+      setCurrentDocumentLabel(documentLabel);
 
       // Generate fresh signed URL (valid for 5 minutes)
       const { data, error } = await supabase.storage
@@ -270,6 +277,7 @@ export default function InvoiceList() {
     setDocumentUrl(null);
     setCurrentBastpNumber("");
     setCurrentStoragePath("");
+    setCurrentDocumentLabel("BASTP Document");
   };
 
   // Detect file type
@@ -453,24 +461,46 @@ export default function InvoiceList() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          {invoice.bastp?.storage_path ? (
-                            <button
-                              onClick={() =>
-                                handleViewDocument(
-                                  invoice.bastp?.storage_path || null,
-                                  invoice.bastp?.number || "",
-                                )
-                              }
-                              disabled={viewingDocument}
-                              className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <FileText className="w-4 h-4" /> View BASTP
-                            </button>
-                          ) : (
-                            <span className="text-xs text-gray-400">
-                              No document
-                            </span>
-                          )}
+                          <div className="flex flex-col items-start gap-1.5">
+                            {invoice.bastp?.storage_path && (
+                              <button
+                                onClick={() =>
+                                  handleViewDocument(
+                                    invoice.bastp?.storage_path || null,
+                                    invoice.bastp?.number || "",
+                                    "BASTP Document",
+                                  )
+                                }
+                                disabled={viewingDocument}
+                                className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <FileText className="w-4 h-4" /> View BASTP
+                              </button>
+                            )}
+                            {invoice.bastp?.form_penawaran_storage_path && (
+                              <button
+                                onClick={() =>
+                                  handleViewDocument(
+                                    invoice.bastp?.form_penawaran_storage_path ||
+                                      null,
+                                    invoice.bastp?.number || "",
+                                    "Form Penawaran",
+                                  )
+                                }
+                                disabled={viewingDocument}
+                                className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <FileText className="w-4 h-4" /> Form
+                                Penawaran
+                              </button>
+                            )}
+                            {!invoice.bastp?.storage_path &&
+                              !invoice.bastp?.form_penawaran_storage_path && (
+                                <span className="text-xs text-gray-400">
+                                  No document
+                                </span>
+                              )}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm space-y-1">
@@ -632,24 +662,45 @@ export default function InvoiceList() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          {bastp.storage_path ? (
-                            <button
-                              onClick={() =>
-                                handleViewDocument(
-                                  bastp.storage_path || null,
-                                  bastp.number,
-                                )
-                              }
-                              disabled={viewingDocument}
-                              className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <FileText className="w-4 h-4" /> View BASTP
-                            </button>
-                          ) : (
-                            <span className="text-xs text-gray-400">
-                              No document
-                            </span>
-                          )}
+                          <div className="flex flex-col items-start gap-1.5">
+                            {bastp.storage_path && (
+                              <button
+                                onClick={() =>
+                                  handleViewDocument(
+                                    bastp.storage_path || null,
+                                    bastp.number,
+                                    "BASTP Document",
+                                  )
+                                }
+                                disabled={viewingDocument}
+                                className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <FileText className="w-4 h-4" /> View BASTP
+                              </button>
+                            )}
+                            {bastp.form_penawaran_storage_path && (
+                              <button
+                                onClick={() =>
+                                  handleViewDocument(
+                                    bastp.form_penawaran_storage_path || null,
+                                    bastp.number,
+                                    "Form Penawaran",
+                                  )
+                                }
+                                disabled={viewingDocument}
+                                className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <FileText className="w-4 h-4" /> Form
+                                Penawaran
+                              </button>
+                            )}
+                            {!bastp.storage_path &&
+                              !bastp.form_penawaran_storage_path && (
+                                <span className="text-xs text-gray-400">
+                                  No document
+                                </span>
+                              )}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm space-y-1">
@@ -704,7 +755,7 @@ export default function InvoiceList() {
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <FileText className="w-5 h-5" /> BASTP Document -{" "}
+                <FileText className="w-5 h-5" /> {currentDocumentLabel} -{" "}
                 {currentBastpNumber}
               </h3>
               <button
@@ -722,7 +773,7 @@ export default function InvoiceList() {
                   <iframe
                     src={`${documentUrl}#view=FitH`}
                     className="w-full h-full border-0"
-                    title="BASTP Document Viewer"
+                    title={`${currentDocumentLabel} Viewer`}
                     style={{ minHeight: "70vh" }}
                   />
                 </div>
@@ -771,7 +822,7 @@ export default function InvoiceList() {
                 </a>
                 <a
                   href={documentUrl}
-                  download={`BASTP-${currentBastpNumber}.pdf`}
+                  download={`${currentDocumentLabel.replace(/\s+/g, "-")}-${currentBastpNumber}.pdf`}
                   className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 inline-flex items-center gap-2 text-sm font-medium"
                 >
                   <Download className="w-4 h-4" /> Download

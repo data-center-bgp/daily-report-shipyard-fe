@@ -67,6 +67,11 @@ export default function ManageInvoice() {
   const [viewingDocument, setViewingDocument] = useState(false);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [currentStoragePath, setCurrentStoragePath] = useState<string | null>(
+    null,
+  );
+  const [currentDocumentLabel, setCurrentDocumentLabel] =
+    useState<string>("BASTP Document");
 
   // Form state
   const [formData, setFormData] = useState({
@@ -159,6 +164,8 @@ export default function ManageInvoice() {
             status,
             storage_path,
             bastp_upload_date,
+            form_penawaran_storage_path,
+            form_penawaran_uploaded_at,
             vessel:vessel_id (
               id,
               name,
@@ -902,10 +909,14 @@ export default function ManageInvoice() {
     }).format(amount);
   };
 
-  // View document with modal
-  const handleViewDocument = async () => {
-    if (!bastp?.storage_path) {
-      setError("No BASTP document available");
+  // View document with modal — reused for both the BASTP's own uploaded
+  // document and its Form Penawaran, which live in the same storage bucket.
+  const handleViewDocument = async (
+    storagePath: string | null | undefined,
+    documentLabel: string = "BASTP Document",
+  ) => {
+    if (!storagePath) {
+      setError("No document available");
       return;
     }
 
@@ -914,15 +925,17 @@ export default function ManageInvoice() {
 
       const { data, error: signedUrlError } = await supabase.storage
         .from("bastp")
-        .createSignedUrl(bastp.storage_path, 300);
+        .createSignedUrl(storagePath, 300);
 
       if (signedUrlError) throw signedUrlError;
 
+      setCurrentStoragePath(storagePath);
+      setCurrentDocumentLabel(documentLabel);
       setDocumentUrl(data.signedUrl);
       setShowDocumentModal(true);
     } catch (err) {
       console.error("Error accessing document:", err);
-      setError("Failed to access BASTP document");
+      setError("Failed to access document");
     } finally {
       setViewingDocument(false);
     }
@@ -931,6 +944,8 @@ export default function ManageInvoice() {
   const handleCloseModal = () => {
     setShowDocumentModal(false);
     setDocumentUrl(null);
+    setCurrentStoragePath(null);
+    setCurrentDocumentLabel("BASTP Document");
   };
 
   const getFileType = (storagePath: string | null | undefined) => {
@@ -1045,16 +1060,44 @@ export default function ManageInvoice() {
           <h2 className="text-lg font-semibold text-blue-900">
             BASTP Information
           </h2>
-          {bastp?.storage_path && (
-            <button
-              type="button"
-              onClick={handleViewDocument}
-              disabled={viewingDocument}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <FileText className="w-4 h-4" /> View BASTP Document
-            </button>
-          )}
+          <div className="flex gap-2">
+            {bastp?.id && (
+              <button
+                type="button"
+                onClick={() => navigate(`/bastp/${bastp.id}`)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+              >
+                <ExternalLink className="w-4 h-4" /> View Full BASTP
+              </button>
+            )}
+            {bastp?.storage_path && (
+              <button
+                type="button"
+                onClick={() =>
+                  handleViewDocument(bastp.storage_path, "BASTP Document")
+                }
+                disabled={viewingDocument}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <FileText className="w-4 h-4" /> View BASTP Document
+              </button>
+            )}
+            {bastp?.form_penawaran_storage_path && (
+              <button
+                type="button"
+                onClick={() =>
+                  handleViewDocument(
+                    bastp.form_penawaran_storage_path,
+                    "Form Penawaran",
+                  )
+                }
+                disabled={viewingDocument}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <FileText className="w-4 h-4" /> View Form Penawaran
+              </button>
+            )}
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
@@ -1078,7 +1121,7 @@ export default function ManageInvoice() {
         </div>
 
         {/* Document Status */}
-        <div className="mt-4 pt-4 border-t border-blue-200">
+        <div className="mt-4 pt-4 border-t border-blue-200 space-y-1.5">
           <div className="flex items-center gap-2">
             {bastp?.storage_path ? (
               <>
@@ -1102,6 +1145,32 @@ export default function ManageInvoice() {
                 <span className="text-yellow-600">⚠️</span>
                 <span className="text-sm text-blue-800">
                   No BASTP document uploaded yet
+                </span>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {bastp?.form_penawaran_storage_path ? (
+              <>
+                <span className="text-green-600">✓</span>
+                <span className="text-sm text-blue-800">
+                  Form Penawaran uploaded on{" "}
+                  {bastp.form_penawaran_uploaded_at
+                    ? new Date(
+                        bastp.form_penawaran_uploaded_at,
+                      ).toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : "N/A"}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-yellow-600">⚠️</span>
+                <span className="text-sm text-blue-800">
+                  No Form Penawaran uploaded yet
                 </span>
               </>
             )}
@@ -1756,7 +1825,7 @@ export default function ManageInvoice() {
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <FileText className="w-5 h-5" /> BASTP Document -{" "}
+                <FileText className="w-5 h-5" /> {currentDocumentLabel} -{" "}
                 {bastp?.number}
               </h3>
               <button
@@ -1769,20 +1838,20 @@ export default function ManageInvoice() {
 
             {/* Modal Body */}
             <div className="flex-1 overflow-hidden bg-gray-100 p-4">
-              {getFileType(bastp?.storage_path) === "pdf" ? (
+              {getFileType(currentStoragePath) === "pdf" ? (
                 <div className="w-full h-[70vh] bg-white rounded-lg overflow-hidden">
                   <iframe
                     src={`${documentUrl}#view=FitH`}
                     className="w-full h-full border-0"
-                    title="BASTP Document Viewer"
+                    title={`${currentDocumentLabel} Viewer`}
                     style={{ minHeight: "70vh" }}
                   />
                 </div>
-              ) : getFileType(bastp?.storage_path) === "image" ? (
+              ) : getFileType(currentStoragePath) === "image" ? (
                 <div className="flex items-center justify-center h-full">
                   <img
                     src={documentUrl}
-                    alt="BASTP Document"
+                    alt={currentDocumentLabel}
                     className="max-w-full max-h-full object-contain"
                   />
                 </div>
@@ -1823,7 +1892,7 @@ export default function ManageInvoice() {
                 </a>
                 <a
                   href={documentUrl}
-                  download={`BASTP-${bastp?.number}.pdf`}
+                  download={`${currentDocumentLabel.replace(/\s+/g, "-")}-${bastp?.number}.pdf`}
                   className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 inline-flex items-center gap-2 text-sm font-medium"
                 >
                   <Download className="w-4 h-4" /> Download
