@@ -6,6 +6,7 @@ import type { BASTPWithDetails } from "../../types/bastp.types";
 import type { Invoice } from "../../types/invoiceTypes";
 import { ActivityLogService } from "../../services/activityLogService";
 import { suggestInvoiceNumber } from "../../utils/invoiceNumbering";
+import BastpPrintButton from "../bastp/BastpPrintButton";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -1069,6 +1070,13 @@ export default function ManageInvoice() {
               >
                 <ExternalLink className="w-4 h-4" /> View Full BASTP
               </button>
+            )}
+            {bastp?.id && (
+              <BastpPrintButton
+                bastpId={bastp.id}
+                label="Print BASTP"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              />
             )}
             {bastp?.storage_path && (
               <button

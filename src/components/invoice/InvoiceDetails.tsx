@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabase";
 import type { Invoice } from "../../types/invoiceTypes";
 import { useReactToPrint } from "react-to-print";
 import InvoicePrint from "./InvoicePrint";
+import BastpPrintButton from "../bastp/BastpPrintButton";
 import { useAuth } from "../../hooks/useAuth";
 import { ActivityLogService } from "../../services/activityLogService";
 import {
@@ -422,6 +423,9 @@ export default function InvoiceDetails() {
             >
               <ExternalLink className="w-4 h-4" /> View Full BASTP
             </button>
+          )}
+          {invoice.bastp?.id && (
+            <BastpPrintButton bastpId={invoice.bastp.id} label="Print BASTP" />
           )}
           {invoice.bastp?.storage_path && (
             <button
