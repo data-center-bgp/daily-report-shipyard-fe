@@ -5,12 +5,18 @@ import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import SearchableSelect from "../common/SearchableSelect";
 import Pagination from "../common/Pagination";
 import {
+  buildCompletedWorkDetailsWorkbook,
+  downloadWorkbookXLSX,
+} from "../../utils/completedWorkExport";
+import {
   Search,
   CheckCircle2,
   XCircle,
   AlertTriangle,
   ExternalLink,
   RefreshCw,
+  FileSpreadsheet,
+  Loader,
 } from "lucide-react";
 
 interface CompletedWorkDetailRow {
@@ -60,6 +66,7 @@ export default function CompletedWorkDetails() {
   const [monthFilterId, setMonthFilterId] = useState(0);
   const [bastpFilter, setBastpFilter] = useState<BastpFilter>("ALL");
   const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
 
   const fetchCompletedWorkDetails = useCallback(async () => {
     try {
@@ -214,6 +221,42 @@ export default function CompletedWorkDetails() {
     setPage(1);
   }, [searchTerm, vesselFilterId, monthFilterId, bastpFilter]);
 
+  const activeFilterDescriptions = [
+    vesselFilterId !== 0
+      ? `Vessel: ${vesselOptions.find((v) => v.id === vesselFilterId)?.label ?? "-"}`
+      : null,
+    monthFilterValue
+      ? `Month: ${monthOptions.find((m) => m.id === monthFilterId)?.label ?? "-"}`
+      : null,
+    bastpFilter !== "ALL"
+      ? `Status: ${bastpFilter === "IN_BASTP" ? "In BASTP" : "Not in BASTP"}`
+      : null,
+    searchTerm ? `Search: "${searchTerm}"` : null,
+  ].filter((v): v is string => !!v);
+  const filterSummary =
+    activeFilterDescriptions.length > 0
+      ? activeFilterDescriptions.join(" | ")
+      : "No filters applied";
+
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const buffer = await buildCompletedWorkDetailsWorkbook(
+        filteredRows,
+        filterSummary,
+      );
+      const today = new Date().toISOString().split("T")[0];
+      downloadWorkbookXLSX(buffer, `completed-work-details-${today}.xlsx`);
+    } catch (err) {
+      console.error("Error exporting completed work details:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to export to Excel",
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const paginatedRows = filteredRows.slice(
@@ -259,6 +302,22 @@ export default function CompletedWorkDetails() {
           </div>
         </div>
       )}
+
+      {/* Export */}
+      <div className="flex justify-end">
+        <button
+          onClick={handleExport}
+          disabled={exporting || filteredRows.length === 0}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+        >
+          {exporting ? (
+            <Loader className="w-4 h-4 animate-spin" />
+          ) : (
+            <FileSpreadsheet className="w-4 h-4" />
+          )}
+          {exporting ? "Exporting..." : "Export to Excel"}
+        </button>
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
