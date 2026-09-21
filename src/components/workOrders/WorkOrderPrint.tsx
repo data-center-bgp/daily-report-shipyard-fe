@@ -76,11 +76,27 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
       const items = activeDetails.filter(
         (d) => d.work_scope?.work_scope === scopeName,
       );
-      const totalDays = items.reduce(
-        (sum, item) =>
-          sum + calcDays(item.planned_start_date, item.target_close_date),
-        0,
-      );
+      // Category duration is the span from its earliest planned start to its
+      // latest target close (same convention as the overall totalDays
+      // below) — NOT the sum of each item's own days. Work items within a
+      // category routinely overlap (e.g. dozens of Steelwork jobs running
+      // in parallel across the same few months), so summing counted the
+      // same calendar days over and over and wildly inflated the total.
+      const categoryStartDates = items
+        .map((d) => d.planned_start_date)
+        .filter(Boolean);
+      const categoryEndDates = items
+        .map((d) => d.target_close_date)
+        .filter(Boolean);
+      const categoryStart =
+        categoryStartDates.length > 0
+          ? categoryStartDates.reduce((min, d) => (d < min ? d : min))
+          : null;
+      const categoryEnd =
+        categoryEndDates.length > 0
+          ? categoryEndDates.reduce((max, d) => (d > max ? d : max))
+          : null;
+      const totalDays = calcDays(categoryStart, categoryEnd);
       return { scopeName, items, totalDays };
     });
 
@@ -489,73 +505,69 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
               </td>
             </tr>
 
-            {/* Note */}
+            {/* Note + Location/Date + Signatures + Disclaimer — kept as one
+                atomic block (single outer tr/section-block) instead of four
+                separate rows. Each row individually satisfying
+                page-break-inside: avoid only stops IT from splitting; it
+                doesn't stop the browser from placing Note/Location at the
+                bottom of one page and pushing just the Signatures onto the
+                next, which is what left the signature table stranded right
+                under the header with barely any room to actually sign.
+                Grouping them means if any one doesn't fit, the whole group
+                — signatures included — moves to a fresh page together. */}
             <tr>
               <td>
-                <div className="mb-4 text-xs section-block border border-gray-400 p-2">
-                  Setelah pekerjaan selesai mohon di kirim evident nya ke
-                  Project Leader yang telah di tunjuk terima kasih.
-                </div>
-              </td>
-            </tr>
+                <div className="section-block pt-2">
+                  <div className="mb-4 text-xs border border-gray-400 p-2">
+                    Setelah pekerjaan selesai mohon di kirim evident nya ke
+                    Project Leader yang telah di tunjuk terima kasih.
+                  </div>
 
-            {/* Location + Date */}
-            <tr>
-              <td>
-                <div className="mb-2 text-xs section-block">
-                  {workOrder.work_location || "-"}, Samarinda,{" "}
-                  {formatDate(workOrder.shipyard_wo_date)}
-                </div>
-              </td>
-            </tr>
+                  <div className="mb-2 text-xs">
+                    {workOrder.work_location || "-"}, Samarinda,{" "}
+                    {formatDate(workOrder.shipyard_wo_date)}
+                  </div>
 
-            {/* Signatures */}
-            <tr>
-              <td>
-                <table className="w-full mb-4 text-center text-xs section-block">
-                  <tbody>
-                    <tr>
-                      <td className="w-1/3">
-                        <p>Dikeluarkan oleh,</p>
-                        <div className="h-12"></div>
-                        <p className="font-semibold underline">
-                          Hendra Muzaki
-                        </p>
-                        <p>Marketing &amp; PPIC Department Head</p>
-                      </td>
-                      <td className="w-1/3">
-                        <p>Di Setujui Oleh,</p>
-                        <div className="h-12"></div>
-                        <p className="font-semibold underline">
-                          {workOrder.kapro?.kapro_name || "-"}
-                        </p>
-                        <p>Head Project</p>
-                      </td>
-                      <td className="w-1/3">
-                        <p>Di ketahui Oleh,</p>
-                        <div className="h-12"></div>
-                        <p className="font-semibold underline">
-                          Prasetya Abdillah
-                        </p>
-                        <p>General Manager</p>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </td>
-            </tr>
+                  <table className="w-full mb-4 text-center text-xs">
+                    <tbody>
+                      <tr>
+                        <td className="w-1/3">
+                          <p>Dikeluarkan oleh,</p>
+                          <div className="h-12"></div>
+                          <p className="font-semibold underline">
+                            Hendra Muzaki
+                          </p>
+                          <p>Marketing &amp; PPIC Department Head</p>
+                        </td>
+                        <td className="w-1/3">
+                          <p>Di Setujui Oleh,</p>
+                          <div className="h-12"></div>
+                          <p className="font-semibold underline">
+                            {workOrder.kapro?.kapro_name || "-"}
+                          </p>
+                          <p>Head Project</p>
+                        </td>
+                        <td className="w-1/3">
+                          <p>Di ketahui Oleh,</p>
+                          <div className="h-12"></div>
+                          <p className="font-semibold underline">
+                            Prasetya Abdillah
+                          </p>
+                          <p>General Manager</p>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
 
-            {/* Disclaimer */}
-            <tr>
-              <td>
-                <div className="text-center text-xs text-gray-600 section-block">
-                  <p>
-                    *) Mohon gunakan lembaran tambahan jika diperlukan /
-                    Another sheet can be used if required
-                  </p>
-                  <p className="text-green-700 italic">
-                    Go green-save trees. Print only when necessary
-                  </p>
+                  <div className="text-center text-xs text-gray-600">
+                    <p>
+                      *) Mohon gunakan lembaran tambahan jika diperlukan /
+                      Another sheet can be used if required
+                    </p>
+                    <p className="text-green-700 italic">
+                      Go green-save trees. Print only when necessary
+                    </p>
+                  </div>
                 </div>
               </td>
             </tr>
