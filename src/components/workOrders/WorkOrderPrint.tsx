@@ -1,6 +1,7 @@
 import { forwardRef, Fragment } from "react";
 import type { WorkOrderWithDetails, WorkDetailsWithProgress } from "../../lib/supabase";
 import { terbilang } from "../../utils/terbilang";
+import { calcWorkingDays } from "../../utils/indonesianHolidays";
 
 interface WorkOrderPrintWorkDetail extends WorkDetailsWithProgress {
   work_scope?: { id: number; work_scope: string } | null;
@@ -31,14 +32,11 @@ const CATEGORY_ORDER = [
   "Cleaning",
 ];
 
+// "Hari" on this document counts working days, not calendar days — Sundays
+// and Indonesian national holidays don't count toward a job's duration,
+// per the shipyard's own scheduling convention.
 function calcDays(start?: string | null, end?: string | null): number {
-  if (!start || !end) return 0;
-  const diff =
-    Math.ceil(
-      (new Date(end).getTime() - new Date(start).getTime()) /
-        (1000 * 60 * 60 * 24),
-    ) + 1;
-  return diff > 0 ? diff : 0;
+  return calcWorkingDays(start, end);
 }
 
 const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
