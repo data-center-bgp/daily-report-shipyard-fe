@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { WORK_TYPE_OPTIONS } from "../../constants/workTypes";
 import { WORK_LOCATION_OPTIONS } from "../../constants/workLocations";
+import DockingPlanning from "./DockingPlanning";
 
 interface WorkOrderWithVessel extends WorkOrder {
   vessel?: Vessel;
@@ -870,6 +871,12 @@ export default function EditWorkOrder() {
             </div>
           </form>
         </div>
+
+        {workOrderId && (
+          <div className="mt-6">
+            <DockingPlanning workOrderId={parseInt(workOrderId)} />
+          </div>
+        )}
       </div>
     </div>
   );

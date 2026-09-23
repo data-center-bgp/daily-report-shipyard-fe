@@ -61,6 +61,12 @@ interface AuthContextType {
   // OP_HEAD's coverage doesn't extend to them. Scoped to this one person by
   // id, not by role — PPIC otherwise has no verification access at all.
   canVerifyExternalVesselWork: boolean;
+  // Work Order "Docking Planning" (Docking/Floating/Vessel on Dock/
+  // Undocking schedule estimate): viewable by anyone who can already see
+  // Work Orders, but only MASTER/PPIC/ADMIN_SHIPPING can add/edit/remove
+  // entries — mirrored by RLS on work_order_general_services, not just
+  // this client-side check.
+  canManageDockingPlanning: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -215,6 +221,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const canVerifyExternalVesselWork =
     profile?.id === EXTERNAL_VESSEL_VERIFIER_PROFILE_ID &&
     profile?.auth_user_id === EXTERNAL_VESSEL_VERIFIER_AUTH_USER_ID;
+
+  const canManageDockingPlanning =
+    profile?.role === "MASTER" ||
+    profile?.role === "PPIC" ||
+    profile?.role === "ADMIN_SHIPPING";
 
   const fetchProfile = useCallback(
     async (userId: string, retryCount = 0): Promise<UserProfile | null> => {
@@ -438,6 +449,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isBastpReadOnly,
         isShippingCreateOnly,
         canVerifyExternalVesselWork,
+        canManageDockingPlanning,
       }}
     >
       {children}

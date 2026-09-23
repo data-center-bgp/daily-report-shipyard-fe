@@ -7,9 +7,19 @@ interface WorkOrderPrintWorkDetail extends WorkDetailsWithProgress {
   work_scope?: { id: number; work_scope: string } | null;
 }
 
+interface WorkOrderGeneralServiceEntry {
+  id: number;
+  start_date: string | null;
+  close_date: string | null;
+  total_days: number | null;
+  remarks: string | null;
+  service_type?: { id: number; service_name: string; display_order: number };
+}
+
 interface WorkOrderPrintProps {
   workOrder: Omit<WorkOrderWithDetails, "work_details"> & {
     work_details: WorkOrderPrintWorkDetail[];
+    work_order_general_services?: WorkOrderGeneralServiceEntry[];
   };
   printNumber: number;
 }
@@ -408,6 +418,65 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
                 </table>
               </td>
             </tr>
+
+            {/* Docking Planning — schedule estimate only, independent of
+                BASTP's own General Services (see DockingPlanning.tsx).
+                Omitted entirely when nothing's been planned yet, same as
+                BASTPPrint does for its General Services table. */}
+            {workOrder.work_order_general_services &&
+              workOrder.work_order_general_services.length > 0 && (
+                <tr>
+                  <td>
+                    <table className="content-table w-full border-collapse border border-gray-400 text-xs mb-4 section-block">
+                      <thead>
+                        <tr className="bg-gray-100">
+                          <th className="border border-gray-400 px-2 py-1 text-center font-semibold w-8">
+                            No
+                          </th>
+                          <th className="border border-gray-400 px-2 py-1 text-left font-semibold">
+                            Docking Planning
+                          </th>
+                          <th className="border border-gray-400 px-2 py-1 text-center font-semibold w-24">
+                            Total Hari
+                          </th>
+                          <th className="border border-gray-400 px-2 py-1 text-left font-semibold">
+                            Remarks
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...workOrder.work_order_general_services]
+                          .sort(
+                            (a, b) =>
+                              (a.service_type?.display_order || 0) -
+                              (b.service_type?.display_order || 0),
+                          )
+                          .map((entry, index) => (
+                            <tr key={entry.id}>
+                              <td className="border border-gray-400 px-2 py-1 text-center">
+                                {index + 1}
+                              </td>
+                              <td className="border border-gray-400 px-2 py-1">
+                                {entry.service_type?.service_name || "-"}
+                                {entry.start_date && entry.close_date && (
+                                  <div className="text-gray-500">
+                                    {entry.start_date} — {entry.close_date}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="border border-gray-400 px-2 py-1 text-center">
+                                {entry.total_days ?? 0} Hari
+                              </td>
+                              <td className="border border-gray-400 px-2 py-1">
+                                {entry.remarks || ""}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              )}
 
             {/* Work Item Table */}
             <tr>

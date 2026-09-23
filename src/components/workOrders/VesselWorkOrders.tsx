@@ -69,12 +69,26 @@ interface WorkDetailWithProgress extends WorkDetailsWithProgress {
   };
 }
 
+// Docking Planning entry — a schedule estimate on the work order itself,
+// independent of BASTP's own General Services (see DockingPlanning.tsx).
+interface WorkOrderGeneralServiceEntry {
+  id: number;
+  service_type_id: number;
+  start_date: string | null;
+  close_date: string | null;
+  total_days: number | null;
+  remarks: string | null;
+  deleted_at: string | null;
+  service_type?: { id: number; service_name: string; display_order: number };
+}
+
 // Define the work order type with progress properties
 interface WorkOrderWithProgress extends Omit<
   WorkOrderWithDetails,
   "work_details"
 > {
   work_details: WorkDetailWithProgress[];
+  work_order_general_services?: WorkOrderGeneralServiceEntry[];
   overall_progress: number;
   has_progress_data: boolean;
 }
@@ -379,6 +393,20 @@ export default function VesselWorkOrders() {
             kapro:kapro_id (
               id,
               kapro_name
+            ),
+            work_order_general_services (
+              id,
+              service_type_id,
+              start_date,
+              close_date,
+              total_days,
+              remarks,
+              deleted_at,
+              service_type:service_type_id (
+                id,
+                service_name,
+                display_order
+              )
             )
           `,
           )
@@ -462,6 +490,10 @@ export default function VesselWorkOrders() {
           return {
             ...wo,
             work_details: workDetailsWithProgress,
+            work_order_general_services: (
+              (wo as unknown as { work_order_general_services?: WorkOrderGeneralServiceEntry[] })
+                .work_order_general_services || []
+            ).filter((s) => !s.deleted_at),
             overall_progress: overallProgress,
             has_progress_data: hasProgressData,
           } as WorkOrderWithProgress;
