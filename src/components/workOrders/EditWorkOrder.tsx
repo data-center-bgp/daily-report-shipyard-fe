@@ -690,6 +690,16 @@ export default function EditWorkOrder() {
                     {kapro.kapro_name}
                   </option>
                 ))}
+                {/* This work order's own kapro won't be in the active list
+                    above if they've since left (soft-deleted) — inject it
+                    separately so the field still shows who it's actually
+                    assigned to instead of silently reverting to blank. */}
+                {workOrder?.kapro &&
+                  !kapros.some((k) => k.id === workOrder.kapro?.id) && (
+                    <option value={workOrder.kapro.id}>
+                      {workOrder.kapro.kapro_name} (Inactive)
+                    </option>
+                  )}
               </select>
             </div>
 
