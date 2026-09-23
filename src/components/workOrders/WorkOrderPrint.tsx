@@ -127,6 +127,52 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
         : null;
     const totalDays = calcDays(earliestStart, latestEnd);
 
+    // Docking Planning rendered as its own leading category in the Work
+    // Item Table, sub-items just like every other work_scope category —
+    // but its own "Hari" figures use calendar days (matching how it's
+    // entered in DockingPlanning.tsx / BASTP's General Services), NOT
+    // calcWorkingDays' Sunday/holiday exclusion used for real work_details.
+    // Keeping this a separate calendar-day convention avoids the printed
+    // number silently disagreeing with what was actually typed in.
+    const dockingPlanningEntries = workOrder.work_order_general_services || [];
+    const hasDockingPlanning = dockingPlanningEntries.length > 0;
+    const dockingPlanningSorted = [...dockingPlanningEntries].sort(
+      (a, b) => (a.service_type?.display_order || 0) - (b.service_type?.display_order || 0),
+    );
+    function calcCalendarDays(
+      start?: string | null,
+      end?: string | null,
+    ): number {
+      if (!start || !end) return 0;
+      const s = new Date(start);
+      const e = new Date(end);
+      if (e < s) return 0;
+      const diff =
+        Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      return diff > 0 ? diff : 0;
+    }
+    const dockingStartDates = dockingPlanningSorted
+      .map((d) => d.start_date)
+      .filter((d): d is string => !!d);
+    const dockingEndDates = dockingPlanningSorted
+      .map((d) => d.close_date)
+      .filter((d): d is string => !!d);
+    const dockingCategoryStart =
+      dockingStartDates.length > 0
+        ? dockingStartDates.reduce((min, d) => (d < min ? d : min))
+        : null;
+    const dockingCategoryEnd =
+      dockingEndDates.length > 0
+        ? dockingEndDates.reduce((max, d) => (d > max ? d : max))
+        : null;
+    const dockingTotalDays = calcCalendarDays(
+      dockingCategoryStart,
+      dockingCategoryEnd,
+    );
+    // Every other category/Serah Terima number shifts down by one when this
+    // leading category is present.
+    const categoryNumberOffset = hasDockingPlanning ? 2 : 1;
+
     const printNumberDisplay = String(printNumber).padStart(3, "0");
 
     return (
@@ -419,65 +465,6 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
               </td>
             </tr>
 
-            {/* Docking Planning — schedule estimate only, independent of
-                BASTP's own General Services (see DockingPlanning.tsx).
-                Omitted entirely when nothing's been planned yet, same as
-                BASTPPrint does for its General Services table. */}
-            {workOrder.work_order_general_services &&
-              workOrder.work_order_general_services.length > 0 && (
-                <tr>
-                  <td>
-                    <table className="content-table w-full border-collapse border border-gray-400 text-xs mb-4 section-block">
-                      <thead>
-                        <tr className="bg-gray-100">
-                          <th className="border border-gray-400 px-2 py-1 text-center font-semibold w-8">
-                            No
-                          </th>
-                          <th className="border border-gray-400 px-2 py-1 text-left font-semibold">
-                            Docking Planning
-                          </th>
-                          <th className="border border-gray-400 px-2 py-1 text-center font-semibold w-24">
-                            Total Hari
-                          </th>
-                          <th className="border border-gray-400 px-2 py-1 text-left font-semibold">
-                            Remarks
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[...workOrder.work_order_general_services]
-                          .sort(
-                            (a, b) =>
-                              (a.service_type?.display_order || 0) -
-                              (b.service_type?.display_order || 0),
-                          )
-                          .map((entry, index) => (
-                            <tr key={entry.id}>
-                              <td className="border border-gray-400 px-2 py-1 text-center">
-                                {index + 1}
-                              </td>
-                              <td className="border border-gray-400 px-2 py-1">
-                                {entry.service_type?.service_name || "-"}
-                                {entry.start_date && entry.close_date && (
-                                  <div className="text-gray-500">
-                                    {entry.start_date} — {entry.close_date}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="border border-gray-400 px-2 py-1 text-center">
-                                {entry.total_days ?? 0} Hari
-                              </td>
-                              <td className="border border-gray-400 px-2 py-1">
-                                {entry.remarks || ""}
-                              </td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
-                  </td>
-                </tr>
-              )}
-
             {/* Work Item Table */}
             <tr>
               <td>
@@ -509,11 +496,56 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
                     </tr>
                   </thead>
                   <tbody>
+                    {/* Docking Planning — a schedule estimate (see
+                        DockingPlanning.tsx), rendered as its own leading
+                        category with its planned stages as sub-items, same
+                        pattern as every other work_scope category below.
+                        Omitted entirely when nothing's been planned yet. */}
+                    {hasDockingPlanning && (
+                      <Fragment>
+                        <tr className="bg-gray-50">
+                          <td className="border border-gray-400 px-2 py-1 font-bold align-top">
+                            1
+                          </td>
+                          <td className="border border-gray-400 px-2 py-1 font-bold uppercase">
+                            Docking
+                          </td>
+                          <td className="border border-gray-400 px-2 py-1 text-center font-bold">
+                            {dockingTotalDays} Hari
+                          </td>
+                          <td className="border border-gray-400 px-2 py-1"></td>
+                          <td className="border border-gray-400 px-2 py-1"></td>
+                        </tr>
+                        {dockingPlanningSorted.map((entry, itemIndex) => (
+                          <tr key={`docking-${entry.id}`}>
+                            <td className="border border-gray-400 px-2 py-1 text-center">
+                              1.{itemIndex + 1}
+                            </td>
+                            <td className="border border-gray-400 px-2 py-1">
+                              {entry.service_type?.service_name || "-"}
+                              {entry.start_date && entry.close_date && (
+                                <div className="text-gray-500">
+                                  {formatDate(entry.start_date)} —{" "}
+                                  {formatDate(entry.close_date)}
+                                </div>
+                              )}
+                            </td>
+                            <td className="border border-gray-400 px-2 py-1 text-center">
+                              {entry.total_days ?? 0} Hari
+                            </td>
+                            <td className="border border-gray-400 px-2 py-1"></td>
+                            <td className="border border-gray-400 px-2 py-1">
+                              {entry.remarks || ""}
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    )}
                     {categories.map((category, categoryIndex) => (
                       <Fragment key={category.scopeName}>
                         <tr className="bg-gray-50">
                           <td className="border border-gray-400 px-2 py-1 font-bold align-top">
-                            {categoryIndex + 1}
+                            {categoryIndex + categoryNumberOffset}
                           </td>
                           <td
                             className="border border-gray-400 px-2 py-1 font-bold uppercase"
@@ -530,7 +562,7 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
                         {category.items.map((item, itemIndex) => (
                           <tr key={item.id}>
                             <td className="border border-gray-400 px-2 py-1 text-center">
-                              {categoryIndex + 1}.{itemIndex + 1}
+                              {categoryIndex + categoryNumberOffset}.{itemIndex + 1}
                             </td>
                             <td className="border border-gray-400 px-2 py-1">
                               {item.description}
@@ -556,7 +588,7 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
                         real work_details, always printed as the final line. */}
                     <tr className="bg-gray-50">
                       <td className="border border-gray-400 px-2 py-1 font-bold">
-                        {categories.length + 1}
+                        {categories.length + categoryNumberOffset}
                       </td>
                       <td className="border border-gray-400 px-2 py-1 font-bold uppercase">
                         Serah Terima
