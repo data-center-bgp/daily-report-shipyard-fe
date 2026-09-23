@@ -11,6 +11,8 @@ export interface GeneralService {
   id: number;
   bastp_id: number;
   service_type_id: number;
+  start_date?: string | null;
+  close_date?: string | null;
   total_days: number;
   unit_price: number;
   payment_price: number;

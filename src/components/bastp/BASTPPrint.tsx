@@ -423,6 +423,68 @@ const BASTPPrint = forwardRef<HTMLDivElement, BASTPPrintProps>(
               </td>
             </tr>
 
+            {/* General Services — costs/services for the whole BASTP that
+                aren't tied to any specific work item (Docking, Electrical
+                Supply, Security Service, etc.). Already fetched by both
+                BASTPDetails.tsx and BastpPrintButton.tsx, but this table
+                was simply never rendered here — the printed/downloaded
+                BASTP silently dropped it entirely. Omitted when there are
+                none, same convention as the rest of this document. */}
+            {bastp.general_services && bastp.general_services.length > 0 && (
+              <tr>
+                <td>
+                  <table className="content-table w-full border-collapse border border-gray-400 text-xs mb-4 section-block">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border border-gray-400 px-2 py-1 text-center font-semibold w-8">
+                          No
+                        </th>
+                        <th className="border border-gray-400 px-2 py-1 text-left font-semibold">
+                          General Services
+                        </th>
+                        <th className="border border-gray-400 px-2 py-1 text-center font-semibold w-24">
+                          Total Hari
+                        </th>
+                        <th className="border border-gray-400 px-2 py-1 text-left font-semibold w-32">
+                          Remarks
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...bastp.general_services]
+                        .sort(
+                          (a, b) =>
+                            (a.service_type?.display_order || 0) -
+                            (b.service_type?.display_order || 0),
+                        )
+                        .map((service, index) => (
+                          <tr key={service.id}>
+                            <td className="border border-gray-400 px-2 py-1 text-center">
+                              {index + 1}
+                            </td>
+                            <td className="border border-gray-400 px-2 py-1">
+                              {service.service_type?.service_name || "-"}
+                              {service.start_date && service.close_date && (
+                                <div className="text-gray-500">
+                                  {formatDate(service.start_date)} —{" "}
+                                  {formatDate(service.close_date)}
+                                </div>
+                              )}
+                            </td>
+                            <td className="border border-gray-400 px-2 py-1 text-center">
+                              {service.total_days ?? 0} Hari
+                            </td>
+                            <td className="border border-gray-400 px-2 py-1">
+                              {service.remarks || ""}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+            )}
+
             {/* Work Item Table */}
             <tr>
               <td>
