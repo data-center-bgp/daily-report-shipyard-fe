@@ -259,6 +259,8 @@ export default function CreateBASTP() {
           general_services (
             id,
             service_type_id,
+            start_date,
+            close_date,
             total_days,
             unit_price,
             payment_price,
