@@ -134,6 +134,50 @@ export class ActivityLogService {
   }
 
   /**
+   * Get every activity log within a date range, unpaginated. Supabase caps
+   * a single query at 1000 rows, and a 30-day window can hold several
+   * thousand — pages internally in batches of 1000 until a batch comes back
+   * short, then returns everything at once for client-side aggregation
+   * (Dashboard/Per User/Rincian tabs all need the full set, not a page).
+   */
+  static async getAllLogsInRange(
+    startISO: string,
+    endISO: string,
+    userId?: number,
+  ): Promise<ActivityLog[]> {
+    const batchSize = 1000;
+    const all: ActivityLog[] = [];
+    let from = 0;
+
+    while (true) {
+      let query = supabase
+        .from("activity_logs")
+        .select("*")
+        .gte("created_at", startISO)
+        .lte("created_at", endISO)
+        .order("created_at", { ascending: false })
+        .range(from, from + batchSize - 1);
+
+      if (userId) {
+        query = query.eq("user_id", userId);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        console.error("Failed to fetch activity logs in range:", error);
+        break;
+      }
+
+      const batch = data || [];
+      all.push(...batch);
+      if (batch.length < batchSize) break;
+      from += batchSize;
+    }
+
+    return all;
+  }
+
+  /**
    * Get all activity logs with pagination
    */
   static async getAllActivityLogs(

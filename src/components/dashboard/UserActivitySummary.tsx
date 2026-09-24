@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import { TRACKED_ROLES } from "../activityLog/activityLogShared";
 
 interface RawActivityLog {
   user_id: number;
@@ -26,13 +27,9 @@ interface UserRow {
 
 // The only roles this breakdown tracks — excludes MASTER/MANAGER (see
 // comments below) as well as OP_HEAD/ADMIN, which aren't relevant here.
-const INCLUDED_ROLES = [
-  "PPIC",
-  "PRODUCTION",
-  "FINANCE",
-  "HSSE",
-  "ADMIN_SHIPPING",
-];
+// Shared with the Activity Log page so both agree on who counts as a
+// tracked "employee".
+const INCLUDED_ROLES = TRACKED_ROLES;
 
 // Monday-start week containing the given date, at local midnight.
 const startOfWeek = (date: Date) => {
