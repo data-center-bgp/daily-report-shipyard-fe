@@ -12,6 +12,11 @@ import {
   formatMaterialTotal,
 } from "../../utils/materialCalculations";
 import {
+  formatServiceQuantity,
+  isTonService,
+  serviceUom,
+} from "../../utils/generalServices";
+import {
   ArrowLeft,
   FileText,
   Printer,
@@ -100,14 +105,18 @@ export default function InvoiceDetails() {
             general_services (
               id,
               service_type_id,
+              start_date,
+              close_date,
               total_days,
+              quantity,
               unit_price,
               payment_price,
               remarks,
               service_type:service_type_id (
                 id,
                 service_name,
-                display_order
+                display_order,
+                uom
               )
             )
           ),
@@ -693,10 +702,10 @@ export default function InvoiceDetails() {
                           Service Name
                         </th>
                         <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                          Total Days
+                          Quantity
                         </th>
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                          Unit Price (per day)
+                          Unit Price
                         </th>
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                           Amount
@@ -719,16 +728,24 @@ export default function InvoiceDetails() {
                               <div className="text-sm font-medium text-gray-900">
                                 {service.service_type?.service_name}
                               </div>
+                              {isTonService(service) && service.start_date && (
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  Supplied {formatDate(service.start_date)}
+                                </div>
+                              )}
                             </td>
                             <td className="px-4 py-4 text-center">
                               <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                                {service.total_days} day
-                                {service.total_days !== 1 ? "s" : ""}
+                                {formatServiceQuantity(service)}
                               </span>
                             </td>
                             <td className="px-4 py-4 text-right">
                               <div className="text-sm text-gray-900">
                                 {formatCurrency(service.unit_price)}
+                                <span className="text-xs text-gray-500">
+                                  {" "}
+                                  / {serviceUom(service)}
+                                </span>
                               </div>
                             </td>
                             <td className="px-4 py-4 text-right">
@@ -737,7 +754,7 @@ export default function InvoiceDetails() {
                               </div>
                               <div className="text-xs text-gray-500 mt-1">
                                 {formatCurrency(service.unit_price)} ×{" "}
-                                {service.total_days}
+                                {formatServiceQuantity(service)}
                               </div>
                             </td>
                             <td className="px-4 py-4">

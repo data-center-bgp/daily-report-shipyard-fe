@@ -4,6 +4,7 @@ import {
   formatMaterialDimensionDisplay,
   formatMaterialTotal,
 } from "../../utils/materialCalculations";
+import { formatTons, isTonService } from "../../utils/generalServices";
 
 interface BASTPPrintProps {
   bastp: BASTPWithDetails;
@@ -443,7 +444,7 @@ const BASTPPrint = forwardRef<HTMLDivElement, BASTPPrintProps>(
                           General Services
                         </th>
                         <th className="border border-gray-400 px-2 py-1 text-center font-semibold w-24">
-                          Total Hari
+                          Jumlah
                         </th>
                         <th className="border border-gray-400 px-2 py-1 text-left font-semibold w-32">
                           Remarks
@@ -464,15 +465,26 @@ const BASTPPrint = forwardRef<HTMLDivElement, BASTPPrintProps>(
                             </td>
                             <td className="border border-gray-400 px-2 py-1">
                               {service.service_type?.service_name || "-"}
-                              {service.start_date && service.close_date && (
-                                <div className="text-gray-500">
-                                  {formatDate(service.start_date)} —{" "}
-                                  {formatDate(service.close_date)}
-                                </div>
+                              {isTonService(service) ? (
+                                service.start_date && (
+                                  <div className="text-gray-500">
+                                    {formatDate(service.start_date)}
+                                  </div>
+                                )
+                              ) : (
+                                service.start_date &&
+                                service.close_date && (
+                                  <div className="text-gray-500">
+                                    {formatDate(service.start_date)} —{" "}
+                                    {formatDate(service.close_date)}
+                                  </div>
+                                )
                               )}
                             </td>
                             <td className="border border-gray-400 px-2 py-1 text-center">
-                              {service.total_days ?? 0} Hari
+                              {isTonService(service)
+                                ? `${formatTons(service.quantity)} Ton`
+                                : `${service.total_days ?? 0} Hari`}
                             </td>
                             <td className="border border-gray-400 px-2 py-1">
                               {service.remarks || ""}

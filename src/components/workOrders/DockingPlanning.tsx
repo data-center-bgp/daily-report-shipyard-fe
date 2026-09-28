@@ -43,9 +43,12 @@ export default function DockingPlanning({ workOrderId }: DockingPlanningProps) {
       setError(null);
 
       const [serviceTypesRes, existingRes] = await Promise.all([
+        // Only day-based stages belong in a docking schedule — ton-based
+        // supplies (Fresh Water Supply) are recorded on the BASTP instead.
         supabase
           .from("general_service_types")
           .select("*")
+          .eq("uom", "day")
           .order("display_order", { ascending: true }),
         supabase
           .from("work_order_general_services")

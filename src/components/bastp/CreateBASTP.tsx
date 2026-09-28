@@ -262,6 +262,7 @@ export default function CreateBASTP() {
             start_date,
             close_date,
             total_days,
+            quantity,
             unit_price,
             payment_price,
             remarks,
@@ -269,7 +270,8 @@ export default function CreateBASTP() {
               id,
               service_name,
               service_code,
-              display_order
+              display_order,
+              uom
             )
           )
         `,
@@ -319,6 +321,7 @@ export default function CreateBASTP() {
           start_date: gs.start_date || new Date().toISOString().split("T")[0],
           close_date: gs.close_date || new Date().toISOString().split("T")[0],
           total_days: gs.total_days,
+          quantity: gs.quantity ?? null,
           remarks: gs.remarks || "",
         }));
       setSelectedServices(servicesFromBastp);
@@ -542,18 +545,56 @@ export default function CreateBASTP() {
         return prev.filter((s) => s.service_type_id !== serviceTypeId);
       } else {
         const today = new Date().toISOString().split("T")[0];
+        const isTon = isTonServiceType(serviceTypeId);
         return [
           ...prev,
           {
             service_type_id: serviceTypeId,
             start_date: today,
             close_date: today,
-            total_days: 1,
+            total_days: isTon ? 0 : 1,
+            quantity: isTon ? 0 : null,
             remarks: "",
           },
         ];
       }
     });
+  };
+
+  const isTonServiceType = (serviceTypeId: number) =>
+    serviceTypes.find((t) => t.id === serviceTypeId)?.uom === "ton";
+
+  const dayServices = selectedServices.filter(
+    (s) => !isTonServiceType(s.service_type_id),
+  );
+
+  // Ton-based services (Fresh Water Supply) have one supply date, stored as
+  // both start_date and close_date so date-based code elsewhere still works.
+  const handleServiceSupplyDateChange = (
+    serviceTypeId: number,
+    supplyDate: string,
+  ) => {
+    setSelectedServices((prev) =>
+      prev.map((service) =>
+        service.service_type_id === serviceTypeId
+          ? { ...service, start_date: supplyDate, close_date: supplyDate }
+          : service,
+      ),
+    );
+  };
+
+  const handleServiceQuantityChange = (
+    serviceTypeId: number,
+    value: string,
+  ) => {
+    const quantity = value === "" ? 0 : Number(value);
+    setSelectedServices((prev) =>
+      prev.map((service) =>
+        service.service_type_id === serviceTypeId
+          ? { ...service, quantity: Number.isFinite(quantity) ? quantity : 0 }
+          : service,
+      ),
+    );
   };
 
   // Handle service remarks change
@@ -827,6 +868,19 @@ export default function CreateBASTP() {
       return;
     }
 
+    const invalidTonService = selectedServices.find(
+      (s) =>
+        isTonServiceType(s.service_type_id) &&
+        (!s.start_date || !s.quantity || s.quantity <= 0),
+    );
+    if (invalidTonService) {
+      const name =
+        serviceTypes.find((t) => t.id === invalidTonService.service_type_id)
+          ?.service_name || "This service";
+      setError(`${name} needs a supply date and a quantity above 0 ton`);
+      return;
+    }
+
     try {
       setSubmitting(true);
       setError(null);
@@ -932,6 +986,7 @@ export default function CreateBASTP() {
             start_date: service.start_date,
             close_date: service.close_date,
             total_days: service.total_days,
+            quantity: service.quantity ?? null,
             unit_price: 0,
             payment_price: 0,
             remarks: service.remarks || null,
@@ -1009,6 +1064,7 @@ export default function CreateBASTP() {
               start_date: service.start_date,
               close_date: service.close_date,
               total_days: service.total_days,
+              quantity: service.quantity ?? null,
               unit_price: 0,
               payment_price: 0,
               remarks: service.remarks || null,
@@ -1508,7 +1564,7 @@ export default function CreateBASTP() {
             </h2>
             <p className="text-sm text-gray-600 mt-1">
               Select the general services used for this vessel and specify the
-              number of days
+              dates (or the supply date and tons for Fresh Water Supply)
             </p>
           </div>
 
@@ -1567,6 +1623,49 @@ export default function CreateBASTP() {
                         {/* Days Input - Only show if selected */}
                         {isSelected && (
                           <>
+                            {serviceType.uom === "ton" ? (
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Supply Date{" "}
+                                  <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="date"
+                                  value={serviceData?.start_date || ""}
+                                  onChange={(e) =>
+                                    handleServiceSupplyDateChange(
+                                      serviceType.id,
+                                      e.target.value,
+                                    )
+                                  }
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Quantity (ton){" "}
+                                  <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={serviceData?.quantity || ""}
+                                  onChange={(e) =>
+                                    handleServiceQuantityChange(
+                                      serviceType.id,
+                                      e.target.value,
+                                    )
+                                  }
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  placeholder="e.g. 12.5"
+                                  required
+                                />
+                              </div>
+                            </div>
+                            ) : (
                             <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1630,6 +1729,7 @@ export default function CreateBASTP() {
                                 </p>
                               </div>
                             </div>
+                            )}
                             <div className="mt-3">
                               <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Remarks (Optional)
@@ -1662,20 +1762,27 @@ export default function CreateBASTP() {
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-900 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4" /> Selected{" "}
-                {selectedServices.length} service(s) • Total Days:{" "}
-                {calculateTotalDays(
-                  selectedServices.reduce(
-                    (min, s) => (s.start_date < min ? s.start_date : min),
-                    selectedServices[0].start_date,
-                  ),
-                  selectedServices.reduce(
-                    (max, s) => (s.close_date > max ? s.close_date : max),
-                    selectedServices[0].close_date,
-                  ),
-                )}{" "}
-                <span className="text-blue-700">
-                  (earliest start to latest close, across all services)
-                </span>
+                {selectedServices.length} service(s)
+                {dayServices.length > 0 && (
+                  <>
+                    {" "}
+                    • Total Days:{" "}
+                    {calculateTotalDays(
+                      dayServices.reduce(
+                        (min, s) => (s.start_date < min ? s.start_date : min),
+                        dayServices[0].start_date,
+                      ),
+                      dayServices.reduce(
+                        (max, s) => (s.close_date > max ? s.close_date : max),
+                        dayServices[0].close_date,
+                      ),
+                    )}{" "}
+                    <span className="text-blue-700">
+                      (earliest start to latest close, across day-based
+                      services)
+                    </span>
+                  </>
+                )}
               </p>
             </div>
           )}

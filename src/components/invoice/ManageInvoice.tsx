@@ -11,6 +11,12 @@ import {
   formatMaterialTotal,
 } from "../../utils/materialCalculations";
 import BastpPrintButton from "../bastp/BastpPrintButton";
+import type { GeneralServiceUom } from "../../types/generalService.types";
+import {
+  billableQuantity,
+  formatServiceQuantity,
+  serviceUom,
+} from "../../utils/generalServices";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -39,7 +45,9 @@ interface WorkDetailPrice {
 
 interface GeneralServicePrice {
   service_type_id: number;
-  total_days: number;
+  // Days for day-based services, tons for ton-based ones (Fresh Water Supply)
+  quantity: number;
+  uom: GeneralServiceUom;
   unit_price: number;
   payment_price: number;
   remarks: string;
@@ -229,14 +237,18 @@ export default function ManageInvoice() {
             general_services (
               id,
               service_type_id,
+              start_date,
+              close_date,
               total_days,
+              quantity,
               unit_price,
               payment_price,
               remarks,
               service_type:service_type_id (
                 id,
                 service_name,
-                display_order
+                display_order,
+                uom
               )
             )
           ),
@@ -355,7 +367,8 @@ export default function ManageInvoice() {
       const servicePrices: GeneralServicePrice[] =
         data.bastp?.general_services?.map((service: any) => ({
           service_type_id: service.service_type_id,
-          total_days: service.total_days,
+          quantity: billableQuantity(service),
+          uom: serviceUom(service),
           unit_price: service.unit_price || 0,
           payment_price: service.payment_price || 0,
           remarks: service.remarks || "",
@@ -441,12 +454,16 @@ export default function ManageInvoice() {
         general_services (
           id,
           service_type_id,
+          start_date,
+          close_date,
           total_days,
+          quantity,
           remarks,
           service_type:service_type_id (
             id,
             service_name,
-            display_order
+            display_order,
+            uom
           )
         )
       `,
@@ -514,7 +531,8 @@ export default function ManageInvoice() {
       const initialServicePrices: GeneralServicePrice[] =
         data.general_services?.map((service: any) => ({
           service_type_id: service.service_type_id,
-          total_days: service.total_days,
+          quantity: billableQuantity(service),
+          uom: serviceUom(service),
           unit_price: 0,
           payment_price: 0,
           remarks: service.remarks || "",
@@ -575,7 +593,7 @@ export default function ManageInvoice() {
           ? {
               ...item,
               unit_price: unit_price,
-              payment_price: unit_price * item.total_days,
+              payment_price: Math.round(unit_price * item.quantity),
             }
           : item,
       ),
@@ -1457,8 +1475,9 @@ export default function ManageInvoice() {
                   <Wrench className="w-5 h-5" /> General Services Pricing
                 </h2>
                 <p className="text-sm text-gray-600 mt-1">
-                  Enter unit price (per day) for each service. Payment price
-                  will be calculated automatically (Unit Price × Total Days)
+                  Enter the unit price for each service (per day, or per ton
+                  for Fresh Water Supply). Payment price is calculated
+                  automatically (Unit Price × Quantity)
                 </p>
                 {pricingLocked && (
                   <p className="text-sm text-yellow-700 mt-2 flex items-center gap-1">
@@ -1475,10 +1494,10 @@ export default function ManageInvoice() {
                         Service Name
                       </th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        Total Days
+                        Quantity
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                        Unit Price (IDR/day)
+                        Unit Price (IDR)
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                         Payment Price (IDR)
@@ -1506,11 +1525,23 @@ export default function ManageInvoice() {
                               <div className="text-sm font-medium text-gray-900">
                                 {service.service_type?.service_name}
                               </div>
+                              {serviceUom(service) === "ton" &&
+                                service.start_date && (
+                                  <div className="text-xs text-gray-500 mt-0.5">
+                                    Supplied{" "}
+                                    {new Date(
+                                      service.start_date,
+                                    ).toLocaleDateString("en-GB", {
+                                      day: "numeric",
+                                      month: "short",
+                                      year: "numeric",
+                                    })}
+                                  </div>
+                                )}
                             </td>
                             <td className="px-4 py-4 text-center">
                               <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                                {service.total_days} day
-                                {service.total_days !== 1 ? "s" : ""}
+                                {formatServiceQuantity(service)}
                               </span>
                             </td>
                             <td className="px-4 py-4">
@@ -1557,7 +1588,7 @@ export default function ManageInvoice() {
                               {priceItem && priceItem.unit_price > 0 && (
                                 <div className="text-xs text-gray-500 mt-1">
                                   {formatCurrency(priceItem.unit_price)} ×{" "}
-                                  {priceItem.total_days}
+                                  {formatServiceQuantity(service)}
                                 </div>
                               )}
                             </td>

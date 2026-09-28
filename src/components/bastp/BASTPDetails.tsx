@@ -6,6 +6,10 @@ import type { BASTPWithDetails } from "../../types/bastp.types";
 import { useAuth } from "../../hooks/useAuth";
 import BASTPPrint from "./BASTPPrint";
 import {
+  formatServiceQuantity,
+  isTonService,
+} from "../../utils/generalServices";
+import {
   ArrowLeft,
   Edit,
   FileText,
@@ -160,12 +164,14 @@ export default function BASTPDetails() {
       start_date,
       close_date,
       total_days,
+      quantity,
       remarks,
       service_type:service_type_id (
         id,
         service_name,
         service_code,
-        display_order
+        display_order,
+        uom
       )
     )
   `,
@@ -1167,7 +1173,7 @@ export default function BASTPDetails() {
                         Close Date
                       </th>
                       <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        Total Days
+                        Quantity
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                         Remarks
@@ -1204,7 +1210,10 @@ export default function BASTPDetails() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
-                              {service.close_date ? (
+                              {isTonService(service) ? (
+                                // Single supply date, already shown as Start Date
+                                <span className="text-gray-400">—</span>
+                              ) : service.close_date ? (
                                 formatDate(service.close_date)
                               ) : (
                                 <span className="text-gray-400 text-xs">
@@ -1215,8 +1224,7 @@ export default function BASTPDetails() {
                           </td>
                           <td className="px-6 py-4 text-center">
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                              {service.total_days} day
-                              {service.total_days !== 1 ? "s" : ""}
+                              {formatServiceQuantity(service)}
                             </span>
                           </td>
                           <td className="px-6 py-4">

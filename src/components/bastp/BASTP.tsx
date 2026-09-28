@@ -92,7 +92,10 @@ export default function BASTP() {
     general_services (
       start_date,
       close_date,
-      total_days
+      total_days,
+      service_type:service_type_id (
+        uom
+      )
     )
   `,
         )
@@ -494,9 +497,14 @@ export default function BASTP() {
                           <div className="text-xs text-gray-500 mt-1">
                             {(() => {
                               const services = bastp.general_services;
+                              // A ton-based supply date isn't part of the
+                              // docking period, so it shouldn't stretch it.
                               const dates = services
                                 .filter(
-                                  (s: any) => s.start_date && s.close_date,
+                                  (s: any) =>
+                                    s.start_date &&
+                                    s.close_date &&
+                                    s.service_type?.uom !== "ton",
                                 )
                                 .flatMap((s: any) => [
                                   new Date(s.start_date),

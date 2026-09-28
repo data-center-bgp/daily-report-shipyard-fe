@@ -144,12 +144,14 @@ export default function BastpPrintButton({
       start_date,
       close_date,
       total_days,
+      quantity,
       remarks,
       service_type:service_type_id (
         id,
         service_name,
         service_code,
-        display_order
+        display_order,
+        uom
       )
     )
   `,

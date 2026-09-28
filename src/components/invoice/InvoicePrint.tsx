@@ -4,6 +4,10 @@ import {
   formatMaterialDimensionDisplay,
   formatMaterialTotal,
 } from "../../utils/materialCalculations";
+import {
+  formatServiceQuantity,
+  isTonService,
+} from "../../utils/generalServices";
 import { CheckCircle2 } from "lucide-react";
 
 interface InvoicePrintProps {
@@ -272,7 +276,7 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
                               Service Name
                             </th>
                             <th className="border border-gray-300 px-2 py-1 text-center font-semibold">
-                              Total Days
+                              Qty
                             </th>
                             <th className="border border-gray-300 px-2 py-1 text-right font-semibold">
                               Unit Price (IDR)
@@ -298,6 +302,12 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
                                   <div className="font-medium">
                                     {service.service_type?.service_name || "-"}
                                   </div>
+                                  {isTonService(service) &&
+                                    service.start_date && (
+                                      <div className="text-gray-600 mt-0.5">
+                                        Supplied {formatDate(service.start_date)}
+                                      </div>
+                                    )}
                                   {service.remarks && (
                                     <div className="text-gray-600 mt-0.5">
                                       {service.remarks}
@@ -305,7 +315,7 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
                                   )}
                                 </td>
                                 <td className="border border-gray-300 px-2 py-1 text-center">
-                                  {service.total_days}
+                                  {formatServiceQuantity(service)}
                                 </td>
                                 <td className="border border-gray-300 px-2 py-1 text-right">
                                   {formatCurrency(service.unit_price || 0)}
