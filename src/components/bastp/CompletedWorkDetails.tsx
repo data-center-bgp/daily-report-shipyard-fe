@@ -5,10 +5,6 @@ import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import SearchableSelect from "../common/SearchableSelect";
 import Pagination from "../common/Pagination";
 import {
-  buildCompletedWorkDetailsWorkbook,
-  downloadWorkbookXLSX,
-} from "../../utils/completedWorkExport";
-import {
   Search,
   CheckCircle2,
   XCircle,
@@ -241,6 +237,10 @@ export default function CompletedWorkDetails() {
   const handleExport = async () => {
     try {
       setExporting(true);
+      // Loaded on click: the Excel library is ~940 KB, and importing it
+      // up front made every visit to the BASTP page wait for it.
+      const { buildCompletedWorkDetailsWorkbook, downloadWorkbookXLSX } =
+        await import("../../utils/completedWorkExport");
       const buffer = await buildCompletedWorkDetailsWorkbook(
         filteredRows,
         filterSummary,

@@ -39,32 +39,17 @@ export default function BASTP() {
       setLoading(true);
       setError(null);
 
-      // Fetch all profiles first
-      const { data: allProfiles, error: profilesError } =
-        await supabase.rpc("get_all_profiles");
-
-      if (profilesError) {
-        console.error("Error fetching profiles:", profilesError);
-      }
-
-      // Create a map for quick lookup
-      const profilesMap: Record<
-        number,
-        { id: number; name: string; email: string }
-      > = {};
-      if (allProfiles) {
-        allProfiles.forEach(
-          (profile: { id: number; name: string; email: string }) => {
-            profilesMap[profile.id] = profile;
-          },
-        );
-      }
-
-      // Fetch BASTPs data
-      const { data, error: fetchError } = await supabase
-        .from("bastp")
-        .select(
-          `
+      // Profiles and BASTPs don't depend on each other — fetch both at once
+      // instead of waiting for one before starting the other.
+      const [
+        { data: allProfiles, error: profilesError },
+        { data, error: fetchError },
+      ] = await Promise.all([
+        supabase.rpc("get_all_profiles"),
+        supabase
+          .from("bastp")
+          .select(
+            `
     *,
     vessel:vessel_id (
       id,
@@ -98,9 +83,27 @@ export default function BASTP() {
       )
     )
   `,
-        )
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
+          )
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false }),
+      ]);
+
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+      }
+
+      // Create a map for quick lookup
+      const profilesMap: Record<
+        number,
+        { id: number; name: string; email: string }
+      > = {};
+      if (allProfiles) {
+        allProfiles.forEach(
+          (profile: { id: number; name: string; email: string }) => {
+            profilesMap[profile.id] = profile;
+          },
+        );
+      }
 
       if (fetchError) throw fetchError;
 
