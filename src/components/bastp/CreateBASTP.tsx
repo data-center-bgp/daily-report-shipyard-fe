@@ -20,6 +20,7 @@ import type {
   GeneralServiceInput,
 } from "../../types/generalService.types";
 import { ActivityLogService } from "../../services/activityLogService";
+import { formatTons, sortServices } from "../../utils/generalServices";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -28,6 +29,7 @@ import {
   RefreshCw,
   CheckCircle2,
   Plus,
+  Trash2,
   X,
   FileEdit,
   Search,
@@ -309,9 +311,12 @@ export default function CreateBASTP() {
       // loaded as-is, the edit form's delete-then-reinsert-on-save would
       // perpetuate them forever, and downstream invoice pricing would count
       // that service's price twice. Keep only the first row per service type.
+      // Ton-based services (Fresh Water Supply) are exempt: several
+      // deliveries per BASTP is intended, so every row is kept, in date order.
       const seenServiceTypes = new Set<number>();
-      const servicesFromBastp = (data.general_services || [])
+      const servicesFromBastp = sortServices(data.general_services || [])
         .filter((gs: any) => {
+          if (gs.service_type?.uom === "ton") return true;
           if (seenServiceTypes.has(gs.service_type_id)) return false;
           seenServiceTypes.add(gs.service_type_id);
           return true;
@@ -568,33 +573,49 @@ export default function CreateBASTP() {
     (s) => !isTonServiceType(s.service_type_id),
   );
 
-  // Ton-based services (Fresh Water Supply) have one supply date, stored as
-  // both start_date and close_date so date-based code elsewhere still works.
-  const handleServiceSupplyDateChange = (
-    serviceTypeId: number,
-    supplyDate: string,
+  // Ton-based services (Fresh Water Supply) can have several deliveries, each
+  // its own row with one supply date (stored as both start_date and
+  // close_date so date-based code elsewhere still works) — so these are
+  // addressed by position in selectedServices, not by service type.
+  const handleTonEntryChange = (
+    index: number,
+    patch: { supply_date?: string; quantity?: string; remarks?: string },
   ) => {
     setSelectedServices((prev) =>
-      prev.map((service) =>
-        service.service_type_id === serviceTypeId
-          ? { ...service, start_date: supplyDate, close_date: supplyDate }
-          : service,
-      ),
+      prev.map((service, i) => {
+        if (i !== index) return service;
+        const next = { ...service };
+        if (patch.supply_date !== undefined) {
+          next.start_date = patch.supply_date;
+          next.close_date = patch.supply_date;
+        }
+        if (patch.quantity !== undefined) {
+          const q = patch.quantity === "" ? 0 : Number(patch.quantity);
+          next.quantity = Number.isFinite(q) ? q : 0;
+        }
+        if (patch.remarks !== undefined) next.remarks = patch.remarks;
+        return next;
+      }),
     );
   };
 
-  const handleServiceQuantityChange = (
-    serviceTypeId: number,
-    value: string,
-  ) => {
-    const quantity = value === "" ? 0 : Number(value);
-    setSelectedServices((prev) =>
-      prev.map((service) =>
-        service.service_type_id === serviceTypeId
-          ? { ...service, quantity: Number.isFinite(quantity) ? quantity : 0 }
-          : service,
-      ),
-    );
+  const handleAddTonEntry = (serviceTypeId: number) => {
+    const today = new Date().toISOString().split("T")[0];
+    setSelectedServices((prev) => [
+      ...prev,
+      {
+        service_type_id: serviceTypeId,
+        start_date: today,
+        close_date: today,
+        total_days: 0,
+        quantity: 0,
+        remarks: "",
+      },
+    ]);
+  };
+
+  const handleRemoveTonEntry = (index: number) => {
+    setSelectedServices((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Handle service remarks change
@@ -877,7 +898,9 @@ export default function CreateBASTP() {
       const name =
         serviceTypes.find((t) => t.id === invalidTonService.service_type_id)
           ?.service_name || "This service";
-      setError(`${name} needs a supply date and a quantity above 0 ton`);
+      setError(
+        `Every ${name} delivery needs a supply date and a quantity above 0 ton`,
+      );
       return;
     }
 
@@ -1624,47 +1647,119 @@ export default function CreateBASTP() {
                         {isSelected && (
                           <>
                             {serviceType.uom === "ton" ? (
-                            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                  Supply Date{" "}
-                                  <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                  type="date"
-                                  value={serviceData?.start_date || ""}
-                                  onChange={(e) =>
-                                    handleServiceSupplyDateChange(
-                                      serviceType.id,
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                  required
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                  Quantity (ton){" "}
-                                  <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={serviceData?.quantity || ""}
-                                  onChange={(e) =>
-                                    handleServiceQuantityChange(
-                                      serviceType.id,
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                  placeholder="e.g. 12.5"
-                                  required
-                                />
-                              </div>
-                            </div>
+                            (() => {
+                              const deliveries = selectedServices
+                                .map((s, index) => ({ s, index }))
+                                .filter(
+                                  ({ s }) => s.service_type_id === serviceType.id,
+                                );
+                              const totalTons = deliveries.reduce(
+                                (sum, { s }) => sum + (Number(s.quantity) || 0),
+                                0,
+                              );
+                              return (
+                                <div className="mt-3 space-y-3">
+                                  {deliveries.map(({ s, index }, n) => (
+                                    <div
+                                      key={index}
+                                      className="rounded-lg border border-blue-200 bg-white p-3"
+                                    >
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className="text-sm font-medium text-gray-700">
+                                          Delivery {n + 1}
+                                        </span>
+                                        {deliveries.length > 1 && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleRemoveTonEntry(index)
+                                            }
+                                            className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />{" "}
+                                            Remove
+                                          </button>
+                                        )}
+                                      </div>
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Supply Date{" "}
+                                            <span className="text-red-500">*</span>
+                                          </label>
+                                          <input
+                                            type="date"
+                                            value={s.start_date || ""}
+                                            onChange={(e) =>
+                                              handleTonEntryChange(index, {
+                                                supply_date: e.target.value,
+                                              })
+                                            }
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            required
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Quantity (ton){" "}
+                                            <span className="text-red-500">*</span>
+                                          </label>
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={s.quantity || ""}
+                                            onChange={(e) =>
+                                              handleTonEntryChange(index, {
+                                                quantity: e.target.value,
+                                              })
+                                            }
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            placeholder="e.g. 12.5"
+                                            required
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Remarks (Optional)
+                                          </label>
+                                          <input
+                                            type="text"
+                                            value={s.remarks || ""}
+                                            onChange={(e) =>
+                                              handleTonEntryChange(index, {
+                                                remarks: e.target.value,
+                                              })
+                                            }
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            placeholder="Add notes..."
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <div className="flex items-center justify-between">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleAddTonEntry(serviceType.id)
+                                      }
+                                      className="text-sm font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                                    >
+                                      <Plus className="w-4 h-4" /> Add delivery
+                                    </button>
+                                    <span className="text-sm text-gray-700">
+                                      {deliveries.length}{" "}
+                                      {deliveries.length === 1
+                                        ? "delivery"
+                                        : "deliveries"}{" "}
+                                      · Total{" "}
+                                      <strong>{formatTons(totalTons)} ton</strong>
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()
                             ) : (
                             <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                               <div>
@@ -1730,6 +1825,7 @@ export default function CreateBASTP() {
                               </div>
                             </div>
                             )}
+                            {serviceType.uom !== "ton" && (
                             <div className="mt-3">
                               <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Remarks (Optional)
@@ -1747,6 +1843,7 @@ export default function CreateBASTP() {
                                 placeholder="Add notes..."
                               />
                             </div>
+                            )}
                           </>
                         )}
                       </div>
@@ -1762,7 +1859,8 @@ export default function CreateBASTP() {
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-900 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4" /> Selected{" "}
-                {selectedServices.length} service(s)
+                {new Set(selectedServices.map((s) => s.service_type_id)).size}{" "}
+                service(s)
                 {dayServices.length > 0 && (
                   <>
                     {" "}

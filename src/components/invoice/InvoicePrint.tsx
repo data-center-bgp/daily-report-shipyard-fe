@@ -5,7 +5,9 @@ import {
   formatMaterialTotal,
 } from "../../utils/materialCalculations";
 import {
-  formatServiceQuantity,
+  formatLineQuantity,
+  formatTons,
+  groupServicesForInvoice,
   isTonService,
 } from "../../utils/generalServices";
 import { CheckCircle2 } from "lucide-react";
@@ -287,14 +289,13 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
                           </tr>
                         </thead>
                         <tbody>
-                          {invoice.bastp.general_services
-                            .sort(
-                              (a, b) =>
-                                (a.service_type?.display_order || 0) -
-                                (b.service_type?.display_order || 0),
-                            )
-                            .map((service, index) => (
-                              <tr key={service.id}>
+                          {groupServicesForInvoice(
+                            invoice.bastp.general_services,
+                          ).map((line, index) => {
+                            const service = line.service;
+                            const isTon = isTonService(service);
+                            return (
+                              <tr key={line.key}>
                                 <td className="border border-gray-300 px-2 py-1">
                                   {index + 1}
                                 </td>
@@ -302,29 +303,43 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
                                   <div className="font-medium">
                                     {service.service_type?.service_name || "-"}
                                   </div>
-                                  {isTonService(service) &&
-                                    service.start_date && (
-                                      <div className="text-gray-600 mt-0.5">
-                                        Supplied {formatDate(service.start_date)}
+                                  {isTon &&
+                                    line.rows.map((row) => (
+                                      <div
+                                        key={row.id}
+                                        className="text-gray-600 mt-0.5"
+                                      >
+                                        {row.start_date
+                                          ? new Date(
+                                              row.start_date,
+                                            ).toLocaleDateString("en-GB", {
+                                              day: "numeric",
+                                              month: "short",
+                                              year: "numeric",
+                                            })
+                                          : "-"}{" "}
+                                        · {formatTons(row.quantity)} ton
+                                        {row.remarks ? ` · ${row.remarks}` : ""}
                                       </div>
-                                    )}
-                                  {service.remarks && (
+                                    ))}
+                                  {!isTon && service.remarks && (
                                     <div className="text-gray-600 mt-0.5">
                                       {service.remarks}
                                     </div>
                                   )}
                                 </td>
                                 <td className="border border-gray-300 px-2 py-1 text-center">
-                                  {formatServiceQuantity(service)}
+                                  {formatLineQuantity(line)}
                                 </td>
                                 <td className="border border-gray-300 px-2 py-1 text-right">
-                                  {formatCurrency(service.unit_price || 0)}
+                                  {formatCurrency(line.unit_price)}
                                 </td>
                                 <td className="border border-gray-300 px-2 py-1 text-right font-medium">
-                                  {formatCurrency(service.payment_price || 0)}
+                                  {formatCurrency(line.payment_price)}
                                 </td>
                               </tr>
-                            ))}
+                            );
+                          })}
                         </tbody>
                         <tfoot>
                           <tr className="bg-gray-50">

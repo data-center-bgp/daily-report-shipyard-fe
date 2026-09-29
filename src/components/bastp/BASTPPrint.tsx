@@ -4,7 +4,11 @@ import {
   formatMaterialDimensionDisplay,
   formatMaterialTotal,
 } from "../../utils/materialCalculations";
-import { formatTons, isTonService } from "../../utils/generalServices";
+import {
+  formatTons,
+  isTonService,
+  sortServices,
+} from "../../utils/generalServices";
 
 interface BASTPPrintProps {
   bastp: BASTPWithDetails;
@@ -452,13 +456,8 @@ const BASTPPrint = forwardRef<HTMLDivElement, BASTPPrintProps>(
                       </tr>
                     </thead>
                     <tbody>
-                      {[...bastp.general_services]
-                        .sort(
-                          (a, b) =>
-                            (a.service_type?.display_order || 0) -
-                            (b.service_type?.display_order || 0),
-                        )
-                        .map((service, index) => (
+                      {sortServices(bastp.general_services).map(
+                        (service, index) => (
                           <tr key={service.id}>
                             <td className="border border-gray-400 px-2 py-1 text-center">
                               {index + 1}

@@ -14,8 +14,12 @@ import BastpPrintButton from "../bastp/BastpPrintButton";
 import type { GeneralServiceUom } from "../../types/generalService.types";
 import {
   billableQuantity,
-  formatServiceQuantity,
+  formatLineQuantity,
+  formatTons,
+  groupServicesForInvoice,
   serviceUom,
+  splitAmountByQuantity,
+  type InvoiceServiceLine,
 } from "../../utils/generalServices";
 import {
   AlertTriangle,
@@ -51,7 +55,41 @@ interface GeneralServicePrice {
   unit_price: number;
   payment_price: number;
   remarks: string;
+  // Ton-based services only: the individual deliveries this one priced line
+  // covers, so the saved amount can be split back across their rows.
+  rows?: { id: number; quantity: number }[];
 }
+
+const toServicePrice = (
+  line: InvoiceServiceLine<any>,
+  priced: boolean,
+): GeneralServicePrice => {
+  const ton = serviceUom(line.service) === "ton";
+  return {
+    service_type_id: line.service.service_type_id,
+    quantity: line.quantity,
+    uom: serviceUom(line.service),
+    unit_price: priced ? line.unit_price : 0,
+    payment_price: priced ? line.payment_price : 0,
+    remarks: line.service.remarks || "",
+    rows: ton
+      ? line.rows.map((r: any) => ({ id: r.id, quantity: billableQuantity(r) }))
+      : undefined,
+  };
+};
+
+// Keeps only the first row per service type (guards against a pre-existing
+// duplicate-rows data issue), except ton-based services, where several
+// rows are separate deliveries and all of them belong on the invoice.
+const dedupeServices = (services: any[]) => {
+  const seen = new Set<number>();
+  return services.filter((gs) => {
+    if (gs.service_type?.uom === "ton") return true;
+    if (seen.has(gs.service_type_id)) return false;
+    seen.add(gs.service_type_id);
+    return true;
+  });
+};
 
 export default function ManageInvoice() {
   const { bastpId, invoiceId } = useParams<{
@@ -296,13 +334,8 @@ export default function ManageInvoice() {
       // price table renders that service twice and a single price entry
       // gets counted twice toward the invoice total.
       if (data.bastp?.general_services) {
-        const seen = new Set<number>();
-        data.bastp.general_services = data.bastp.general_services.filter(
-          (gs: any) => {
-            if (seen.has(gs.service_type_id)) return false;
-            seen.add(gs.service_type_id);
-            return true;
-          },
+        data.bastp.general_services = dedupeServices(
+          data.bastp.general_services,
         );
       }
 
@@ -364,15 +397,9 @@ export default function ManageInvoice() {
       setWorkDetailPrices(prices);
 
       // Populate general service prices
-      const servicePrices: GeneralServicePrice[] =
-        data.bastp?.general_services?.map((service: any) => ({
-          service_type_id: service.service_type_id,
-          quantity: billableQuantity(service),
-          uom: serviceUom(service),
-          unit_price: service.unit_price || 0,
-          payment_price: service.payment_price || 0,
-          remarks: service.remarks || "",
-        })) || [];
+      const servicePrices: GeneralServicePrice[] = groupServicesForInvoice(
+        data.bastp?.general_services || [],
+      ).map((line) => toServicePrice(line, true));
 
       setGeneralServicePrices(servicePrices);
     } catch (err) {
@@ -498,12 +525,7 @@ export default function ManageInvoice() {
       // Dedupe leftover duplicate general_services rows for the same
       // service_type_id (see fetchExistingInvoice for why).
       if (data.general_services) {
-        const seen = new Set<number>();
-        data.general_services = data.general_services.filter((gs: any) => {
-          if (seen.has(gs.service_type_id)) return false;
-          seen.add(gs.service_type_id);
-          return true;
-        });
+        data.general_services = dedupeServices(data.general_services);
       }
 
       setBastp(data);
@@ -529,14 +551,9 @@ export default function ManageInvoice() {
 
       // Initialize general service prices with 0
       const initialServicePrices: GeneralServicePrice[] =
-        data.general_services?.map((service: any) => ({
-          service_type_id: service.service_type_id,
-          quantity: billableQuantity(service),
-          uom: serviceUom(service),
-          unit_price: 0,
-          payment_price: 0,
-          remarks: service.remarks || "",
-        })) || [];
+        groupServicesForInvoice(data.general_services || []).map((line) =>
+          toServicePrice(line, false),
+        );
       setGeneralServicePrices(initialServicePrices);
 
       // Pre-fill some fields from BASTP
@@ -602,6 +619,41 @@ export default function ManageInvoice() {
     if (error && error.includes("service price")) {
       setError(null);
     }
+  };
+
+  // Writes the priced amounts back onto the BASTP's general_services rows —
+  // batched instead of a sequential loop, so a mid-loop failure can't leave
+  // some services priced from this save and others still stale. A ton-based
+  // line (all Fresh Water deliveries) is priced once, then split across its
+  // delivery rows by tons, so the rows still add up to the invoice line.
+  const saveServicePrices = async (targetBastpId: number | string | undefined) => {
+    const updates = generalServicePrices.flatMap((service) => {
+      if (service.rows) {
+        return splitAmountByQuantity(service.unit_price, service.rows).map(
+          (row) =>
+            supabase
+              .from("general_services")
+              .update({
+                unit_price: service.unit_price,
+                payment_price: row.payment_price,
+              })
+              .eq("id", row.id),
+        );
+      }
+      return [
+        supabase
+          .from("general_services")
+          .update({
+            unit_price: service.unit_price,
+            payment_price: service.payment_price,
+          })
+          .eq("bastp_id", targetBastpId)
+          .eq("service_type_id", service.service_type_id),
+      ];
+    });
+    const results = await Promise.all(updates);
+    const updateError = results.find((r) => r.error)?.error;
+    if (updateError) throw updateError;
   };
 
   const calculateTotalAmount = () => {
@@ -763,22 +815,7 @@ export default function ManageInvoice() {
         // Update general services in BASTP — batched instead of a
         // sequential per-row loop, so a mid-loop failure can't leave some
         // services priced from this save and others still stale.
-        const serviceUpdateResults = await Promise.all(
-          generalServicePrices.map((service) =>
-            supabase
-              .from("general_services")
-              .update({
-                unit_price: service.unit_price,
-                payment_price: service.payment_price,
-              })
-              .eq("bastp_id", bastp?.id)
-              .eq("service_type_id", service.service_type_id),
-          ),
-        );
-        const serviceUpdateError = serviceUpdateResults.find(
-          (r) => r.error,
-        )?.error;
-        if (serviceUpdateError) throw serviceUpdateError;
+        await saveServicePrices(bastp?.id);
 
         // Log the activity for update
         await ActivityLogService.logActivity({
@@ -871,22 +908,7 @@ export default function ManageInvoice() {
 
         // Update general services in BASTP — batched (see the edit branch
         // above for why a sequential loop isn't used here).
-        const serviceUpdateResults = await Promise.all(
-          generalServicePrices.map((service) =>
-            supabase
-              .from("general_services")
-              .update({
-                unit_price: service.unit_price,
-                payment_price: service.payment_price,
-              })
-              .eq("bastp_id", bastpId)
-              .eq("service_type_id", service.service_type_id),
-          ),
-        );
-        const serviceUpdateError = serviceUpdateResults.find(
-          (r) => r.error,
-        )?.error;
-        if (serviceUpdateError) throw serviceUpdateError;
+        await saveServicePrices(bastpId);
 
         // Log the activity for create
         await ActivityLogService.logActivity({
@@ -1508,41 +1530,50 @@ export default function ManageInvoice() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {bastp.general_services
-                      .sort(
-                        (a: any, b: any) =>
-                          (a.service_type?.display_order || 0) -
-                          (b.service_type?.display_order || 0),
-                      )
-                      .map((service: any) => {
+                    {groupServicesForInvoice(bastp.general_services as any[])
+                      .map((line) => {
+                        const service = line.service;
+                        const isTon = serviceUom(service) === "ton";
                         const priceItem = generalServicePrices.find(
                           (p) => p.service_type_id === service.service_type_id,
                         );
 
                         return (
-                          <tr key={service.id} className="hover:bg-gray-50">
+                          <tr key={line.key} className="hover:bg-gray-50">
                             <td className="px-4 py-4">
                               <div className="text-sm font-medium text-gray-900">
                                 {service.service_type?.service_name}
                               </div>
-                              {serviceUom(service) === "ton" &&
-                                service.start_date && (
-                                  <div className="text-xs text-gray-500 mt-0.5">
-                                    Supplied{" "}
-                                    {new Date(
-                                      service.start_date,
-                                    ).toLocaleDateString("en-GB", {
-                                      day: "numeric",
-                                      month: "short",
-                                      year: "numeric",
-                                    })}
-                                  </div>
-                                )}
+                              {isTon && (
+                                <ul className="text-xs text-gray-500 mt-1 space-y-0.5">
+                                  {line.rows.map((row: any, i: number) => (
+                                    <li key={row.id}>
+                                      {i + 1}.{" "}
+                                      {row.start_date
+                                        ? new Date(
+                                            row.start_date,
+                                          ).toLocaleDateString("en-GB", {
+                                            day: "numeric",
+                                            month: "short",
+                                            year: "numeric",
+                                          })
+                                        : "-"}{" "}
+                                      · {formatTons(row.quantity)} ton
+                                      {row.remarks ? ` · ${row.remarks}` : ""}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
                             </td>
                             <td className="px-4 py-4 text-center">
                               <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                                {formatServiceQuantity(service)}
+                                {formatLineQuantity(line)}
                               </span>
+                              {isTon && line.rows.length > 1 && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {line.rows.length} deliveries
+                                </div>
+                              )}
                             </td>
                             <td className="px-4 py-4">
                               <input
@@ -1588,13 +1619,15 @@ export default function ManageInvoice() {
                               {priceItem && priceItem.unit_price > 0 && (
                                 <div className="text-xs text-gray-500 mt-1">
                                   {formatCurrency(priceItem.unit_price)} ×{" "}
-                                  {formatServiceQuantity(service)}
+                                  {formatLineQuantity(line)}
                                 </div>
                               )}
                             </td>
                             <td className="px-4 py-4">
                               <div className="text-sm text-gray-600">
-                                {service.remarks || "-"}
+                                {/* Ton lines show each delivery's remarks
+                                    in the delivery list instead */}
+                                {(!isTon && service.remarks) || "-"}
                               </div>
                             </td>
                           </tr>

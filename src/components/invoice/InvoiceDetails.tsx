@@ -12,7 +12,9 @@ import {
   formatMaterialTotal,
 } from "../../utils/materialCalculations";
 import {
-  formatServiceQuantity,
+  formatLineQuantity,
+  formatTons,
+  groupServicesForInvoice,
   isTonService,
   serviceUom,
 } from "../../utils/generalServices";
@@ -716,32 +718,42 @@ export default function InvoiceDetails() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {invoice.bastp.general_services
-                        .sort(
-                          (a: any, b: any) =>
-                            (a.service_type?.display_order || 0) -
-                            (b.service_type?.display_order || 0),
-                        )
-                        .map((service: any) => (
-                          <tr key={service.id} className="hover:bg-gray-50">
+                      {groupServicesForInvoice(
+                        invoice.bastp.general_services as any[],
+                      ).map((line) => {
+                        const service = line.service;
+                        const isTon = isTonService(service);
+                        return (
+                          <tr key={line.key} className="hover:bg-gray-50">
                             <td className="px-4 py-4">
                               <div className="text-sm font-medium text-gray-900">
                                 {service.service_type?.service_name}
                               </div>
-                              {isTonService(service) && service.start_date && (
-                                <div className="text-xs text-gray-500 mt-0.5">
-                                  Supplied {formatDate(service.start_date)}
-                                </div>
+                              {isTon && (
+                                <ul className="text-xs text-gray-500 mt-1 space-y-0.5">
+                                  {line.rows.map((row: any, i: number) => (
+                                    <li key={row.id}>
+                                      {i + 1}. {formatDate(row.start_date)} ·{" "}
+                                      {formatTons(row.quantity)} ton
+                                      {row.remarks ? ` · ${row.remarks}` : ""}
+                                    </li>
+                                  ))}
+                                </ul>
                               )}
                             </td>
                             <td className="px-4 py-4 text-center">
                               <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                                {formatServiceQuantity(service)}
+                                {formatLineQuantity(line)}
                               </span>
+                              {isTon && line.rows.length > 1 && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {line.rows.length} deliveries
+                                </div>
+                              )}
                             </td>
                             <td className="px-4 py-4 text-right">
                               <div className="text-sm text-gray-900">
-                                {formatCurrency(service.unit_price)}
+                                {formatCurrency(line.unit_price)}
                                 <span className="text-xs text-gray-500">
                                   {" "}
                                   / {serviceUom(service)}
@@ -750,20 +762,21 @@ export default function InvoiceDetails() {
                             </td>
                             <td className="px-4 py-4 text-right">
                               <div className="text-sm font-bold text-green-900">
-                                {formatCurrency(service.payment_price)}
+                                {formatCurrency(line.payment_price)}
                               </div>
                               <div className="text-xs text-gray-500 mt-1">
-                                {formatCurrency(service.unit_price)} ×{" "}
-                                {formatServiceQuantity(service)}
+                                {formatCurrency(line.unit_price)} ×{" "}
+                                {formatLineQuantity(line)}
                               </div>
                             </td>
                             <td className="px-4 py-4">
                               <div className="text-sm text-gray-600">
-                                {service.remarks || "-"}
+                                {(!isTon && service.remarks) || "-"}
                               </div>
                             </td>
                           </tr>
-                        ))}
+                        );
+                      })}
                     </tbody>
                     <tfoot className="bg-gray-50">
                       <tr>

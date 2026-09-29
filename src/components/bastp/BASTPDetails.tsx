@@ -8,6 +8,7 @@ import BASTPPrint from "./BASTPPrint";
 import {
   formatServiceQuantity,
   isTonService,
+  sortServices,
 } from "../../utils/generalServices";
 import {
   ArrowLeft,
@@ -1181,12 +1182,7 @@ export default function BASTPDetails() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {bastp.general_services
-                      .sort(
-                        (a: any, b: any) =>
-                          (a.service_type?.display_order || 0) -
-                          (b.service_type?.display_order || 0),
-                      )
+                    {sortServices(bastp.general_services as any[])
                       .map((service: any, index: number) => (
                         <tr key={service.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
