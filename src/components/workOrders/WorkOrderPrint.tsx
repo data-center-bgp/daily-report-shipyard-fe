@@ -1,7 +1,41 @@
-import { forwardRef, Fragment } from "react";
+import { forwardRef, Fragment, useEffect, useState } from "react";
 import type { WorkOrderWithDetails, WorkDetailsWithProgress } from "../../lib/supabase";
 import { terbilang } from "../../utils/terbilang";
 import { calcWorkingDays } from "../../utils/indonesianHolidays";
+import { COMPANY_STAMP, loadSignature } from "../../utils/signatures";
+
+const ISSUER_NAME = "Hendra Muzaki";
+const GENERAL_MANAGER_NAME = "Prasetya Abdillah";
+
+// Keeps the original 48px gap in the layout, but draws the signature larger
+// than that gap, centered on it — so it spills over the label above and the
+// name below, the way a real signature crosses the printed name.
+function SignatureImage({
+  src,
+  stamp,
+}: {
+  src: string | null;
+  stamp?: string | null;
+}) {
+  return (
+    <div className="relative h-12">
+      {stamp && (
+        <img
+          src={stamp}
+          alt=""
+          className="absolute top-1/2 left-1/2 -translate-y-1/2 -translate-x-[95%] h-24 w-auto opacity-90 pointer-events-none"
+        />
+      )}
+      {src && (
+        <img
+          src={src}
+          alt=""
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 h-20 w-auto max-w-[190px] object-contain pointer-events-none"
+        />
+      )}
+    </div>
+  );
+}
 
 interface WorkOrderPrintWorkDetail extends WorkDetailsWithProgress {
   work_scope?: { id: number; work_scope: string } | null;
@@ -51,6 +85,29 @@ function calcDays(start?: string | null, end?: string | null): number {
 
 const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
   ({ workOrder, printNumber }, ref) => {
+    const kaproName = workOrder.kapro?.kapro_name;
+    const [signatures, setSignatures] = useState<{
+      issuer: string | null;
+      kapro: string | null;
+      generalManager: string | null;
+      stamp: string | null;
+    }>({ issuer: null, kapro: null, generalManager: null, stamp: null });
+
+    useEffect(() => {
+      let cancelled = false;
+      Promise.all([
+        loadSignature(ISSUER_NAME),
+        loadSignature(kaproName),
+        loadSignature(GENERAL_MANAGER_NAME),
+        loadSignature(COMPANY_STAMP),
+      ]).then(([issuer, kapro, generalManager, stamp]) => {
+        if (!cancelled) setSignatures({ issuer, kapro, generalManager, stamp });
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [kaproName]);
+
     const formatDate = (dateString: string | null | undefined) => {
       if (!dateString) return "-";
       return new Date(dateString).toLocaleDateString("id-ID", {
@@ -632,25 +689,30 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
                       <tr>
                         <td className="w-1/3">
                           <p>Dikeluarkan oleh,</p>
-                          <div className="h-12"></div>
+                          <SignatureImage src={signatures.issuer} />
                           <p className="font-semibold underline">
-                            Hendra Muzaki
+                            {ISSUER_NAME}
                           </p>
                           <p>Marketing &amp; PPIC Department Head</p>
                         </td>
                         <td className="w-1/3">
                           <p>Di Setujui Oleh,</p>
-                          <div className="h-12"></div>
+                          <SignatureImage src={signatures.kapro} />
                           <p className="font-semibold underline">
-                            {workOrder.kapro?.kapro_name || "-"}
+                            {kaproName || "-"}
                           </p>
                           <p>Head Project</p>
                         </td>
                         <td className="w-1/3">
                           <p>Di ketahui Oleh,</p>
-                          <div className="h-12"></div>
+                          {/* Company stamp sits under the left half of the
+                              GM's signature, as on the stamped paper originals. */}
+                          <SignatureImage
+                            src={signatures.generalManager}
+                            stamp={signatures.stamp}
+                          />
                           <p className="font-semibold underline">
-                            Prasetya Abdillah
+                            {GENERAL_MANAGER_NAME}
                           </p>
                           <p>General Manager</p>
                         </td>
