@@ -1,11 +1,10 @@
 // Shared constants/utilities for the Activity Log page (Dashboard / Per User
-// / Rincian tabs) and the smaller UserActivitySummary dashboard widget.
+// / Rincian tabs).
 
 // Roles this feature tracks as "employees" for the User Aktif / User Tanpa
 // Aksi counts, the Per User grid rows, and the Dashboard recap table.
 // Deliberately excludes MASTER/MANAGER (oversight/admin accounts, not
-// day-to-day data entry) and OP_HEAD/ADMIN, matching the roster
-// UserActivitySummary already tracked before this feature existed.
+// day-to-day data entry) and OP_HEAD/ADMIN.
 export const TRACKED_ROLES = [
   "PPIC",
   "PRODUCTION",
@@ -56,8 +55,7 @@ export function tableShortCode(tableName: string): string {
 
 // ── Date helpers ───────────────────────────────────────────────────────────
 // All grouping is by LOCAL calendar day (not UTC), so "today" lines up with
-// what the person viewing the page actually considers today — same
-// convention UserActivitySummary already used.
+// what the person viewing the page actually considers today.
 
 const pad = (n: number) => String(n).padStart(2, "0");
 

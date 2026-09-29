@@ -52,9 +52,8 @@ export default function ActivityLogPage() {
     [preset, offset, customStart, customEnd],
   );
 
-  // Fetch the tracked-employee roster once per privilege level — same
-  // admin_list_all_profiles RPC UserActivitySummary uses, restricted to
-  // MASTER/MANAGER by that RPC itself.
+  // Fetch the tracked-employee roster once per privilege level —
+  // admin_list_all_profiles is restricted to MASTER/MANAGER by the RPC itself.
   useEffect(() => {
     if (!seesEveryone) {
       setTrackedProfiles([]);

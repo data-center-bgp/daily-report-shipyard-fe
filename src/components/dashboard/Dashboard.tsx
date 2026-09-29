@@ -5,7 +5,6 @@ import {
   useDashboardData,
   type VesselSummary,
 } from "../../hooks/useDashboardData";
-import UserActivitySummary from "./UserActivitySummary";
 import SearchableSelect from "../common/SearchableSelect";
 
 // Fixed-order categorical hues (slots 1-3 of the validated 8-hue set) — used
@@ -1440,8 +1439,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-
-      <UserActivitySummary />
     </div>
   );
 }
