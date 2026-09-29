@@ -35,6 +35,7 @@ import {
   Printer,
   Download,
   X,
+  FileSpreadsheet,
 } from "lucide-react";
 
 export default function BASTPDetails() {
@@ -55,6 +56,8 @@ export default function BASTPDetails() {
   );
   const [viewingFormPenawaran, setViewingFormPenawaran] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [printError, setPrintError] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
@@ -244,6 +247,27 @@ export default function BASTPDetails() {
       }
     `,
   });
+
+  // The Excel library is large, so the builder is loaded only on click.
+  const handleExportExcel = async () => {
+    if (!bastp) return;
+    try {
+      setExportingExcel(true);
+      setExportError(null);
+      const { buildBastpWorkbook, downloadBastpWorkbook } = await import(
+        "../../utils/bastpExcelExport"
+      );
+      const buffer = await buildBastpWorkbook(bastp);
+      downloadBastpWorkbook(buffer, bastp.number);
+    } catch (err) {
+      console.error("Error exporting BASTP to Excel:", err);
+      setExportError(
+        err instanceof Error ? err.message : "Failed to export to Excel",
+      );
+    } finally {
+      setExportingExcel(false);
+    }
+  };
 
   // Same canvas-snapshot approach as WorkOrderPrint's download — see that
   // component for the tradeoffs (no repeated header/footer per page).
@@ -574,6 +598,11 @@ export default function BASTPDetails() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">BASTP Details</h1>
           <p className="text-gray-600 mt-2">{bastp.number}</p>
+          {exportError && (
+            <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+              <AlertTriangle className="w-4 h-4" /> {exportError}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -584,6 +613,18 @@ export default function BASTPDetails() {
             className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-800 flex items-center gap-2"
           >
             <Printer className="w-4 h-4" /> Print
+          </button>
+          <button
+            onClick={handleExportExcel}
+            disabled={exportingExcel}
+            className="bg-white text-green-700 border border-green-600 px-4 py-2 rounded-lg hover:bg-green-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exportingExcel ? (
+              <Loader className="w-4 h-4 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="w-4 h-4" />
+            )}{" "}
+            {exportingExcel ? "Exporting..." : "Export Excel"}
           </button>
           {canEditBastp ? (
             <>
