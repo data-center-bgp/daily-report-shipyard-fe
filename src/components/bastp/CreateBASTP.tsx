@@ -883,11 +883,8 @@ export default function CreateBASTP() {
       return;
     }
 
-    // Only validate services in CREATE mode, not in EDIT mode (for backward compatibility)
-    if (!isEditMode && selectedServices.length === 0) {
-      setError("Please select at least one general service");
-      return;
-    }
+    // General services are optional: repairs done off-yard (typically on
+    // external vessels) have nothing to bill under them.
 
     const invalidTonService = selectedServices.find(
       (s) =>
@@ -1583,11 +1580,15 @@ export default function CreateBASTP() {
         <div className="bg-white rounded-lg shadow p-6">
           <div className="mb-4">
             <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-              <Wrench className="w-5 h-5" /> General Services
+              <Wrench className="w-5 h-5" /> General Services{" "}
+              <span className="text-sm font-normal text-gray-500">
+                (optional)
+              </span>
             </h2>
             <p className="text-sm text-gray-600 mt-1">
               Select the general services used for this vessel and specify the
-              dates (or the supply date and tons for Fresh Water Supply)
+              dates (or the supply date and tons for Fresh Water Supply). Skip
+              this if none apply.
             </p>
           </div>
 
@@ -1885,16 +1886,14 @@ export default function CreateBASTP() {
             </div>
           )}
 
-          {/* No services selected warning */}
+          {/* Nothing selected — allowed, just noted */}
           {selectedServices.length === 0 &&
             !loadingServiceTypes &&
             serviceTypes.length > 0 && (
-              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <p className="text-sm text-yellow-800 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4" />
-                  {isEditMode
-                    ? "No general services selected."
-                    : "Please select at least one general service"}
+              <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-sm text-gray-600">
+                  No general services selected. This is fine for work done
+                  outside the shipyard; leave it empty if none apply.
                 </p>
               </div>
             )}
