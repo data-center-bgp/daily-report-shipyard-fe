@@ -63,11 +63,23 @@ export default function Iridescence({
   const ctnDom = useRef<HTMLDivElement>(null);
   const mousePos = useRef({ x: 0.5, y: 0.5 });
 
+  // Depend on the primitive values: callers pass an inline array, and a new
+  // array identity would tear down and recreate the WebGL context every render.
+  const [colorR, colorG, colorB] = color;
+
   useEffect(() => {
     if (!ctnDom.current) return;
     const ctn = ctnDom.current;
-    const renderer = new Renderer();
+    let renderer: Renderer;
+    try {
+      renderer = new Renderer();
+    } catch {
+      // WebGL unavailable (GPU/hardware acceleration off, context limit hit):
+      // skip the effect and let the container's CSS fallback show.
+      return;
+    }
     const gl = renderer.gl;
+    if (!gl) return;
     gl.clearColor(1, 1, 1, 1);
 
     let program: Program;
@@ -92,7 +104,7 @@ export default function Iridescence({
       fragment: fragmentShader,
       uniforms: {
         uTime: { value: 0 },
-        uColor: { value: new Color(...color) },
+        uColor: { value: new Color(colorR, colorG, colorB) },
         uResolution: {
           value: new Color(
             gl.canvas.width,
@@ -138,7 +150,7 @@ export default function Iridescence({
       ctn.removeChild(gl.canvas);
       gl.getExtension("WEBGL_lose_context")?.loseContext();
     };
-  }, [color, speed, amplitude, mouseReact]);
+  }, [colorR, colorG, colorB, speed, amplitude, mouseReact]);
 
   return <div ref={ctnDom} className="iridescence-container" {...rest} />;
 }
