@@ -1,3 +1,4 @@
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
@@ -315,7 +316,8 @@ export default function WorkVerification() {
       setError(null);
 
       // Fetch work details with progress data
-      const { data: workDetailsData, error: wdError } = await supabase
+      const workDetailsData = await fetchAllRows<any>((from, to) =>
+        supabase
         .from("work_details")
         .select(
           `
@@ -350,12 +352,13 @@ export default function WorkVerification() {
         `,
         )
         .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-
-      if (wdError) throw wdError;
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to),
+      );
 
       // Process work details to find completed ones (100% progress)
-      const workDetailsWithProgress = (workDetailsData || []).map((wd) => {
+      const workDetailsWithProgress = workDetailsData.map((wd) => {
         const progressRecords: WorkProgressItem[] = wd.work_progress || [];
         if (progressRecords.length === 0) {
           return {
@@ -394,7 +397,8 @@ export default function WorkVerification() {
         canReviewAll ? completed : completed.filter(isExternalVessel),
       );
 
-      const { data: verificationData, error: verError } = await supabase
+      const verificationData = await fetchAllRows<any>((from, to) =>
+        supabase
         .from("work_verification")
         .select(
           `
@@ -432,11 +436,12 @@ export default function WorkVerification() {
         `,
         )
         .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-
-      if (verError) throw verError;
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to),
+      );
       const verificationsTyped =
-        (verificationData as unknown as VerificationWithDetails[]) || [];
+        verificationData as unknown as VerificationWithDetails[];
       setVerifications(
         canReviewAll
           ? verificationsTyped
@@ -446,14 +451,19 @@ export default function WorkVerification() {
       // Real BASTP linkage lives in bastp_work_details — work_details'
       // own is_in_bastp/bastp_id columns are legacy and nothing writes to
       // them anymore, so they're never used here.
-      const { data: bastpLinks, error: linkError } = await supabase
-        .from("bastp_work_details")
-        .select("work_details_id, bastp_id")
-        .is("deleted_at", null);
-
-      if (linkError) throw linkError;
+      const bastpLinks = await fetchAllRows<{
+        work_details_id: number;
+        bastp_id: number;
+      }>((from, to) =>
+        supabase
+          .from("bastp_work_details")
+          .select("work_details_id, bastp_id")
+          .is("deleted_at", null)
+          .order("id")
+          .range(from, to),
+      );
       setBastpLinkByWorkDetails(
-        new Map((bastpLinks || []).map((l) => [l.work_details_id, l.bastp_id])),
+        new Map(bastpLinks.map((l) => [l.work_details_id, l.bastp_id])),
       );
 
       // Fetch BASTPs with vessel information
