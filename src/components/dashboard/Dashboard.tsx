@@ -1,6 +1,21 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Filter, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Filter,
+  Gauge,
+  LayoutGrid,
+  List,
+  Receipt,
+  Search,
+  Ship,
+  X,
+} from "lucide-react";
 import {
   useDashboardData,
   type VesselSummary,
@@ -19,6 +34,66 @@ const PIPELINE_RAMP = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281"];
 
 const pct = (part: number, total: number) =>
   total > 0 ? Math.round((part / total) * 100) : 0;
+
+// Status pills for a vessel. Overdue and ready-to-invoice can both apply, so
+// they stack; a vessel with neither shows a single neutral pill instead.
+function VesselBadges({ vessel }: { vessel: VesselSummary }) {
+  const pill =
+    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset";
+  const none = !vessel.hasOverdue && vessel.readyForInvoiceCount === 0;
+  const allDone = vessel.completed > 0 && vessel.inProgress === 0;
+  return (
+    <>
+      {vessel.hasOverdue && (
+        <span className={`${pill} bg-red-50 text-red-700 ring-red-100`}>
+          <AlertTriangle className="h-3 w-3" /> Overdue
+        </span>
+      )}
+      {vessel.readyForInvoiceCount > 0 && (
+        <span className={`${pill} bg-amber-50 text-amber-700 ring-amber-100`}>
+          <Receipt className="h-3 w-3" /> Ready to invoice
+        </span>
+      )}
+      {none && (
+        <span
+          className={`${pill} ${
+            allDone
+              ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+              : "bg-slate-50 text-slate-600 ring-slate-200"
+          }`}
+        >
+          <CheckCircle2 className="h-3 w-3" />
+          {allDone ? "Completed" : "Normal"}
+        </span>
+      )}
+    </>
+  );
+}
+
+function ProgressTrack({
+  value,
+  color,
+  height,
+}: {
+  value: number;
+  color: string;
+  height: string;
+}) {
+  return (
+    <div
+      className={`w-full overflow-hidden rounded-full bg-slate-100 ${height}`}
+      role="progressbar"
+      aria-valuenow={value}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      <div
+        className={`${color} ${height} rounded-full transition-all`}
+        style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
+      />
+    </div>
+  );
+}
 
 const MONTH_NAMES = [
   "January",
@@ -323,12 +398,16 @@ export default function Dashboard() {
     });
   };
 
-  const getVesselStatusColor = (summary: VesselSummary) => {
-    if (summary.hasOverdue) return "border-red-500";
-    if (summary.readyForInvoiceCount > 0) return "border-yellow-500";
-    if (summary.completed > 0) return "border-green-500";
-    if (summary.inProgress > 0) return "border-blue-500";
-    return "border-gray-300";
+  // Tint for the vessel's icon tile, in the same priority order the old
+  // left-border color used.
+  const getVesselStatus = (summary: VesselSummary) => {
+    if (summary.hasOverdue) return { tile: "bg-red-50 text-red-600" };
+    if (summary.readyForInvoiceCount > 0)
+      return { tile: "bg-amber-50 text-amber-600" };
+    if (summary.completed > 0)
+      return { tile: "bg-emerald-50 text-emerald-600" };
+    if (summary.inProgress > 0) return { tile: "bg-blue-50 text-blue-600" };
+    return { tile: "bg-slate-100 text-slate-400" };
   };
 
   if (loading) {
@@ -1054,48 +1133,57 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Enhanced Vessel Summary */}
+      {/* Vessel Summary */}
       {vesselSummaries.length > 0 && (
         <div className="mb-8">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">
-                Vessel Summary ({filteredVessels.length} of{" "}
-                {vesselSummaries.length} vessels)
-              </h2>
-              <p className="text-sm text-gray-600">
-                Track work progress across all vessels — combined, and split
-                between Docking and Repair
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-xl font-semibold text-slate-900">
+                  Vessel Summary
+                </h2>
+                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 tabular-nums">
+                  {filteredVessels.length} of {vesselSummaries.length} vessels
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-slate-500">
+                Work progress across all vessels — combined, and split between
+                Docking and Repair
               </p>
             </div>
 
-            <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
-              <button
-                onClick={() => setVesselViewMode("grid")}
-                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                  vesselViewMode === "grid"
-                    ? "bg-white text-gray-900 shadow"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-              >
-                Grid
-              </button>
-              <button
-                onClick={() => setVesselViewMode("list")}
-                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                  vesselViewMode === "list"
-                    ? "bg-white text-gray-900 shadow"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-              >
-                List
-              </button>
+            <div
+              role="group"
+              aria-label="View mode"
+              className="inline-flex self-start lg:self-auto items-center gap-0.5 rounded-lg bg-slate-100 p-1"
+            >
+              {(
+                [
+                  { mode: "grid", label: "Grid", Icon: LayoutGrid },
+                  { mode: "list", label: "List", Icon: List },
+                ] as const
+              ).map(({ mode, label, Icon }) => (
+                <button
+                  key={mode}
+                  onClick={() => setVesselViewMode(mode)}
+                  aria-pressed={vesselViewMode === mode}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    vesselViewMode === mode
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-4 mb-4">
-            <div className="flex flex-col sm:flex-row gap-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 mb-5 shadow-sm">
+            <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex-1 relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Search vessels..."
@@ -1104,11 +1192,8 @@ export default function Dashboard() {
                     setVesselSearchTerm(e.target.value);
                     setVesselPage(1);
                   }}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/60 py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 />
-                <span className="absolute left-3 top-2.5 text-gray-400">
-                  🔍
-                </span>
               </div>
 
               <select
@@ -1117,7 +1202,7 @@ export default function Dashboard() {
                   setVesselFilter(e.target.value as typeof vesselFilter);
                   setVesselPage(1);
                 }}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               >
                 <option value="all">
                   All Vessels ({vesselFilterCounts.all})
@@ -1138,7 +1223,7 @@ export default function Dashboard() {
                 onChange={(e) =>
                   setVesselSortBy(e.target.value as typeof vesselSortBy)
                 }
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               >
                 <option value="activity">Recent Activity</option>
                 <option value="name">Name (A-Z)</option>
@@ -1147,212 +1232,253 @@ export default function Dashboard() {
               </select>
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-4 text-sm text-gray-600">
-              <span>Overdue: {vesselQuickStats.overdue}</span>
-              <span>Ready to Invoice: {vesselQuickStats.readyToInvoice}</span>
-              <span>Avg Progress: {vesselQuickStats.avgProgress}%</span>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-100">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Overdue
+                <b className="tabular-nums">{vesselQuickStats.overdue}</b>
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-100">
+                <Receipt className="h-3.5 w-3.5" />
+                Ready to Invoice
+                <b className="tabular-nums">{vesselQuickStats.readyToInvoice}</b>
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-100">
+                <Gauge className="h-3.5 w-3.5" />
+                Avg Progress
+                <b className="tabular-nums">{vesselQuickStats.avgProgress}%</b>
+              </span>
             </div>
           </div>
 
-          {vesselViewMode === "grid" ? (
+          {paginationValues.currentVessels.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white py-12 text-center">
+              <Ship className="mx-auto h-8 w-8 text-slate-300" />
+              <p className="mt-2 text-sm font-medium text-slate-600">
+                No vessels match your filters
+              </p>
+              <p className="text-xs text-slate-400">
+                Try a different search or filter.
+              </p>
+            </div>
+          ) : vesselViewMode === "grid" ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {paginationValues.currentVessels.map((vessel) => (
-                <div
+                <button
+                  type="button"
                   key={vessel.id}
-                  className={`bg-white rounded-lg shadow p-4 border-l-4 cursor-pointer hover:shadow-lg transition-all ${getVesselStatusColor(
-                    vessel,
-                  )}`}
+                  className="group flex flex-col rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   onClick={() => navigate(`/vessel/${vessel.id}/work-orders`)}
                 >
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex-1 min-w-0">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg ${getVesselStatus(vessel).tile}`}
+                    >
+                      <Ship className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
                       <h3
-                        className="font-semibold text-gray-900 text-sm truncate"
+                        className="truncate text-sm font-semibold text-slate-900"
                         title={vessel.name}
                       >
                         {vessel.name}
                       </h3>
                       <p
-                        className="text-xs text-gray-600 truncate"
+                        className="truncate text-xs text-slate-500"
                         title={`${vessel.type} • ${vessel.company}`}
                       >
                         {vessel.type} • {vessel.company}
                       </p>
                     </div>
-                    <div className="flex items-center space-x-1 ml-2">
-                      {vessel.hasOverdue && (
-                        <span className="text-red-500">🚨</span>
-                      )}
-                      {vessel.readyForInvoiceCount > 0 && (
-                        <span className="text-orange-500">💰</span>
-                      )}
-                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
-                    <div className="text-center">
-                      <div className="font-bold text-blue-600">
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <VesselBadges vessel={vessel} />
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-3 divide-x divide-slate-100 rounded-lg bg-slate-50 py-2 text-center">
+                    <div>
+                      <div className="text-base font-semibold leading-tight text-slate-900 tabular-nums">
                         {vessel.totalWorkOrders}
                       </div>
-                      <div className="text-gray-500">Total WO</div>
+                      <div className="text-[11px] text-slate-500">Total WO</div>
                     </div>
-                    <div className="text-center">
-                      <div className="font-bold text-green-600">
+                    <div>
+                      <div className="text-base font-semibold leading-tight text-blue-700 tabular-nums">
+                        {vessel.inProgress}
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        In progress
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-base font-semibold leading-tight text-emerald-700 tabular-nums">
                         {vessel.completed}
                       </div>
-                      <div className="text-gray-500">Done</div>
+                      <div className="text-[11px] text-slate-500">Done</div>
                     </div>
                   </div>
 
-                  {/* Combined progress */}
-                  <div className="flex items-center mb-1">
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full transition-all"
-                        style={{ width: `${vessel.overallProgress}%` }}
-                      ></div>
+                  <div className="mt-4">
+                    <div className="mb-1.5 flex items-baseline justify-between">
+                      <span className="text-xs font-medium text-slate-500">
+                        Overall progress
+                      </span>
+                      <span className="text-sm font-semibold text-slate-900 tabular-nums">
+                        {vessel.overallProgress}%
+                      </span>
                     </div>
-                    <span className="text-xs text-gray-500 ml-2 min-w-max">
-                      {vessel.overallProgress}%
-                    </span>
+                    <ProgressTrack
+                      value={vessel.overallProgress}
+                      color="bg-blue-600"
+                      height="h-2"
+                    />
                   </div>
 
-                  {/* Docking / Repair split */}
-                  <div className="space-y-1 mb-2">
-                    {vessel.dockingProgress !== null && (
-                      <div className="flex items-center">
-                        <span className="text-[10px] text-gray-400 w-12 flex-shrink-0">
-                          Docking
-                        </span>
-                        <div className="w-full bg-gray-100 rounded-full h-1.5">
-                          <div
-                            className="bg-indigo-500 h-1.5 rounded-full"
-                            style={{ width: `${vessel.dockingProgress}%` }}
-                          ></div>
+                  {(vessel.dockingProgress !== null ||
+                    vessel.repairProgress !== null) && (
+                    <div className="mt-3 space-y-1.5">
+                      {vessel.dockingProgress !== null && (
+                        <div className="flex items-center gap-2">
+                          <span className="w-14 flex-shrink-0 text-[11px] text-slate-500">
+                            Docking
+                          </span>
+                          <ProgressTrack
+                            value={vessel.dockingProgress}
+                            color="bg-indigo-500"
+                            height="h-1.5"
+                          />
+                          <span className="w-9 flex-shrink-0 text-right text-[11px] text-slate-500 tabular-nums">
+                            {vessel.dockingProgress}%
+                          </span>
                         </div>
-                        <span className="text-[10px] text-gray-400 ml-2 min-w-max">
-                          {vessel.dockingProgress}%
-                        </span>
-                      </div>
-                    )}
-                    {vessel.repairProgress !== null && (
-                      <div className="flex items-center">
-                        <span className="text-[10px] text-gray-400 w-12 flex-shrink-0">
-                          Repair
-                        </span>
-                        <div className="w-full bg-gray-100 rounded-full h-1.5">
-                          <div
-                            className="bg-teal-500 h-1.5 rounded-full"
-                            style={{ width: `${vessel.repairProgress}%` }}
-                          ></div>
+                      )}
+                      {vessel.repairProgress !== null && (
+                        <div className="flex items-center gap-2">
+                          <span className="w-14 flex-shrink-0 text-[11px] text-slate-500">
+                            Repair
+                          </span>
+                          <ProgressTrack
+                            value={vessel.repairProgress}
+                            color="bg-teal-500"
+                            height="h-1.5"
+                          />
+                          <span className="w-9 flex-shrink-0 text-right text-[11px] text-slate-500 tabular-nums">
+                            {vessel.repairProgress}%
+                          </span>
                         </div>
-                        <span className="text-[10px] text-gray-400 ml-2 min-w-max">
-                          {vessel.repairProgress}%
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {vessel.lastActivity && (
-                    <div className="text-xs text-gray-400 truncate">
-                      Last: {formatDate(vessel.lastActivity)}
+                      )}
                     </div>
                   )}
-                </div>
+
+                  <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-400">
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5" />
+                      {vessel.lastActivity
+                        ? formatDate(vessel.lastActivity)
+                        : "No activity"}
+                    </span>
+                    <ArrowRight className="h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-blue-600" />
+                  </div>
+                </button>
               ))}
             </div>
           ) : (
-            <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="min-w-full divide-y divide-slate-200">
+                  <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Vessel
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Work Orders
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Progress (Combined / Docking / Repair)
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Last Activity
-                      </th>
+                      {[
+                        "Vessel",
+                        "Work Orders",
+                        "Progress",
+                        "Status",
+                        "Last Activity",
+                      ].map((heading) => (
+                        <th
+                          key={heading}
+                          className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500"
+                        >
+                          {heading}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="divide-y divide-slate-100 bg-white">
                     {paginationValues.currentVessels.map((vessel) => (
                       <tr
                         key={vessel.id}
-                        className="hover:bg-gray-50 cursor-pointer"
+                        className="cursor-pointer transition-colors hover:bg-slate-50"
                         onClick={() =>
                           navigate(`/vessel/${vessel.id}/work-orders`)
                         }
                       >
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">
-                              {vessel.name}
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg ${getVesselStatus(vessel).tile}`}
+                            >
+                              <Ship className="h-4 w-4" />
                             </div>
-                            <div className="text-sm text-gray-500">
-                              {vessel.type} • {vessel.company}
+                            <div>
+                              <div className="text-sm font-medium text-slate-900">
+                                {vessel.name}
+                              </div>
+                              <div className="text-xs text-slate-500">
+                                {vessel.type} • {vessel.company}
+                              </div>
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex space-x-4 text-sm">
-                            <span className="text-blue-600 font-medium">
-                              {vessel.totalWorkOrders} Total
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <div className="flex gap-4 text-sm tabular-nums">
+                            <span className="font-medium text-slate-900">
+                              {vessel.totalWorkOrders}{" "}
+                              <span className="font-normal text-slate-500">
+                                total
+                              </span>
                             </span>
-                            <span className="text-yellow-600">
-                              {vessel.inProgress} Progress
+                            <span className="text-blue-700">
+                              {vessel.inProgress}{" "}
+                              <span className="text-slate-500">in progress</span>
                             </span>
-                            <span className="text-green-600">
-                              {vessel.completed} Done
+                            <span className="text-emerald-700">
+                              {vessel.completed}{" "}
+                              <span className="text-slate-500">done</span>
                             </span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-600">
-                            {vessel.overallProgress}%{" "}
-                            <span className="text-gray-400">
-                              (
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <div className="flex items-center gap-3">
+                            <div className="w-28">
+                              <ProgressTrack
+                                value={vessel.overallProgress}
+                                color="bg-blue-600"
+                                height="h-2"
+                              />
+                            </div>
+                            <span className="w-10 text-sm font-semibold text-slate-900 tabular-nums">
+                              {vessel.overallProgress}%
+                            </span>
+                            <span className="text-xs text-slate-500 tabular-nums">
+                              Docking{" "}
                               {vessel.dockingProgress !== null
                                 ? `${vessel.dockingProgress}%`
                                 : "—"}{" "}
-                              /{" "}
+                              · Repair{" "}
                               {vessel.repairProgress !== null
                                 ? `${vessel.repairProgress}%`
                                 : "—"}
-                              )
                             </span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex space-x-1">
-                            {vessel.hasOverdue && (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                🚨 Overdue
-                              </span>
-                            )}
-                            {vessel.readyForInvoiceCount > 0 && (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                                💰 Ready
-                              </span>
-                            )}
-                            {!vessel.hasOverdue &&
-                              vessel.readyForInvoiceCount === 0 && (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                  ✅ Normal
-                                </span>
-                              )}
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <div className="flex gap-1.5">
+                            <VesselBadges vessel={vessel} />
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-5 py-3.5 whitespace-nowrap text-sm text-slate-500">
                           {vessel.lastActivity
                             ? formatDate(vessel.lastActivity)
                             : "No activity"}
@@ -1366,9 +1492,9 @@ export default function Dashboard() {
           )}
 
           {paginationValues.totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between">
-              <div className="text-sm text-gray-600">
-                Showing {paginationValues.startIndex + 1} to{" "}
+            <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="text-sm text-slate-500 tabular-nums">
+                Showing {paginationValues.startIndex + 1}–
                 {Math.min(
                   paginationValues.startIndex + vesselsPerPage,
                   filteredVessels.length,
@@ -1376,43 +1502,43 @@ export default function Dashboard() {
                 of {filteredVessels.length} vessels
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => setVesselPage(Math.max(1, vesselPage - 1))}
                   disabled={vesselPage === 1}
-                  className="px-3 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 text-sm"
+                  aria-label="Previous page"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  ← Previous
+                  <ChevronLeft className="h-4 w-4" />
                 </button>
 
-                <div className="flex space-x-1">
-                  {Array.from(
-                    { length: Math.min(5, paginationValues.totalPages) },
-                    (_, i) => {
-                      const pageNum =
-                        Math.max(
-                          1,
-                          Math.min(
-                            paginationValues.totalPages - 4,
-                            vesselPage - 2,
-                          ),
-                        ) + i;
-                      return (
-                        <button
-                          key={pageNum}
-                          onClick={() => setVesselPage(pageNum)}
-                          className={`px-3 py-2 text-sm rounded-lg ${
-                            pageNum === vesselPage
-                              ? "bg-blue-600 text-white"
-                              : "border border-gray-300 hover:bg-gray-50"
-                          }`}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    },
-                  )}
-                </div>
+                {Array.from(
+                  { length: Math.min(5, paginationValues.totalPages) },
+                  (_, i) => {
+                    const pageNum =
+                      Math.max(
+                        1,
+                        Math.min(
+                          paginationValues.totalPages - 4,
+                          vesselPage - 2,
+                        ),
+                      ) + i;
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setVesselPage(pageNum)}
+                        aria-current={pageNum === vesselPage ? "page" : undefined}
+                        className={`h-9 min-w-9 rounded-lg px-3 text-sm font-medium tabular-nums ${
+                          pageNum === vesselPage
+                            ? "bg-blue-600 text-white shadow-sm"
+                            : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  },
+                )}
 
                 <button
                   onClick={() =>
@@ -1421,20 +1547,22 @@ export default function Dashboard() {
                     )
                   }
                   disabled={vesselPage === paginationValues.totalPages}
-                  className="px-3 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 text-sm"
+                  aria-label="Next page"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  Next →
+                  <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
             </div>
           )}
 
-          <div className="mt-4 text-center">
+          <div className="mt-5 text-center">
             <button
               onClick={() => navigate("/work-orders")}
-              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-800"
             >
-              View Detailed Vessel Dashboard →
+              View Detailed Vessel Dashboard
+              <ArrowRight className="h-4 w-4" />
             </button>
           </div>
         </div>
