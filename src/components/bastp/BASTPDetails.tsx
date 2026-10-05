@@ -1,3 +1,4 @@
+import FormPenawaranMissingBadge from "./FormPenawaranMissingBadge";
 import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useReactToPrint } from "react-to-print";
@@ -679,7 +680,13 @@ export default function BASTPDetails() {
             <label className="block text-sm font-medium text-gray-500 mb-1">
               Status
             </label>
-            {getStatusBadge(bastp.status)}
+            <div className="flex flex-wrap items-center gap-2">
+              {getStatusBadge(bastp.status)}
+              {(bastp.status === "DRAFT" || bastp.status === "VERIFIED") &&
+                !bastp.form_penawaran_storage_path && (
+                  <FormPenawaranMissingBadge onDetailsPage />
+                )}
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-500 mb-1">

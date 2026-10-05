@@ -21,6 +21,7 @@ import {
   ClipboardList,
 } from "lucide-react";
 import CompletedWorkDetails from "./CompletedWorkDetails";
+import FormPenawaranMissingBadge from "./FormPenawaranMissingBadge";
 
 type PageTab = "records" | "completedWork";
 
@@ -542,7 +543,14 @@ export default function BASTP() {
                         )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(bastp.status)}
+                      <div className="flex flex-col items-start gap-1.5">
+                        {getStatusBadge(bastp.status)}
+                        {(bastp.status === "DRAFT" ||
+                          bastp.status === "VERIFIED") &&
+                          !bastp.form_penawaran_storage_path && (
+                            <FormPenawaranMissingBadge />
+                          )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {bastp.profiles?.name || "Unknown"}
