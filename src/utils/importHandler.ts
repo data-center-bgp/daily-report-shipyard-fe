@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { fetchAllRows } from "./fetchAllRows";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { WORK_TYPE_OPTIONS } from "../constants/workTypes";
@@ -157,20 +158,31 @@ async function getMasterData(): Promise<MasterData> {
   if (masterDataPromise) return masterDataPromise;
 
   masterDataPromise = (async () => {
-    const [vesselsRes, kaprosRes, locationsRes, workScopesRes, workOrdersRes, workDetailsRes] =
+    const [vesselsRes, kaprosRes, locationsRes, workScopesRes, workOrdersData, workDetailsData] =
       await Promise.all([
         supabase.from("vessel").select("id, name").is("deleted_at", null),
         supabase.from("kapro").select("id, kapro_name").is("deleted_at", null),
         supabase.from("location").select("id, location").is("deleted_at", null),
         supabase.from("work_scope").select("id, work_scope").is("deleted_at", null),
-        supabase
-          .from("work_order")
-          .select("id, vessel_id, shipyard_wo_number")
-          .is("deleted_at", null),
-        supabase
-          .from("work_details")
-          .select("id, work_order_id, description")
-          .is("deleted_at", null),
+        // These two outgrow PostgREST's 1000-row cap, so page through them.
+        fetchAllRows<{ id: number; vessel_id: number; shipyard_wo_number: string | null }>(
+          (from, to) =>
+            supabase
+              .from("work_order")
+              .select("id, vessel_id, shipyard_wo_number")
+              .is("deleted_at", null)
+              .order("id")
+              .range(from, to),
+        ),
+        fetchAllRows<{ id: number; work_order_id: number; description: string | null }>(
+          (from, to) =>
+            supabase
+              .from("work_details")
+              .select("id, work_order_id, description")
+              .is("deleted_at", null)
+              .order("id")
+              .range(from, to),
+        ),
       ]);
 
     const vesselsByNorm = new Map<string, number>();
@@ -210,13 +222,13 @@ async function getMasterData(): Promise<MasterData> {
     }
 
     const workOrdersByKey = new Map<string, number>();
-    for (const wo of workOrdersRes.data ?? []) {
+    for (const wo of workOrdersData) {
       const key = `${wo.vessel_id}:${((wo.shipyard_wo_number as string) ?? "").toLowerCase().trim()}`;
       workOrdersByKey.set(key, wo.id as number);
     }
 
     const workDetailsByKey = new Map<string, number>();
-    for (const wd of workDetailsRes.data ?? []) {
+    for (const wd of workDetailsData) {
       const key = `${wd.work_order_id}:${((wd.description as string) ?? "").toLowerCase().trim()}`;
       workDetailsByKey.set(key, wd.id as number);
     }
@@ -1569,19 +1581,31 @@ export async function validateProgressRows(
     number,
     { id: number; progress_percentage: number; report_date: string }
   >();
-  const wdIds = [...workDetails.values()];
-  if (wdIds.length > 0) {
-    const { data } = await supabase
-      .from("work_progress")
-      .select("id, work_details_id, progress_percentage, report_date")
-      .eq("is_imported", true)
-      .is("deleted_at", null)
-      .in("work_details_id", wdIds);
-    for (const row of data ?? []) {
-      existingImported.set(row.work_details_id as number, {
-        id: row.id as number,
-        progress_percentage: row.progress_percentage as number,
-        report_date: row.report_date as string,
+  const wdIds = new Set(workDetails.values());
+  if (wdIds.size > 0) {
+    // Not filtered with .in("work_details_id", ids): that list can hold
+    // thousands of ids, which overflows the URL. Fetch every imported row
+    // (paged) and match against the id set here instead.
+    const importedRows = await fetchAllRows<{
+      id: number;
+      work_details_id: number;
+      progress_percentage: number;
+      report_date: string;
+    }>((from, to) =>
+      supabase
+        .from("work_progress")
+        .select("id, work_details_id, progress_percentage, report_date")
+        .eq("is_imported", true)
+        .is("deleted_at", null)
+        .order("id")
+        .range(from, to),
+    );
+    for (const row of importedRows) {
+      if (!wdIds.has(row.work_details_id)) continue;
+      existingImported.set(row.work_details_id, {
+        id: row.id,
+        progress_percentage: row.progress_percentage,
+        report_date: row.report_date,
       });
     }
   }

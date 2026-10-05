@@ -156,6 +156,7 @@ export class ActivityLogService {
         .gte("created_at", startISO)
         .lte("created_at", endISO)
         .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
         .range(from, from + batchSize - 1);
 
       if (userId) {

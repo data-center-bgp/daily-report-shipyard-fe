@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
@@ -36,6 +37,9 @@ import {
 } from "lucide-react";
 
 // ==================== INTERFACES ====================
+
+// Search ids are sent in the request URL (~8KB limit); stay well under it.
+const MAX_SEARCH_IDS = 1200;
 
 interface VesselInfo {
   id: number;
@@ -488,24 +492,13 @@ export default function WorkProgressTable({
           return;
         }
 
+        // Filter on the embedded work_details instead of first resolving the
+        // work orders to a list of work detail ids: that list can exceed
+        // PostgREST's 1000-row cap and the URL length limit.
         const workOrderIds = filteredWorkOrders.map((wo) => wo.id);
-        const { data: workDetailsInOrders, error: wdError } = await supabase
-          .from("work_details")
-          .select("id")
-          .in("work_order_id", workOrderIds)
-          .is("deleted_at", null);
-
-        if (wdError) throw wdError;
-
-        if (!workDetailsInOrders || workDetailsInOrders.length === 0) {
-          setWorkProgress([]);
-          setTotalCount(0);
-          setLoading(false);
-          return;
-        }
-
-        const workDetailsIds = workDetailsInOrders.map((wd) => wd.id);
-        query = query.in("work_details_id", workDetailsIds);
+        query = query
+          .in("work_details.work_order_id", workOrderIds)
+          .is("work_details.deleted_at", null);
       }
 
       // Free-text search across work detail description/PIC and progress
@@ -517,26 +510,51 @@ export default function WorkProgressTable({
         const term = `%${workDetailsSearchTerm.trim()}%`;
 
         const [descMatches, picMatches, notesMatches] = await Promise.all([
-          supabase
-            .from("work_details")
-            .select("id")
-            .ilike("description", term)
-            .is("deleted_at", null),
-          supabase
-            .from("work_details")
-            .select("id")
-            .ilike("pic", term)
-            .is("deleted_at", null),
-          supabase.from("work_progress").select("id").ilike("notes", term),
+          fetchAllRows<{ id: number }>((from, to) =>
+            supabase
+              .from("work_details")
+              .select("id")
+              .ilike("description", term)
+              .is("deleted_at", null)
+              .order("id")
+              .range(from, to),
+          ),
+          fetchAllRows<{ id: number }>((from, to) =>
+            supabase
+              .from("work_details")
+              .select("id")
+              .ilike("pic", term)
+              .is("deleted_at", null)
+              .order("id")
+              .range(from, to),
+          ),
+          fetchAllRows<{ id: number }>((from, to) =>
+            supabase
+              .from("work_progress")
+              .select("id")
+              .ilike("notes", term)
+              .order("id")
+              .range(from, to),
+          ),
         ]);
 
         const matchedDetailIds = new Set([
-          ...(descMatches.data || []).map((d) => d.id),
-          ...(picMatches.data || []).map((d) => d.id),
+          ...descMatches.map((d) => d.id),
+          ...picMatches.map((d) => d.id),
         ]);
-        const matchedProgressIds = new Set(
-          (notesMatches.data || []).map((p) => p.id),
-        );
+        const matchedProgressIds = new Set(notesMatches.map((p) => p.id));
+
+        // The ids go into the request URL, which has a hard length limit.
+        // Fail loudly instead of silently dropping matches.
+        if (matchedDetailIds.size + matchedProgressIds.size > MAX_SEARCH_IDS) {
+          setWorkProgress([]);
+          setTotalCount(0);
+          setError(
+            "Too many results match this search. Please use a more specific search term.",
+          );
+          setLoading(false);
+          return;
+        }
 
         if (matchedDetailIds.size === 0 && matchedProgressIds.size === 0) {
           setWorkProgress([]);

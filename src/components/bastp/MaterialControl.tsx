@@ -1,3 +1,4 @@
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
@@ -303,22 +304,24 @@ export default function MaterialControl({
 
   const fetchMaterialLists = async () => {
     try {
-      const { data, error: fetchError } = await supabase
-        .from("material_lists")
-        .select(
-          "*, material_density:material_density_id(id, name, density, unit)",
-        )
-        .is("deleted_at", null)
-        .order("category", { ascending: true })
-        .order("material", { ascending: true });
+      const data = await fetchAllRows((from, to) =>
+        supabase
+          .from("material_lists")
+          .select(
+            "*, material_density:material_density_id(id, name, density, unit)",
+          )
+          .is("deleted_at", null)
+          .order("category", { ascending: true })
+          .order("material", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to),
+      );
 
-      if (fetchError) throw fetchError;
-
-      setMaterialLists(data || []);
+      setMaterialLists(data);
 
       // Extract categories
       const categories = [
-        ...new Set(data?.map((m) => m.category).filter(Boolean)),
+        ...new Set(data.map((m) => m.category).filter(Boolean)),
       ];
       setAvailableCategories(categories as string[]);
     } catch (err) {

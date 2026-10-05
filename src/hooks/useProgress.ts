@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { fetchAllRows } from "../utils/fetchAllRows";
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import type {
@@ -335,10 +336,26 @@ export const useProgress = () => {
       const projects_on_track = active_projects - projects_behind_schedule;
 
       // Fetch work details stats for the unified interface
-      const { data: workDetailsStats, error: workDetailsError } = await supabase
-        .from("work_progress")
-        .select("work_details_id, progress_percentage, evidence_url")
-        .is("deleted_at", null);
+      let workDetailsStats:
+        | {
+            work_details_id: number;
+            progress_percentage: number;
+            evidence_url: string | null;
+          }[]
+        | null = null;
+      let workDetailsError: unknown = null;
+      try {
+        workDetailsStats = await fetchAllRows((from, to) =>
+          supabase
+            .from("work_progress")
+            .select("work_details_id, progress_percentage, evidence_url")
+            .is("deleted_at", null)
+            .order("id")
+            .range(from, to),
+        );
+      } catch (err) {
+        workDetailsError = err;
+      }
 
       let total_work_details = 0;
       let completed_work_details = 0;

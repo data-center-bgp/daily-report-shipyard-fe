@@ -20,6 +20,7 @@ import type {
   GeneralServiceInput,
 } from "../../types/generalService.types";
 import { ActivityLogService } from "../../services/activityLogService";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import { formatTons, sortServices } from "../../utils/generalServices";
 import {
   AlertTriangle,
@@ -345,7 +346,8 @@ export default function CreateBASTP() {
 
     try {
       // Get all work details with 100% progress for the selected vessel
-      const { data: workDetailsData, error: wdError } = await supabase
+      const workDetailsData = await fetchAllRows((from, to) =>
+        supabase
         .from("work_details")
         .select(
           `
@@ -377,12 +379,13 @@ export default function CreateBASTP() {
         `,
         )
         .eq("work_order.vessel.id", formData.vessel_id)
-        .is("deleted_at", null);
-
-      if (wdError) throw wdError;
+        .is("deleted_at", null)
+        .order("id")
+        .range(from, to),
+      );
 
       // Process to get only 100% completed work
-      const completedWork = (workDetailsData || [])
+      const completedWork = workDetailsData
         .map((wd) => {
           const progressRecords: WorkProgress[] = wd.work_progress || [];
           if (progressRecords.length === 0) {
@@ -417,16 +420,21 @@ export default function CreateBASTP() {
       // Check which work details are approved — the latest review per work
       // detail decides this, not just "does a work_verification row exist,"
       // since a rejected item can later be approved after rework.
-      const { data: verifications, error: verError } = await supabase
-        .from("work_verification")
-        .select("work_details_id, status, created_at")
-        .is("deleted_at", null);
-
-      if (verError) throw verError;
-
-      const latestVerificationByWorkDetails = getLatestVerificationByWorkDetails(
-        verifications || [],
+      const verifications = await fetchAllRows<{
+        work_details_id: number;
+        status: "APPROVED" | "REJECTED";
+        created_at: string;
+      }>((from, to) =>
+        supabase
+          .from("work_verification")
+          .select("work_details_id, status, created_at")
+          .is("deleted_at", null)
+          .order("id")
+          .range(from, to),
       );
+
+      const latestVerificationByWorkDetails =
+        getLatestVerificationByWorkDetails(verifications);
 
       // Mark verified / sent-back-for-rework work details
       const workWithVerification = completedWork.map((wd) => ({
@@ -439,18 +447,22 @@ export default function CreateBASTP() {
       }));
 
       // Filter out work details already in other BASTPs (except current one in edit mode)
-      const { data: existingBastpWorkDetails, error: bastpError } =
-        await supabase
+      const existingBastpWorkDetails = await fetchAllRows<{
+        work_details_id: number;
+        bastp_id: number;
+      }>((from, to) =>
+        supabase
           .from("bastp_work_details")
           .select("work_details_id, bastp_id")
-          .is("deleted_at", null);
-
-      if (bastpError) throw bastpError;
+          .is("deleted_at", null)
+          .order("id")
+          .range(from, to),
+      );
 
       const workDetailsInOtherBastps = new Set(
         existingBastpWorkDetails
-          ?.filter((bwd) => bwd.bastp_id !== Number(bastpId))
-          .map((bwd) => bwd.work_details_id) || [],
+          .filter((bwd) => bwd.bastp_id !== Number(bastpId))
+          .map((bwd) => bwd.work_details_id),
       );
 
       // Also exclude currently selected work details

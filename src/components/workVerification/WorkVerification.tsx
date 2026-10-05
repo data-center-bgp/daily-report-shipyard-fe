@@ -316,7 +316,7 @@ export default function WorkVerification() {
       setError(null);
 
       // Fetch work details with progress data
-      const workDetailsData = await fetchAllRows<any>((from, to) =>
+      const workDetailsData = await fetchAllRows((from, to) =>
         supabase
         .from("work_details")
         .select(
@@ -397,7 +397,7 @@ export default function WorkVerification() {
         canReviewAll ? completed : completed.filter(isExternalVessel),
       );
 
-      const verificationData = await fetchAllRows<any>((from, to) =>
+      const verificationData = await fetchAllRows((from, to) =>
         supabase
         .from("work_verification")
         .select(
