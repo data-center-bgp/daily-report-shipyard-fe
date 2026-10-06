@@ -280,10 +280,27 @@ export default function ReadinessForm() {
         .update({
           gas_test_document_url: publicUrlData.publicUrl,
           gas_test_storage_path: filePath,
-          updated_at: new Date().toISOString(),
+          // Adding the document to an already-approved form shouldn't
+          // reshuffle the queue's "last updated" ordering.
+          ...(savedStatus === "APPROVED"
+            ? {}
+            : { updated_at: new Date().toISOString() }),
         })
         .eq("id", formId);
       if (updateError) throw updateError;
+
+      await ActivityLogService.logActivity({
+        action: "update",
+        tableName: "vessel_readiness_forms",
+        recordId: formId,
+        oldData: { gas_test_storage_path: gasTestDoc.storagePath },
+        newData: { gas_test_storage_path: filePath, id: formId },
+        description: `${
+          gasTestDoc.storagePath ? "Replaced" : "Uploaded"
+        } Gas Tester result (FR-02-01) on ${
+          savedStatus === "APPROVED" ? "approved " : ""
+        }readiness form for project ${project?.project_name ?? `#${projectId}`}`,
+      });
 
       setGasTestDoc({ url: publicUrlData.publicUrl, storagePath: filePath });
     } catch (err) {
@@ -302,6 +319,11 @@ export default function ReadinessForm() {
   const hsseTurn = status === "SUBMITTED";
   const adminCanEdit = !isReadOnly && canFillAsAdmin && adminTurn;
   const hsseCanReview = !isReadOnly && canReviewAsHsse && hsseTurn;
+  // The Gas Tester result can be attached or replaced by whoever is filling
+  // the form, and by HSSE at any point — including after approval, since
+  // forms approved before this was possible still need the document added.
+  const canUploadGasTest =
+    !isReadOnly && (adminCanEdit || canReviewAsHsse);
 
   const allAnswered =
     checklistItems.length > 0 &&
@@ -894,7 +916,7 @@ export default function ReadinessForm() {
                 type="file"
                 accept=".pdf,.jpg,.jpeg,.png"
                 onChange={handleDocumentUpload}
-                disabled={uploadingDoc || !adminCanEdit}
+                disabled={uploadingDoc || !canUploadGasTest}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
               />
               {uploadingDoc && (

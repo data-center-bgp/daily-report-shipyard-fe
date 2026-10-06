@@ -9,12 +9,15 @@ import {
   Ship,
   FolderKanban,
   Clock,
+  FileWarning,
 } from "lucide-react";
+import Tooltip from "../common/Tooltip";
 
 interface ReadinessQueueRow {
   id: number;
   project_id: number;
   status: ReadinessFormStatus;
+  gas_test_storage_path: string | null;
   created_at: string;
   updated_at: string;
   project: { id: number; project_name: string } | null;
@@ -80,6 +83,7 @@ export default function ReadinessQueue() {
           id,
           project_id,
           status,
+          gas_test_storage_path,
           created_at,
           updated_at,
           project:project_id ( id, project_name ),
@@ -194,6 +198,16 @@ export default function ReadinessQueue() {
                         >
                           {badge.label}
                         </span>
+                        {!form.gas_test_storage_path &&
+                          (form.status === "SUBMITTED" ||
+                            form.status === "APPROVED") && (
+                            <Tooltip content="The Gas Tester result (FR-02-01) hasn't been attached to this form yet. HSSE can upload it from the form page.">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
+                                <FileWarning className="h-3 w-3" />
+                                Gas test result missing
+                              </span>
+                            </Tooltip>
+                          )}
                       </div>
                       <p className="text-sm text-gray-600 flex items-center gap-1">
                         <Ship className="w-3.5 h-3.5" /> {form.vessel?.name} —{" "}
