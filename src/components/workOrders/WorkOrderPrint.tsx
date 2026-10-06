@@ -226,6 +226,16 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
       dockingCategoryStart,
       dockingCategoryEnd,
     );
+    // Overall "Target Hari Kerja": once Docking Planning has dates, the
+    // timeline it describes (earliest start to latest close, in working days
+    // like every other duration on this document) is the authoritative total.
+    // Until it's been filled in, fall back to the span of the work details.
+    const dockingTimelineDays = calcWorkingDays(
+      dockingCategoryStart,
+      dockingCategoryEnd,
+    );
+    const overallTotalDays =
+      dockingTimelineDays > 0 ? dockingTimelineDays : totalDays;
     // Every other category/Serah Terima number shifts down by one when this
     // leading category is present.
     const categoryNumberOffset = hasDockingPlanning ? 2 : 1;
@@ -511,7 +521,7 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
                               Target Total Hari:
                             </span>
                             <span className="font-medium">
-                              {totalDays} ( {terbilang(totalDays)} ) Hari
+                              {overallTotalDays} ( {terbilang(overallTotalDays)} ) Hari
                             </span>
                           </div>
                         </div>

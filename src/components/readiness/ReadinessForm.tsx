@@ -1,3 +1,4 @@
+import DocumentViewerModal from "../common/DocumentViewerModal";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
@@ -97,11 +98,14 @@ export default function ReadinessForm() {
     signer_name: "",
     signed_date: "",
   });
+  // The bastp bucket is private, so the document is only ever referenced by
+  // its storage path and opened through a short-lived signed URL.
   const [gasTestDoc, setGasTestDoc] = useState<{
-    url: string | null;
     storagePath: string | null;
-  }>({ url: null, storagePath: null });
+  }>({ storagePath: null });
   const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [viewingDoc, setViewingDoc] = useState(false);
+  const [docViewerUrl, setDocViewerUrl] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -181,7 +185,6 @@ export default function ReadinessForm() {
           last_cargo_info: existingForm.last_cargo_info || "",
         });
         setGasTestDoc({
-          url: existingForm.gas_test_document_url,
           storagePath: existingForm.gas_test_storage_path,
         });
         setSavedStatus(existingForm.status);
@@ -271,14 +274,12 @@ export default function ReadinessForm() {
         .upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      const { data: publicUrlData } = supabase.storage
-        .from("bastp")
-        .getPublicUrl(filePath);
-
       const { error: updateError } = await supabase
         .from("vessel_readiness_forms")
         .update({
-          gas_test_document_url: publicUrlData.publicUrl,
+          // Public URLs 404 on a private bucket; the old column is cleared so
+          // nothing keeps pointing at a dead link.
+          gas_test_document_url: null,
           gas_test_storage_path: filePath,
           // Adding the document to an already-approved form shouldn't
           // reshuffle the queue's "last updated" ordering.
@@ -302,7 +303,7 @@ export default function ReadinessForm() {
         }readiness form for project ${project?.project_name ?? `#${projectId}`}`,
       });
 
-      setGasTestDoc({ url: publicUrlData.publicUrl, storagePath: filePath });
+      setGasTestDoc({ storagePath: filePath });
     } catch (err) {
       console.error("Error uploading gas test document:", err);
       alert(
@@ -310,6 +311,23 @@ export default function ReadinessForm() {
       );
     } finally {
       setUploadingDoc(false);
+    }
+  };
+
+  const handleViewDocument = async () => {
+    if (!gasTestDoc.storagePath) return;
+    try {
+      setViewingDoc(true);
+      const { data, error: signError } = await supabase.storage
+        .from("bastp")
+        .createSignedUrl(gasTestDoc.storagePath, 300);
+      if (signError) throw signError;
+      setDocViewerUrl(data.signedUrl);
+    } catch (err) {
+      console.error("Error opening gas test document:", err);
+      alert("❌ Failed to open the document. Please try again.");
+    } finally {
+      setViewingDoc(false);
     }
   };
 
@@ -893,19 +911,19 @@ export default function ReadinessForm() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Gas Tester Result (form FR-02-01)
               </label>
-              {gasTestDoc.url ? (
+              {gasTestDoc.storagePath ? (
                 <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg mb-3">
                   <p className="text-sm font-medium text-green-900">
                     Document uploaded
                   </p>
-                  <a
-                    href={gasTestDoc.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-800 text-sm"
+                  <button
+                    type="button"
+                    onClick={handleViewDocument}
+                    disabled={viewingDoc}
+                    className="text-blue-600 hover:text-blue-800 text-sm disabled:opacity-50"
                   >
-                    View Document
-                  </a>
+                    {viewingDoc ? "Opening..." : "View Document"}
+                  </button>
                 </div>
               ) : (
                 <p className="text-xs text-gray-500 mb-2">
@@ -1013,6 +1031,15 @@ export default function ReadinessForm() {
           </div>
         )}
       </form>
+
+      {docViewerUrl && gasTestDoc.storagePath && (
+        <DocumentViewerModal
+          title="Gas Tester Result (FR-02-01)"
+          url={docViewerUrl}
+          storagePath={gasTestDoc.storagePath}
+          onClose={() => setDocViewerUrl(null)}
+        />
+      )}
     </div>
   );
 }
