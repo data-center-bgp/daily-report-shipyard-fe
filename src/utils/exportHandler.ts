@@ -373,7 +373,8 @@ export const exportVesselData = async (
       )
     `
     )
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .is("work_order.work_details.deleted_at", null);
 
   // Apply vessel filter if specified
   if (vesselFilter.length > 0) {

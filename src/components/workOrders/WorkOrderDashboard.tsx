@@ -163,7 +163,8 @@ export default function WorkOrderDashboard() {
           )
         `,
         )
-        .is("deleted_at", null);
+        .is("deleted_at", null)
+        .is("work_details.deleted_at", null);
 
       clearTimeout(timeoutId);
 

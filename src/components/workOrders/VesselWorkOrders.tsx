@@ -412,6 +412,8 @@ export default function VesselWorkOrders() {
           )
           .eq("vessel_id", vesselId)
           .is("deleted_at", null)
+          // Soft-deleted work details must not keep showing under their WO.
+          .is("work_details.deleted_at", null)
           .order(sortField, { ascending: sortDirection === "asc" })
           // Nested work_details has no meaningful ordering of its own —
           // default to ascending id (insertion order), so the list matches

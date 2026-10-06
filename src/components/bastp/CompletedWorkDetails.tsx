@@ -92,7 +92,8 @@ export default function CompletedWorkDetails() {
           )
         `,
         )
-        .is("deleted_at", null);
+        .is("deleted_at", null)
+        .is("work_details.deleted_at", null);
 
       if (fetchError) throw fetchError;
 

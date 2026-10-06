@@ -277,7 +277,9 @@ function useDashboardDataQuery() {
           )
         `,
         )
-        .is("deleted_at", null);
+        .is("deleted_at", null)
+        // Soft-deleted work details must not count toward any dashboard total.
+        .is("work_details.deleted_at", null);
 
       if (fetchError) throw fetchError;
 

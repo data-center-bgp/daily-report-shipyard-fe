@@ -149,6 +149,7 @@ export default function ProjectDetails() {
         )
         .eq("project_id", projectId)
         .is("deleted_at", null)
+        .is("work_details.deleted_at", null)
         .order("shipyard_wo_date", { ascending: true });
 
       if (woError) throw woError;

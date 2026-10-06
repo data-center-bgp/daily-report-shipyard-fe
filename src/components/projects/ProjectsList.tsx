@@ -84,6 +84,7 @@ export default function ProjectsList() {
         `,
         )
         .is("deleted_at", null)
+        .is("work_order.work_details.deleted_at", null)
         .order("created_at", { ascending: false });
 
       if (fetchError) throw fetchError;
