@@ -38,8 +38,9 @@ import {
 
 // ==================== INTERFACES ====================
 
-// Search ids are sent in the request URL (~8KB limit); stay well under it.
-const MAX_SEARCH_IDS = 1200;
+// Search ids are sent in the request URL (~8KB limit, ~7 chars per id once
+// encoded); stay well under it so the friendly message shows first.
+const MAX_SEARCH_IDS = 800;
 
 interface VesselInfo {
   id: number;
@@ -580,6 +581,9 @@ export default function WorkProgressTable({
       query = query
         .order("report_date", { ascending: false })
         .order("created_at", { ascending: false })
+        // Imported rows share report_date and created_at; without a unique
+        // final key, rows can repeat or be skipped between pages.
+        .order("id", { ascending: false })
         .range(startIdx, startIdx + itemsPerPage - 1);
 
       const { data, error, count } = await query;

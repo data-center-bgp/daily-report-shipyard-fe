@@ -35,6 +35,7 @@ export default function ActivityLogPage() {
   const seesEveryone = canAccess("activityLogs");
 
   const [tab, setTab] = useState<TabKey>("dashboard");
+  const [loadError, setLoadError] = useState(false);
   const [preset, setPreset] = useState<PeriodPreset>("month");
   const [offset, setOffset] = useState(0);
   const [customStart, setCustomStart] = useState("");
@@ -96,13 +97,22 @@ export default function ActivityLogPage() {
     }
     let cancelled = false;
     setLoading(true);
+    setLoadError(false);
     const { startISO, endISO } = periodQueryBounds(range);
-    ActivityLogService.getAllLogsInRange(startISO, endISO).then((data) => {
-      if (!cancelled) {
-        setLogs(data);
-        setLoading(false);
-      }
-    });
+    ActivityLogService.getAllLogsInRange(startISO, endISO)
+      .then((data) => {
+        if (!cancelled) {
+          setLogs(data);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLogs([]);
+          setLoadError(true);
+          setLoading(false);
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -124,6 +134,12 @@ export default function ActivityLogPage() {
 
   return (
     <div className="p-6">
+      {loadError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          Gagal memuat log aktivitas. Data tidak ditampilkan agar tidak
+          menyesatkan — coba muat ulang halaman.
+        </div>
+      )}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">

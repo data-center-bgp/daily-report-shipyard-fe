@@ -165,8 +165,10 @@ export class ActivityLogService {
 
       const { data, error } = await query;
       if (error) {
+        // Never return a partial list: every tab aggregates over the whole
+        // set, so a silently truncated one would just look like low activity.
         console.error("Failed to fetch activity logs in range:", error);
-        break;
+        throw error;
       }
 
       const batch = data || [];
