@@ -50,12 +50,22 @@ interface WorkOrderGeneralServiceEntry {
   service_type?: { id: number; service_name: string; display_order: number };
 }
 
+export type WorkOrderPrintDocument = "WO" | "KOM";
+export type WorkOrderPrintScope = "all" | "original" | "additional";
+
 interface WorkOrderPrintProps {
   workOrder: Omit<WorkOrderWithDetails, "work_details"> & {
     work_details: WorkOrderPrintWorkDetail[];
     work_order_general_services?: WorkOrderGeneralServiceEntry[];
   };
   printNumber: number;
+  // "WO" = Perintah Kerja (FM-OPS-04-02); "KOM" = Kick Off Meeting
+  // (FM-OPS-04-04), which carries the same work items under its own header,
+  // numbering and unsigned signature block.
+  documentType?: WorkOrderPrintDocument;
+  // Which work details to list: everything, only the original scope, or only
+  // the additional work details.
+  scope?: WorkOrderPrintScope;
 }
 
 // Fixed display order matching the paper form's category sequence. Any
@@ -84,7 +94,8 @@ function calcDays(start?: string | null, end?: string | null): number {
 }
 
 const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
-  ({ workOrder, printNumber }, ref) => {
+  ({ workOrder, printNumber, documentType = "WO", scope = "all" }, ref) => {
+    const isKom = documentType === "KOM";
     const kaproName = workOrder.kapro?.kapro_name;
     const [signatures, setSignatures] = useState<{
       issuer: string | null;
@@ -117,8 +128,17 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
       });
     };
 
+    const komNumber = workOrder.shipyard_wo_number
+      ? workOrder.shipyard_wo_number.replace(/\/WO-/i, "/KOM-")
+      : "-";
+
     const activeDetails = (workOrder.work_details || []).filter(
-      (d) => !d.cancelled_at,
+      (d) =>
+        !d.cancelled_at &&
+        (scope === "all" ||
+          (scope === "additional"
+            ? !!d.is_additional_wo_details
+            : !d.is_additional_wo_details)),
     );
 
     // Group by work_scope name, preserving CATEGORY_ORDER first, then any
@@ -191,7 +211,10 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
     // calcWorkingDays' Sunday/holiday exclusion used for real work_details.
     // Keeping this a separate calendar-day convention avoids the printed
     // number silently disagreeing with what was actually typed in.
-    const dockingPlanningEntries = workOrder.work_order_general_services || [];
+    const dockingPlanningEntries =
+      scope === "additional"
+        ? []
+        : workOrder.work_order_general_services || [];
     const hasDockingPlanning = dockingPlanningEntries.length > 0;
     const dockingPlanningSorted = [...dockingPlanningEntries].sort(
       (a, b) => (a.service_type?.display_order || 0) - (b.service_type?.display_order || 0),
@@ -380,7 +403,7 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
           <thead>
             <tr>
               <td>
-                <div className="fm-code">FM-OPS-04-02</div>
+                <div className="fm-code">{isKom ? "FM-OPS-04-04" : "FM-OPS-04-02"}</div>
                 <img src="/images/invoice-header.png" alt="Company Header" />
               </td>
             </tr>
@@ -398,10 +421,10 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
               <td>
                 <div className="text-center mb-4 section-block">
                   <h1 className="text-base font-bold text-gray-900 underline">
-                    PERINTAH KERJA
+                    {isKom ? "MEETING AWAL PEKERJAAN" : "PERINTAH KERJA"}
                   </h1>
                   <p className="text-sm font-semibold text-gray-800">
-                    WORK ORDER (WO)
+                    {isKom ? "Kick Off Meeting (KOM)" : "WORK ORDER (WO)"}
                   </p>
                 </div>
               </td>
@@ -420,14 +443,16 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
                     <tr>
                       <td className="align-top w-1/2 pr-8">
                         <div className="space-y-1">
-                          <div className="flex gap-2">
-                            <span className="text-gray-600 w-32 flex-shrink-0">
-                              To:
-                            </span>
-                            <span className="font-semibold">
-                              Team Produksi
-                            </span>
-                          </div>
+                          {!isKom && (
+                            <div className="flex gap-2">
+                              <span className="text-gray-600 w-32 flex-shrink-0">
+                                To:
+                              </span>
+                              <span className="font-semibold">
+                                Team Produksi
+                              </span>
+                            </div>
+                          )}
                           <div className="flex gap-2">
                             <span className="text-gray-600 w-32 flex-shrink-0">
                               Name of Vessel:
@@ -480,10 +505,10 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
                           </div>
                           <div className="flex gap-2">
                             <span className="text-gray-600 w-32 flex-shrink-0">
-                              No. WO PPIC:
+                              {isKom ? "No. Kick Off Meeting:" : "No. WO PPIC:"}
                             </span>
                             <span className="font-medium">
-                              {workOrder.shipyard_wo_number}
+                              {isKom ? komNumber : workOrder.shipyard_wo_number}
                             </span>
                           </div>
                           <div className="flex gap-2">
@@ -502,6 +527,16 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
                               {workOrder.kapro?.kapro_name || "-"}
                             </span>
                           </div>
+                          {isKom && (
+                            <div className="flex gap-2">
+                              <span className="text-gray-600 w-32 flex-shrink-0">
+                                No. WO PPIC:
+                              </span>
+                              <span className="font-medium">
+                                {workOrder.shipyard_wo_number}
+                              </span>
+                            </div>
+                          )}
                           <div className="flex gap-2">
                             <span className="text-gray-600 w-32 flex-shrink-0">
                               No. WO Shipping:
@@ -510,12 +545,14 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
                               {workOrder.customer_wo_number || "-"}
                             </span>
                           </div>
-                          <div className="flex gap-2">
-                            <span className="text-gray-600 w-32 flex-shrink-0">
-                              Serial No./Part No.:
-                            </span>
-                            <span className="font-medium"></span>
-                          </div>
+                          {!isKom && (
+                            <div className="flex gap-2">
+                              <span className="text-gray-600 w-32 flex-shrink-0">
+                                Serial No./Part No.:
+                              </span>
+                              <span className="font-medium"></span>
+                            </div>
+                          )}
                           <div className="flex gap-2">
                             <span className="text-gray-600 w-32 flex-shrink-0">
                               Target Total Hari:
@@ -684,16 +721,60 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
             <tr>
               <td>
                 <div className="section-block pt-2">
-                  <div className="mb-4 text-xs border border-gray-400 p-2">
-                    Setelah pekerjaan selesai mohon di kirim evident nya ke
-                    Project Leader yang telah di tunjuk terima kasih.
-                  </div>
+                  {!isKom && (
+                    <div className="mb-4 text-xs border border-gray-400 p-2">
+                      Setelah pekerjaan selesai mohon di kirim evident nya ke
+                      Project Leader yang telah di tunjuk terima kasih.
+                    </div>
+                  )}
 
                   <div className="mb-2 text-xs">
                     {workOrder.work_location || "-"}, Samarinda,{" "}
                     {formatDate(workOrder.shipyard_wo_date)}
                   </div>
 
+                  {isKom ? (
+                    // Kick Off Meeting: names and roles only — the signature
+                    // spaces are left blank to be signed on paper.
+                    <table className="w-full mb-4 text-center text-xs">
+                      <tbody>
+                        <tr>
+                          <td className="w-1/4">
+                            <p>Disusun oleh,</p>
+                            <div className="h-12" />
+                            <p className="font-semibold underline">
+                              {ISSUER_NAME}
+                            </p>
+                            <p>Marketing &amp; PPIC Department Head</p>
+                          </td>
+                          <td className="w-1/4">
+                            <p>Di Setujui Oleh,</p>
+                            <div className="h-12" />
+                            <p className="font-semibold underline">
+                              {kaproName || "-"}
+                            </p>
+                            <p>Head Project</p>
+                          </td>
+                          <td className="w-1/4">
+                            <p>Di Setujui Oleh,</p>
+                            <div className="h-12" />
+                            {/* Owner's surveyor differs per job — name is
+                                written in by hand, so only a blank line. */}
+                            <div className="mx-auto h-4 w-40 border-b border-gray-800" />
+                            <p>Owner Surveyor</p>
+                          </td>
+                          <td className="w-1/4">
+                            <p>Di ketahui Oleh,</p>
+                            <div className="h-12" />
+                            <p className="font-semibold underline">
+                              {GENERAL_MANAGER_NAME}
+                            </p>
+                            <p>General Manager</p>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  ) : (
                   <table className="w-full mb-4 text-center text-xs">
                     <tbody>
                       <tr>
@@ -729,6 +810,8 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
                       </tr>
                     </tbody>
                   </table>
+
+                  )}
 
                   <div className="text-center text-xs text-gray-600">
                     <p>

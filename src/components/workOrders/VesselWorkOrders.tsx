@@ -11,7 +11,10 @@ import { ActivityLogService } from "../../services/activityLogService";
 import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import { isWorkOrderFullyCompleted } from "../../utils/workOrderCompletion";
 import { ensureWorkOrderPrintNumber } from "../../utils/workOrderPrintNumbering";
-import WorkOrderPrint from "./WorkOrderPrint";
+import WorkOrderPrint, {
+  type WorkOrderPrintDocument,
+  type WorkOrderPrintScope,
+} from "./WorkOrderPrint";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -164,11 +167,21 @@ export default function VesselWorkOrders() {
   const [printLoading, setPrintLoading] = useState<number | null>(null);
   const [printError, setPrintError] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [printDocType, setPrintDocType] =
+    useState<WorkOrderPrintDocument>("WO");
+  const [printScope, setPrintScope] = useState<WorkOrderPrintScope>("all");
   const printRef = useRef<HTMLDivElement>(null);
+
+  // e.g. "WO-337-WO-PPIC-...", "KOM-...-additional" — shared by the browser
+  // print title and the downloaded PDF's filename.
+  const printFileBase = () =>
+    `${printDocType}-${printPreviewWO?.shipyard_wo_number || printPreviewWO?.id}${
+      printScope === "all" ? "" : `-${printScope}`
+    }`;
 
   const handlePrintWorkOrder = useReactToPrint({
     contentRef: printRef,
-    documentTitle: `WO-${printPreviewWO?.shipyard_wo_number || printPreviewWO?.id}`,
+    documentTitle: printFileBase(),
     pageStyle: `
       @page {
         size: A4;
@@ -310,9 +323,7 @@ export default function VesselWorkOrders() {
         firstPage = false;
       }
 
-      pdf.save(
-        `WO-${printPreviewWO.shipyard_wo_number || printPreviewWO.id}.pdf`,
-      );
+      pdf.save(`${printFileBase()}.pdf`);
     } catch (err) {
       console.error("Error generating work order PDF:", err);
       setPrintError(
@@ -338,6 +349,8 @@ export default function VesselWorkOrders() {
       );
       setPrintPreviewWO(woWithNumber);
       setPrintPreviewNumber(number);
+      setPrintDocType("WO");
+      setPrintScope("all");
     } catch (err) {
       console.error("Error preparing work order document:", err);
       setPrintError(
@@ -902,12 +915,18 @@ export default function VesselWorkOrders() {
     if (!printPreviewWO || printPreviewNumber == null) return null;
 
     return (
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-        <div className="bg-white rounded-lg max-w-5xl w-full my-8 shadow-2xl">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        {/* Fixed-height column: header + toolbar stay put and only the
+            document scrolls, so nothing is ever clipped by the viewport or
+            moves when the selection changes. */}
+        <div className="bg-white rounded-lg max-w-5xl w-full h-[92vh] flex flex-col shadow-2xl">
           {/* Modal Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200 sticky top-0 bg-white rounded-t-lg no-print z-10">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white rounded-t-lg no-print flex-shrink-0">
             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <FileText className="w-5 h-5" /> Work Order Print Preview
+              <FileText className="w-5 h-5" />{" "}
+              {printDocType === "KOM"
+                ? "Kick Off Meeting Print Preview"
+                : "Work Order Print Preview"}
             </h3>
             <div className="flex gap-2">
               <button
@@ -940,12 +959,91 @@ export default function VesselWorkOrders() {
             </div>
           </div>
 
+          {/* Document + scope selectors */}
+          <div className="no-print flex flex-wrap items-center gap-x-6 gap-y-2 px-4 pt-3 pb-1 bg-gray-50 text-sm flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-600 font-medium">Document</span>
+              <div className="inline-flex rounded-lg bg-gray-200 p-0.5">
+                {(
+                  [
+                    ["WO", "Work Order"],
+                    ["KOM", "Kick Off Meeting"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setPrintDocType(value)}
+                    aria-pressed={printDocType === value}
+                    className={`px-3 py-1 rounded-md font-medium transition-colors ${
+                      printDocType === value
+                        ? "bg-white text-gray-900 shadow-sm"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-600 font-medium">Work details</span>
+              <div className="inline-flex rounded-lg bg-gray-200 p-0.5">
+                {(
+                  [
+                    ["all", "All"],
+                    ["original", "Original only"],
+                    ["additional", "Additional only"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setPrintScope(value)}
+                    aria-pressed={printScope === value}
+                    className={`px-3 py-1 rounded-md font-medium transition-colors ${
+                      printScope === value
+                        ? "bg-white text-gray-900 shadow-sm"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          {/* Fixed-height hint line: its text changes with the selection, and a
+              line that appears/wraps would resize the toolbar and, with the
+              modal vertically centered, make the whole dialog jump under the
+              cursor between clicks. */}
+          <div className="no-print h-6 px-4 text-xs text-gray-500 bg-gray-50 border-b border-gray-200 flex items-center truncate flex-shrink-0">
+            {printScope !== "all" &&
+              `${
+                printPreviewWO.work_details.filter(
+                  (d) =>
+                    !d.cancelled_at &&
+                    (printScope === "additional"
+                      ? d.is_additional_wo_details
+                      : !d.is_additional_wo_details),
+                ).length
+              } work detail(s) in this selection${
+                printScope === "additional"
+                  ? " — Docking Planning is not included"
+                  : ""
+              }`}
+          </div>
+
           {/* Printable Content */}
-          <div className="overflow-y-auto max-h-[80vh]">
+          {/* Fixed (not max) height so a short selection can't shrink the
+              dialog and shift the toolbar away from the cursor. */}
+          <div className="overflow-y-auto flex-1 min-h-0">
             <WorkOrderPrint
               ref={printRef}
               workOrder={printPreviewWO}
               printNumber={printPreviewNumber}
+              documentType={printDocType}
+              scope={printScope}
             />
           </div>
         </div>
