@@ -170,6 +170,13 @@ export default function VesselWorkOrders() {
   const [printDocType, setPrintDocType] =
     useState<WorkOrderPrintDocument>("WO");
   const [printScope, setPrintScope] = useState<WorkOrderPrintScope>("all");
+  // Custom selection: which work details go on the document.
+  const [customSelectedIds, setCustomSelectedIds] = useState<number[]>([]);
+  const [customIncludeDocking, setCustomIncludeDocking] = useState(false);
+  // Issue date printed on a custom document — defaults to today.
+  const [customDocDate, setCustomDocDate] = useState("");
+  const customSelectionEmpty =
+    printScope === "custom" && customSelectedIds.length === 0;
   const printRef = useRef<HTMLDivElement>(null);
 
   // e.g. "WO-337-WO-PPIC-...", "KOM-...-additional" — shared by the browser
@@ -351,6 +358,9 @@ export default function VesselWorkOrders() {
       setPrintPreviewNumber(number);
       setPrintDocType("WO");
       setPrintScope("all");
+      setCustomSelectedIds([]);
+      setCustomIncludeDocking(false);
+      setCustomDocDate(new Date().toLocaleDateString("en-CA"));
     } catch (err) {
       console.error("Error preparing work order document:", err);
       setPrintError(
@@ -911,6 +921,143 @@ export default function VesselWorkOrders() {
     );
   }
 
+  // Checklist of the work order's work details, grouped by the day each was
+  // added — so "the 6 added on 1 October" is one click.
+  const renderCustomSelectionPanel = () => {
+    if (!printPreviewWO) return null;
+    const details = printPreviewWO.work_details.filter((d) => !d.cancelled_at);
+
+    const dayKey = (iso: string) => {
+      const d = new Date(iso);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+        d.getDate(),
+      ).padStart(2, "0")}`;
+    };
+    const groups = new Map<string, typeof details>();
+    [...details]
+      .sort((a, b) => a.id - b.id)
+      .forEach((d) => {
+        const key = dayKey(d.created_at);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(d);
+      });
+    const orderedGroups = Array.from(groups.entries()).sort(([a], [b]) =>
+      a.localeCompare(b),
+    );
+
+    const toggleIds = (ids: number[], on: boolean) =>
+      setCustomSelectedIds((prev) =>
+        on
+          ? Array.from(new Set([...prev, ...ids]))
+          : prev.filter((id) => !ids.includes(id)),
+      );
+
+    return (
+      <div className="no-print flex-shrink-0 border-b border-gray-200 bg-white">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 text-xs">
+          <button
+            type="button"
+            onClick={() => toggleIds(details.map((d) => d.id), true)}
+            className="text-blue-600 hover:text-blue-800 font-medium"
+          >
+            Select all
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              toggleIds(
+                details.filter((d) => d.is_additional_wo_details).map((d) => d.id),
+                true,
+              )
+            }
+            className="text-blue-600 hover:text-blue-800 font-medium"
+          >
+            Select all additional
+          </button>
+          <button
+            type="button"
+            onClick={() => setCustomSelectedIds([])}
+            className="text-gray-600 hover:text-gray-900 font-medium"
+          >
+            Clear
+          </button>
+          <label className="ml-auto inline-flex items-center gap-1.5 text-gray-700">
+            Document date
+            <input
+              type="date"
+              value={customDocDate}
+              onChange={(e) => setCustomDocDate(e.target.value)}
+              className="rounded border border-gray-300 px-1.5 py-0.5"
+            />
+          </label>
+          {(printPreviewWO.work_order_general_services?.length ?? 0) > 0 && (
+            <label className="inline-flex items-center gap-1.5 text-gray-700">
+              <input
+                type="checkbox"
+                checked={customIncludeDocking}
+                onChange={(e) => setCustomIncludeDocking(e.target.checked)}
+              />
+              Include Docking Planning
+            </label>
+          )}
+        </div>
+        <div className="max-h-44 overflow-y-auto border-t border-gray-100 px-4 pb-2">
+          {orderedGroups.map(([key, items]) => {
+            const ids = items.map((d) => d.id);
+            const selectedCount = ids.filter((id) =>
+              customSelectedIds.includes(id),
+            ).length;
+            return (
+              <div key={key} className="py-1.5">
+                <label className="flex items-center gap-2 text-xs font-semibold text-gray-800">
+                  <input
+                    type="checkbox"
+                    checked={selectedCount === ids.length}
+                    ref={(el) => {
+                      if (el)
+                        el.indeterminate =
+                          selectedCount > 0 && selectedCount < ids.length;
+                    }}
+                    onChange={(e) => toggleIds(ids, e.target.checked)}
+                  />
+                  Added {new Date(key + "T00:00:00").toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                  <span className="font-normal text-gray-500">
+                    ({selectedCount}/{ids.length})
+                  </span>
+                </label>
+                <div className="mt-1 space-y-0.5 pl-6">
+                  {items.map((d) => (
+                    <label
+                      key={d.id}
+                      className="flex items-start gap-2 text-xs text-gray-700"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={customSelectedIds.includes(d.id)}
+                        onChange={(e) => toggleIds([d.id], e.target.checked)}
+                      />
+                      <span className="flex-1">{d.description}</span>
+                      {d.is_additional_wo_details && (
+                        <span className="rounded bg-amber-100 px-1.5 text-[10px] font-medium text-amber-800">
+                          Additional
+                        </span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const renderPrintPreviewModal = () => {
     if (!printPreviewWO || printPreviewNumber == null) return null;
 
@@ -931,13 +1078,14 @@ export default function VesselWorkOrders() {
             <div className="flex gap-2">
               <button
                 onClick={handlePrintWorkOrder}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                disabled={customSelectionEmpty}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Printer className="w-4 h-4" /> Print
               </button>
               <button
                 onClick={handleDownloadWorkOrderPdf}
-                disabled={downloadingPdf}
+                disabled={downloadingPdf || customSelectionEmpty}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {downloadingPdf ? (
@@ -994,6 +1142,7 @@ export default function VesselWorkOrders() {
                     ["all", "All"],
                     ["original", "Original only"],
                     ["additional", "Additional only"],
+                    ["custom", "Custom selection"],
                   ] as const
                 ).map(([value, label]) => (
                   <button
@@ -1018,23 +1167,31 @@ export default function VesselWorkOrders() {
               modal vertically centered, make the whole dialog jump under the
               cursor between clicks. */}
           <div className="no-print h-6 px-4 text-xs text-gray-500 bg-gray-50 border-b border-gray-200 flex items-center truncate flex-shrink-0">
-            {printScope !== "all" &&
-              `${
-                printPreviewWO.work_details.filter(
-                  (d) =>
-                    !d.cancelled_at &&
-                    (printScope === "additional"
-                      ? d.is_additional_wo_details
-                      : !d.is_additional_wo_details),
-                ).length
-              } work detail(s) in this selection${
-                printScope === "additional"
-                  ? " — Docking Planning is not included"
-                  : ""
-              }`}
+            {printScope === "custom"
+              ? customSelectedIds.length === 0
+                ? "Select at least one work detail below to print."
+                : `${customSelectedIds.length} work detail(s) selected${
+                    customIncludeDocking ? "" : " — Docking Planning is not included"
+                  }`
+              : printScope !== "all" &&
+                `${
+                  printPreviewWO.work_details.filter(
+                    (d) =>
+                      !d.cancelled_at &&
+                      (printScope === "additional"
+                        ? d.is_additional_wo_details
+                        : !d.is_additional_wo_details),
+                  ).length
+                } work detail(s) in this selection${
+                  printScope === "additional"
+                    ? " — Docking Planning is not included"
+                    : ""
+                }`}
           </div>
 
           {/* Printable Content */}
+          {printScope === "custom" && renderCustomSelectionPanel()}
+
           {/* Fixed (not max) height so a short selection can't shrink the
               dialog and shift the toolbar away from the cursor. */}
           <div className="overflow-y-auto flex-1 min-h-0">
@@ -1044,6 +1201,9 @@ export default function VesselWorkOrders() {
               printNumber={printPreviewNumber}
               documentType={printDocType}
               scope={printScope}
+              selectedWorkDetailIds={customSelectedIds}
+              includeDockingPlanning={customIncludeDocking}
+              documentDate={printScope === "custom" ? customDocDate : null}
             />
           </div>
         </div>

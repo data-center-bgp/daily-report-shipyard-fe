@@ -51,7 +51,12 @@ interface WorkOrderGeneralServiceEntry {
 }
 
 export type WorkOrderPrintDocument = "WO" | "KOM";
-export type WorkOrderPrintScope = "all" | "original" | "additional";
+export type WorkOrderPrintScope =
+  | "all"
+  | "original"
+  | "additional"
+  // Hand-picked work details (see selectedWorkDetailIds).
+  | "custom";
 
 interface WorkOrderPrintProps {
   workOrder: Omit<WorkOrderWithDetails, "work_details"> & {
@@ -66,6 +71,14 @@ interface WorkOrderPrintProps {
   // Which work details to list: everything, only the original scope, or only
   // the additional work details.
   scope?: WorkOrderPrintScope;
+  // Used when scope === "custom": the ids of the work details to list.
+  selectedWorkDetailIds?: number[];
+  // Docking Planning is the schedule of the work order as a whole, so a
+  // custom selection leaves it out unless asked for.
+  includeDockingPlanning?: boolean;
+  // Date printed on the document (YYYY-MM-DD). Defaults to the work order's
+  // own date; a batch issued later (e.g. additional work) passes its own.
+  documentDate?: string | null;
 }
 
 // Fixed display order matching the paper form's category sequence. Any
@@ -94,7 +107,18 @@ function calcDays(start?: string | null, end?: string | null): number {
 }
 
 const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
-  ({ workOrder, printNumber, documentType = "WO", scope = "all" }, ref) => {
+  (
+    {
+      workOrder,
+      printNumber,
+      documentType = "WO",
+      scope = "all",
+      selectedWorkDetailIds = [],
+      includeDockingPlanning = false,
+      documentDate = null,
+    },
+    ref,
+  ) => {
     const isKom = documentType === "KOM";
     const kaproName = workOrder.kapro?.kapro_name;
     const [signatures, setSignatures] = useState<{
@@ -136,9 +160,11 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
       (d) =>
         !d.cancelled_at &&
         (scope === "all" ||
-          (scope === "additional"
-            ? !!d.is_additional_wo_details
-            : !d.is_additional_wo_details)),
+          (scope === "custom"
+            ? selectedWorkDetailIds.includes(d.id)
+            : scope === "additional"
+              ? !!d.is_additional_wo_details
+              : !d.is_additional_wo_details)),
     );
 
     // Group by work_scope name, preserving CATEGORY_ORDER first, then any
@@ -212,7 +238,7 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
     // Keeping this a separate calendar-day convention avoids the printed
     // number silently disagreeing with what was actually typed in.
     const dockingPlanningEntries =
-      scope === "additional"
+      scope === "additional" || (scope === "custom" && !includeDockingPlanning)
         ? []
         : workOrder.work_order_general_services || [];
     const hasDockingPlanning = dockingPlanningEntries.length > 0;
@@ -492,7 +518,7 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
                               Date:
                             </span>
                             <span className="font-medium">
-                              {formatDate(workOrder.shipyard_wo_date)}
+                              {formatDate(documentDate || workOrder.shipyard_wo_date)}
                             </span>
                           </div>
                           <div className="flex gap-2">
@@ -730,7 +756,7 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
 
                   <div className="mb-2 text-xs">
                     {workOrder.work_location || "-"}, Samarinda,{" "}
-                    {formatDate(workOrder.shipyard_wo_date)}
+                    {formatDate(documentDate || workOrder.shipyard_wo_date)}
                   </div>
 
                   {isKom ? (
