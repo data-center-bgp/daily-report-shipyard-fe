@@ -231,12 +231,10 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
     const totalDays = calcDays(earliestStart, latestEnd);
 
     // Docking Planning rendered as its own leading category in the Work
-    // Item Table, sub-items just like every other work_scope category —
-    // but its own "Hari" figures use calendar days (matching how it's
-    // entered in DockingPlanning.tsx / BASTP's General Services), NOT
-    // calcWorkingDays' Sunday/holiday exclusion used for real work_details.
-    // Keeping this a separate calendar-day convention avoids the printed
-    // number silently disagreeing with what was actually typed in.
+    // Item Table, sub-items just like every other work_scope category. The
+    // Docking Planning form itself stores calendar days, but this document's
+    // column is "Target Hari Kerja", so the figures printed here are working
+    // days like everything else in it.
     const dockingPlanningEntries =
       scope === "additional" || (scope === "custom" && !includeDockingPlanning)
         ? []
@@ -245,18 +243,6 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
     const dockingPlanningSorted = [...dockingPlanningEntries].sort(
       (a, b) => (a.service_type?.display_order || 0) - (b.service_type?.display_order || 0),
     );
-    function calcCalendarDays(
-      start?: string | null,
-      end?: string | null,
-    ): number {
-      if (!start || !end) return 0;
-      const s = new Date(start);
-      const e = new Date(end);
-      if (e < s) return 0;
-      const diff =
-        Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-      return diff > 0 ? diff : 0;
-    }
     const dockingStartDates = dockingPlanningSorted
       .map((d) => d.start_date)
       .filter((d): d is string => !!d);
@@ -271,20 +257,17 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
       dockingEndDates.length > 0
         ? dockingEndDates.reduce((max, d) => (d > max ? d : max))
         : null;
-    const dockingTotalDays = calcCalendarDays(
-      dockingCategoryStart,
-      dockingCategoryEnd,
-    );
-    // Overall "Target Hari Kerja": once Docking Planning has dates, the
-    // timeline it describes (earliest start to latest close, in working days
-    // like every other duration on this document) is the authoritative total.
-    // Until it's been filled in, fall back to the span of the work details.
-    const dockingTimelineDays = calcWorkingDays(
+    // Every "Hari" figure in this column is working days (Sundays and
+    // national holidays excluded). The Docking Planning category covers the
+    // same timeline as the overall "Target Total Hari", so both use this one
+    // number — and once Docking Planning has dates it IS the authoritative
+    // total. Until it's been filled in, fall back to the work details' span.
+    const dockingTotalDays = calcWorkingDays(
       dockingCategoryStart,
       dockingCategoryEnd,
     );
     const overallTotalDays =
-      dockingTimelineDays > 0 ? dockingTimelineDays : totalDays;
+      dockingTotalDays > 0 ? dockingTotalDays : totalDays;
     // Every other category/Serah Terima number shifts down by one when this
     // leading category is present.
     const categoryNumberOffset = hasDockingPlanning ? 2 : 1;
@@ -661,7 +644,7 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
                               )}
                             </td>
                             <td className="border border-gray-400 px-2 py-1 text-center">
-                              {entry.total_days ?? 0} Hari
+                              {calcWorkingDays(entry.start_date, entry.close_date)} Hari
                             </td>
                             <td className="border border-gray-400 px-2 py-1"></td>
                             <td className="border border-gray-400 px-2 py-1">
