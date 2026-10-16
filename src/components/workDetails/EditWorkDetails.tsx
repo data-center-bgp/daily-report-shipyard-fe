@@ -19,6 +19,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import LoadingState from "../common/LoadingState";
 
 interface Location {
   id: number;
@@ -692,12 +693,7 @@ export default function EditWorkDetails() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-600">Loading work details...</span>
-      </div>
-    );
+    return <LoadingState label="Loading work details..." />;
   }
 
   if (error && !originalData) {

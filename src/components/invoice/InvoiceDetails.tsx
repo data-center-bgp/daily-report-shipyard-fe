@@ -36,6 +36,7 @@ import {
   Calendar,
   Ban,
 } from "lucide-react";
+import LoadingState from "../common/LoadingState";
 
 export default function InvoiceDetails() {
   const { invoiceId } = useParams<{ invoiceId: string }>();
@@ -426,14 +427,7 @@ export default function InvoiceDetails() {
   };
 
   if (loading) {
-    return (
-      <div className="p-8">
-        <div className="flex items-center justify-center h-64">
-          <Loader className="w-12 h-12 text-blue-600 animate-spin" />
-          <span className="ml-3 text-gray-600">Loading invoice...</span>
-        </div>
-      </div>
-    );
+    return <LoadingState label="Loading invoice..." />;
   }
 
   if (error || !invoice) {

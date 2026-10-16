@@ -15,6 +15,7 @@ import {
   Filter,
   ChevronRight,
 } from "lucide-react";
+import { PageSkeleton } from "../common/Skeleton";
 
 interface WorkOrderStats {
   totalWorkOrders: number;
@@ -508,12 +509,7 @@ export default function WorkOrderDashboard() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-600">Loading dashboard...</span>
-      </div>
-    );
+    return <PageSkeleton label="Loading dashboard..." padding="p-6" action stats={3} statSize="lg" list="grid" rows={6} />;
   }
 
   if (error) {

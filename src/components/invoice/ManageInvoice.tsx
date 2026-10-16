@@ -37,6 +37,7 @@ import {
   DollarSign,
   Ban,
 } from "lucide-react";
+import LoadingState from "../common/LoadingState";
 
 interface WorkDetailPrice {
   work_details_id: number;
@@ -1068,14 +1069,9 @@ export default function ManageInvoice() {
 
   if (loading) {
     return (
-      <div className="p-8">
-        <div className="flex items-center justify-center h-64">
-          <Loader className="w-12 h-12 text-blue-600 animate-spin" />
-          <span className="ml-3 text-gray-600">
-            Loading {isEditMode ? "invoice" : "BASTP"} details...
-          </span>
-        </div>
-      </div>
+      <LoadingState
+        label={`Loading ${isEditMode ? "invoice" : "BASTP"} details...`}
+      />
     );
   }
 

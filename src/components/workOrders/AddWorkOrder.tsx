@@ -16,6 +16,7 @@ import { WORK_TYPE_OPTIONS } from "../../constants/workTypes";
 import { WORK_LOCATION_OPTIONS } from "../../constants/workLocations";
 import { suggestProjectName } from "../../utils/projectNaming";
 import { suggestWorkOrderNumber } from "../../utils/workOrderNumbering";
+import LoadingState from "../common/LoadingState";
 
 interface ProjectOption {
   id: number;
@@ -785,20 +786,17 @@ export default function AddWorkOrder() {
 
   if (loadingVessels || loadingKapros || loadingProjects || !currentUser) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">
-            {loadingVessels
-              ? "Loading vessels..."
-              : loadingKapros
-                ? "Loading kapros..."
-                : loadingProjects
-                  ? "Loading projects..."
-                  : "Loading user information..."}
-          </p>
-        </div>
-      </div>
+      <LoadingState
+        label={
+          loadingVessels
+            ? "Loading vessels..."
+            : loadingKapros
+              ? "Loading kapros..."
+              : loadingProjects
+                ? "Loading projects..."
+                : "Loading user information..."
+        }
+      />
     );
   }
 

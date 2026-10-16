@@ -16,6 +16,7 @@ import {
   FolderKanban,
   Clock,
 } from "lucide-react";
+import { PageSkeleton } from "../common/Skeleton";
 
 const STATUS_BADGE: Record<
   AdditionalWoRequestStatus,
@@ -157,12 +158,7 @@ export default function AdditionalWoApprovals() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-600">Loading requests...</span>
-      </div>
-    );
+    return <PageSkeleton label="Loading requests..." padding="p-6" list="cards" rows={5} />;
   }
 
   return (

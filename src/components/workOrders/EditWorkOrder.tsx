@@ -22,6 +22,7 @@ import {
 import { WORK_TYPE_OPTIONS } from "../../constants/workTypes";
 import { WORK_LOCATION_OPTIONS } from "../../constants/workLocations";
 import DockingPlanning from "./DockingPlanning";
+import LoadingState from "../common/LoadingState";
 
 interface WorkOrderWithVessel extends WorkOrder {
   vessel?: Vessel;
@@ -382,18 +383,15 @@ export default function EditWorkOrder() {
 
   if (loadingWorkOrder || loadingVessels || loadingKapros) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-slate-600 font-medium">
-            {loadingWorkOrder
-              ? "Loading work order..."
-              : loadingVessels
-                ? "Loading vessels..."
-                : "Loading kapros..."}
-          </p>
-        </div>
-      </div>
+      <LoadingState
+        label={
+          loadingWorkOrder
+            ? "Loading work order..."
+            : loadingVessels
+              ? "Loading vessels..."
+              : "Loading kapros..."
+        }
+      />
     );
   }
 

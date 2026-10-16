@@ -49,6 +49,7 @@ import {
   Download,
   Loader,
 } from "lucide-react";
+import { PageSkeleton } from "../common/Skeleton";
 
 interface VesselData {
   id: number;
@@ -882,16 +883,7 @@ export default function VesselWorkOrders() {
   };
 
   if (loading) {
-    return (
-      <div className="p-8">
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <span className="ml-3 text-gray-600">
-            Loading vessel work orders...
-          </span>
-        </div>
-      </div>
-    );
+    return <PageSkeleton label="Loading vessel work orders..." action list="cards" rows={4} />;
   }
 
   if (error || !vessel) {

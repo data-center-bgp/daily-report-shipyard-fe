@@ -25,6 +25,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
+import LoadingState from "../common/LoadingState";
 
 interface WorkProgressData {
   id: number;
@@ -372,12 +373,7 @@ export default function EditWorkProgress() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-600">Loading progress data...</span>
-      </div>
-    );
+    return <LoadingState label="Loading progress data..." />;
   }
 
   if (!progressData) {

@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
   CalendarRange,
 } from "lucide-react";
+import { PageSkeleton } from "../common/Skeleton";
 
 interface ProjectRow {
   id: number;
@@ -124,12 +125,7 @@ export default function ProjectsList() {
   });
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-600">Loading projects...</span>
-      </div>
-    );
+    return <PageSkeleton label="Loading projects..." padding="p-6" action filters list="grid" rows={6} />;
   }
 
   if (error) {

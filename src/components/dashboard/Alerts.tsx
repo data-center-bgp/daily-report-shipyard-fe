@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useDashboardData, type DashboardAlert } from "../../hooks/useDashboardData";
+import LoadingState from "../common/LoadingState";
 
 const PER_PAGE = 10;
 
@@ -154,14 +155,7 @@ export default function Alerts() {
   const { alerts, loading, error, refetch } = useDashboardData();
 
   if (loading) {
-    return (
-      <div className="p-8 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading alerts...</p>
-        </div>
-      </div>
-    );
+    return <LoadingState label="Loading alerts..." />;
   }
 
   if (error) {

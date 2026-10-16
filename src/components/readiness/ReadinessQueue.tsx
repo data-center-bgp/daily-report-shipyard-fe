@@ -12,6 +12,7 @@ import {
   FileWarning,
 } from "lucide-react";
 import Tooltip from "../common/Tooltip";
+import { PageSkeleton } from "../common/Skeleton";
 
 interface ReadinessQueueRow {
   id: number;
@@ -122,12 +123,7 @@ export default function ReadinessQueue() {
   const pendingCount = forms.filter((f) => f.status === "SUBMITTED").length;
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-600">Loading readiness forms...</span>
-      </div>
-    );
+    return <PageSkeleton label="Loading readiness forms..." padding="p-6" list="cards" rows={5} />;
   }
 
   return (

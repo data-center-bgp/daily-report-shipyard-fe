@@ -35,6 +35,7 @@ import {
   FolderKanban,
   Undo2,
 } from "lucide-react";
+import { TableSkeleton } from "../common/Skeleton";
 
 // ==================== INTERFACES ====================
 
@@ -1799,12 +1800,7 @@ export default function WorkProgressTable({
     }
 
     if (loading) {
-      return (
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <span className="ml-3 text-gray-600">Loading work progress...</span>
-        </div>
-      );
+      return <TableSkeleton label="Loading work progress..." />;
     }
 
     if (workProgress.length === 0) {

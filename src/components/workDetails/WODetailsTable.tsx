@@ -47,6 +47,7 @@ import {
   Undo2,
   Ban,
 } from "lucide-react";
+import { TableSkeleton } from "../common/Skeleton";
 
 interface ProjectOption {
   id: number;
@@ -2469,12 +2470,7 @@ export default function WODetailsTable({
   // ==================== MAIN RENDER ====================
 
   if (loading && !hasLoadedOnce) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-600">Loading work details...</span>
-      </div>
-    );
+    return <TableSkeleton label="Loading work details..." toolbar />;
   }
 
   if (error) {

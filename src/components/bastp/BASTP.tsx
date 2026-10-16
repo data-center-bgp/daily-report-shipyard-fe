@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import CompletedWorkDetails from "./CompletedWorkDetails";
 import FormPenawaranMissingBadge from "./FormPenawaranMissingBadge";
+import { PageSkeleton } from "../common/Skeleton";
 
 type PageTab = "records" | "completedWork";
 
@@ -304,14 +305,7 @@ export default function BASTP() {
   };
 
   if (loading) {
-    return (
-      <div className="p-8">
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <span className="ml-3 text-gray-600">Loading BASTPs...</span>
-        </div>
-      </div>
-    );
+    return <PageSkeleton label="Loading BASTPs..." action pageTabs={2} stats={5} filters />;
   }
 
   return (

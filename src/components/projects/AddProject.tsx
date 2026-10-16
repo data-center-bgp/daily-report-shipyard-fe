@@ -6,6 +6,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { ArrowLeft, FolderKanban, Plus } from "lucide-react";
 import { WORK_TYPE_OPTIONS } from "../../constants/workTypes";
 import { suggestProjectName } from "../../utils/projectNaming";
+import LoadingState from "../common/LoadingState";
 
 export default function AddProject() {
   const navigate = useNavigate();
@@ -249,14 +250,11 @@ export default function AddProject() {
 
   if (loadingVessels || !currentUser) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">
-            {loadingVessels ? "Loading vessels..." : "Loading user information..."}
-          </p>
-        </div>
-      </div>
+      <LoadingState
+        label={
+          loadingVessels ? "Loading vessels..." : "Loading user information..."
+        }
+      />
     );
   }
 

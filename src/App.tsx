@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { DashboardDataProvider } from "./hooks/useDashboardData";
 
 import Layout from "./components/common/Layout";
+import LoadingState from "./components/common/LoadingState";
 
 // Every route below is its own chunk — none of this is needed until the
 // user actually navigates there, so keeping it out of the main bundle
@@ -102,14 +103,6 @@ const MasterDataPage = lazy(
   () => import("./components/masterData/MasterDataPage"),
 );
 
-function PageLoader() {
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-    </div>
-  );
-}
-
 function AppRoutes() {
   const { user, loading, signOut } = useAuth();
 
@@ -118,12 +111,12 @@ function AppRoutes() {
   };
 
   if (loading) {
-    return <PageLoader />;
+    return <LoadingState variant="fullScreen" />;
   }
 
   if (!user) {
     return (
-      <Suspense fallback={<PageLoader />}>
+      <Suspense fallback={<LoadingState variant="fullScreen" />}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="*" element={<Navigate to="/login" />} />
@@ -135,7 +128,7 @@ function AppRoutes() {
   return (
     <DashboardDataProvider>
       <Layout onLogout={handleLogout}>
-        <Suspense fallback={<PageLoader />}>
+        <Suspense fallback={<LoadingState />}>
           <Routes>
           {/* Dashboard */}
           <Route path="/" element={<Dashboard />} />
