@@ -108,6 +108,8 @@ export interface WorkOrderWithDetails extends WorkOrder {
     name: string;
     type: string;
     company: string;
+    // Set for our own fleet (synced from the company API), null for external vessels.
+    fleet_number?: number | null;
   };
   kapro?: {
     id: number;

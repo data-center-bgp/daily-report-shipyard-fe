@@ -7,6 +7,12 @@ import { COMPANY_STAMP, loadSignature } from "../../utils/signatures";
 const ISSUER_NAME = "Hendra Muzaki";
 const GENERAL_MANAGER_NAME = "Prasetya Abdillah";
 
+// Owner Surveyor printed on the Kick Off Meeting. One person covers every
+// internal vessel (one with a fleet_number); external vessels, which belong to
+// other companies, get the other name. Change these here if that changes.
+const OWNER_SURVEYOR_INTERNAL = "Agus Handoko";
+const OWNER_SURVEYOR_EXTERNAL = "Nuryadi";
+
 // Keeps the original 48px gap in the layout, but draws the signature larger
 // than that gap, centered on it — so it spills over the label above and the
 // name below, the way a real signature crosses the printed name.
@@ -121,6 +127,10 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
   ) => {
     const isKom = documentType === "KOM";
     const kaproName = workOrder.kapro?.kapro_name;
+    const ownerSurveyorName =
+      workOrder.vessel?.fleet_number != null
+        ? OWNER_SURVEYOR_INTERNAL
+        : OWNER_SURVEYOR_EXTERNAL;
     const [signatures, setSignatures] = useState<{
       issuer: string | null;
       kapro: string | null;
@@ -767,9 +777,9 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
                           <td className="w-1/4">
                             <p>Di Setujui Oleh,</p>
                             <div className="h-12" />
-                            {/* Owner's surveyor differs per job — name is
-                                written in by hand, so only a blank line. */}
-                            <div className="mx-auto h-4 w-40 border-b border-gray-800" />
+                            <p className="font-semibold underline">
+                              {ownerSurveyorName}
+                            </p>
                             <p>Owner Surveyor</p>
                           </td>
                           <td className="w-1/4">

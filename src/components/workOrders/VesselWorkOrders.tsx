@@ -412,7 +412,8 @@ export default function VesselWorkOrders() {
               id,
               name,
               type,
-              company
+              company,
+              fleet_number
             ),
             kapro:kapro_id (
               id,
