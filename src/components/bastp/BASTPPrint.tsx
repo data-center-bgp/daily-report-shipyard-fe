@@ -556,7 +556,7 @@ const BASTPPrint = forwardRef<HTMLDivElement, BASTPPrintProps>(
                         <p className="font-semibold underline">
                           {bastp.to_name || "-"}
                         </p>
-                        <p>Operation Head</p>
+                        <p>Owner Surveyor</p>
                       </td>
                       <td className="w-1/3">
                         <p>Di Saksikan Oleh,</p>

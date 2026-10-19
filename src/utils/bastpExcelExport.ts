@@ -296,7 +296,7 @@ export async function buildBastpWorkbook(
     bold: true,
     underline: true,
   });
-  signRow(["Marketing & PPIC Department Head", "Operation Head", "General Manager"]);
+  signRow(["Marketing & PPIC Department Head", "Owner Surveyor", "General Manager"]);
 
   if (footerImage) {
     blank();
