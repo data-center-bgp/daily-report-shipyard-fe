@@ -123,12 +123,12 @@ export default function ReadinessQueue() {
   const pendingCount = forms.filter((f) => f.status === "SUBMITTED").length;
 
   if (loading) {
-    return <PageSkeleton label="Loading readiness forms..." padding="p-6" list="cards" rows={5} />;
+    return <PageSkeleton label="Loading readiness forms..." padding="p-4 sm:p-6" list="cards" rows={5} />;
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-6 space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <ClipboardCheck className="w-7 h-7 text-blue-600" /> Readiness

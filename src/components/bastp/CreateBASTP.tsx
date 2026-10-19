@@ -1172,7 +1172,7 @@ export default function CreateBASTP() {
 
   if (!canEditBastp) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 flex items-start gap-3">
           <Lock className="w-6 h-6 text-yellow-600 flex-shrink-0" />
           <div>
@@ -1199,7 +1199,7 @@ export default function CreateBASTP() {
 
   if (isLocked) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 flex items-start gap-3">
           <Lock className="w-6 h-6 text-yellow-600 flex-shrink-0" />
           <div>
@@ -1227,11 +1227,11 @@ export default function CreateBASTP() {
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
             {isEditMode ? "Edit BASTP" : "Create New BASTP"}
           </h1>
           <p className="text-gray-600 mt-2">

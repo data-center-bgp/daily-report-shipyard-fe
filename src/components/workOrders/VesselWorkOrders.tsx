@@ -888,7 +888,7 @@ export default function VesselWorkOrders() {
 
   if (error || !vessel) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <h3 className="text-red-800 font-medium">
             Error Loading Vessel Work Orders
@@ -1204,7 +1204,7 @@ export default function VesselWorkOrders() {
   };
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Delete Modal */}
       {renderDeleteModal()}
       {renderPrintPreviewModal()}
@@ -1335,7 +1335,7 @@ export default function VesselWorkOrders() {
       {/* Search and Actions */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-          <div className="relative flex-1 max-w-md">
+          <div className="relative w-full flex-1 sm:max-w-md">
             <input
               type="text"
               placeholder="Search by WO number, work type, location, or Kapro..."
@@ -1345,7 +1345,7 @@ export default function VesselWorkOrders() {
             />
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
             <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer whitespace-nowrap">
               <input
                 type="checkbox"
@@ -1370,7 +1370,7 @@ export default function VesselWorkOrders() {
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {filteredWorkOrders.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="table-stack min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">

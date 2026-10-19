@@ -266,7 +266,7 @@ export default function ActivityLogList({
       {/* Activity Log List */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="table-stack w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">
@@ -355,12 +355,12 @@ export default function ActivityLogList({
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+          <div className="px-4 py-3 border-t border-gray-200 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
             <div className="text-sm text-gray-700">
               Showing {(page - 1) * pageSize + 1} to{" "}
               {Math.min(page * pageSize, totalCount)} of {totalCount} results
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}

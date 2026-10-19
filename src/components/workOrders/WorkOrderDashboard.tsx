@@ -509,7 +509,7 @@ export default function WorkOrderDashboard() {
   };
 
   if (loading) {
-    return <PageSkeleton label="Loading dashboard..." padding="p-6" action stats={3} statSize="lg" list="grid" rows={6} />;
+    return <PageSkeleton label="Loading dashboard..." padding="p-4 sm:p-6" action stats={3} statSize="lg" list="grid" rows={6} />;
   }
 
   if (error) {
@@ -528,8 +528,8 @@ export default function WorkOrderDashboard() {
   }
 
   return (
-    <div className="space-y-8 p-6">
-      <div className="flex justify-between items-center">
+    <div className="p-4 sm:p-6 space-y-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
             Work Order Dashboard
@@ -572,8 +572,8 @@ export default function WorkOrderDashboard() {
       )}
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 [&>*:last-child:nth-child(odd)]:col-span-2 lg:[&>*:last-child:nth-child(odd)]:col-span-1">
+        <div className="bg-white p-3 sm:p-6 rounded-lg shadow border-l-4 border-blue-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">
@@ -587,7 +587,7 @@ export default function WorkOrderDashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-purple-500">
+        <div className="bg-white p-3 sm:p-6 rounded-lg shadow border-l-4 border-purple-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Vessels</p>
@@ -599,7 +599,7 @@ export default function WorkOrderDashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
+        <div className="bg-white p-3 sm:p-6 rounded-lg shadow border-l-4 border-green-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">
@@ -684,7 +684,7 @@ export default function WorkOrderDashboard() {
               </div>
             ) : searchFilteredWorkOrders.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="table-stack min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1070,14 +1070,14 @@ export default function WorkOrderDashboard() {
               </div>
 
               {totalPages > 1 && (
-                <div className="mt-8 flex items-center justify-between">
+                <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
                   <div className="text-sm text-gray-600">
                     Showing {startIndex + 1} to{" "}
                     {Math.min(endIndex, filteredVessels.length)} of{" "}
                     {filteredVessels.length} vessels
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-center gap-2">
                     <button
                       onClick={() =>
                         setCurrentPage(Math.max(1, currentPage - 1))

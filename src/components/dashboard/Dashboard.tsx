@@ -429,9 +429,9 @@ export default function Dashboard() {
     // When set, shows "N% of <percentOf.total>" underneath the value.
     percentOf?: { total: number; ofLabel: string };
   }) => (
-    <div className={`bg-white rounded-lg shadow p-6 border-l-4 ${borderColor}`}>
-      <p className="text-sm font-medium text-gray-600">{label}</p>
-      <p className={`text-2xl font-bold ${color || "text-gray-900"}`}>
+    <div className={`bg-white rounded-lg shadow p-3 sm:p-6 border-l-4 ${borderColor}`}>
+      <p className="text-xs sm:text-sm font-medium text-gray-600">{label}</p>
+      <p className={`text-xl sm:text-2xl font-bold ${color || "text-gray-900"}`}>
         {value}
       </p>
       {percentOf && (
@@ -457,7 +457,7 @@ export default function Dashboard() {
   }) => {
     const total = segments.reduce((sum, s) => sum + s.value, 0);
     return (
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-white rounded-lg shadow p-4 sm:p-6">
         <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
         {subtitle && <p className="text-xs text-gray-500 mb-3">{subtitle}</p>}
         <div
@@ -520,7 +520,7 @@ export default function Dashboard() {
     let cumulative = 0;
 
     return (
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-white rounded-lg shadow p-4 sm:p-6">
         <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
         {subtitle && <p className="text-xs text-gray-500 mb-3">{subtitle}</p>}
         <div className="flex items-center gap-6 flex-wrap">
@@ -623,7 +623,7 @@ export default function Dashboard() {
     const max = Math.max(...segments.map((s) => s.value), 1);
     const fmt = formatValue || ((v: number) => v.toLocaleString());
     return (
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-white rounded-lg shadow p-4 sm:p-6">
         <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
         {subtitle && <p className="text-xs text-gray-500 mb-3">{subtitle}</p>}
         <div className={`space-y-4 ${subtitle ? "" : "mt-3"}`}>
@@ -663,10 +663,10 @@ export default function Dashboard() {
     }).format(amount);
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+      <div className="mb-5 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-gray-600">
           Work Order Management & Financial Overview
         </p>
@@ -687,11 +687,11 @@ export default function Dashboard() {
       {/* 1. Vessel projects, grouped by project — a project is "in progress"
              while any of its work orders isn't completed yet, and
              "completed" once every work order in it is done. */}
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
+      <div className="mb-6 sm:mb-8">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
           Vessel Projects
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1">
           <StatCard
             label="All Projects"
             value={stats.totalProjects}
@@ -718,7 +718,7 @@ export default function Dashboard() {
              its own prominent panel since it now spans several sections,
              not just the one it happens to sit above. */}
       <div
-        className={`mb-8 rounded-lg shadow p-4 border-2 transition-colors ${
+        className={`mb-6 sm:mb-8 rounded-lg shadow p-3 sm:p-4 border-2 transition-colors ${
           isWorkOrderFilterActive
             ? "bg-blue-50 border-blue-300"
             : "bg-white border-gray-200"
@@ -767,14 +767,14 @@ export default function Dashboard() {
       {/* 1b. Individual work orders — separate from the project rollup above,
              since a project can still be "in progress" overall while some of
              its own work orders are already done. */}
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
+      <div className="mb-6 sm:mb-8">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
           Work Orders ({filteredWorkOrderStats.totalWorkOrders}
           {isWorkOrderFilterActive ? ` of ${stats.totalWorkOrders}` : ""}{" "}
           total)
         </h2>
         <p className="text-sm font-medium text-gray-500 mb-2">In Progress</p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1 mb-4 sm:mb-6">
           <StatCard
             label="All Work Types"
             value={filteredWorkOrderStats.workOrdersInProgressTotal}
@@ -795,7 +795,7 @@ export default function Dashboard() {
           />
         </div>
         <p className="text-sm font-medium text-gray-500 mb-2">Completed</p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1">
           <StatCard
             label="All Work Types"
             value={filteredWorkOrderStats.workOrdersCompletedTotal}
@@ -818,8 +818,8 @@ export default function Dashboard() {
       </div>
 
       {/* 3 & 7. Work detail progress */}
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
+      <div className="mb-6 sm:mb-8">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
           Work Detail Progress ({filteredWorkDetailStats.totalWorkDetails}
           {isWorkOrderFilterActive ? ` of ${stats.totalWorkDetails}` : ""}{" "}
           total)
@@ -829,7 +829,7 @@ export default function Dashboard() {
             </span>
           )}
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6 [&>*:last-child:nth-child(odd)]:col-span-2 lg:[&>*:last-child:nth-child(odd)]:col-span-1 mb-4 sm:mb-6">
           <StatCard
             label="Completed"
             value={filteredWorkDetailStats.workDetailsCompleted}
@@ -861,7 +861,7 @@ export default function Dashboard() {
             borderColor="border-emerald-500"
           />
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           <DonutChart
             title="Progress State"
             subtitle={`Share of all ${filteredWorkDetailStats.totalWorkDetails.toLocaleString()} work details`}
@@ -906,8 +906,8 @@ export default function Dashboard() {
       </div>
 
       {/* 5 & 6. BASTP pipeline */}
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
+      <div className="mb-6 sm:mb-8">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
           BASTP Pipeline
           {isWorkOrderFilterActive && (
             <span className="ml-2 text-sm font-normal text-gray-400">
@@ -915,7 +915,7 @@ export default function Dashboard() {
             </span>
           )}
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1 mb-4 sm:mb-6">
           <StatCard
             label="Not Made Into BASTP Yet"
             value={filteredWorkDetailStats.workDetailsNotInBastp}
@@ -968,8 +968,8 @@ export default function Dashboard() {
       </div>
 
       {/* 4. Invoiced */}
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
+      <div className="mb-6 sm:mb-8">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
           Invoiced Work Details
           {isWorkOrderFilterActive && (
             <span className="ml-2 text-sm font-normal text-gray-400">
@@ -977,7 +977,7 @@ export default function Dashboard() {
             </span>
           )}
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-2 gap-3 sm:gap-6 mb-4 sm:mb-6">
           <StatCard
             label="Paid"
             value={filteredWorkDetailStats.workDetailsInvoicedPaid}
@@ -1003,7 +1003,7 @@ export default function Dashboard() {
             }}
           />
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           <StackedBar
             title="BASTP Pipeline Stage"
             subtitle={`Every one of ${filteredWorkDetailStats.totalWorkDetails.toLocaleString()} work details, from not-yet-BASTP to invoiced`}
@@ -1074,8 +1074,8 @@ export default function Dashboard() {
       </div>
 
       {/* 8. Work order composition */}
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
+      <div className="mb-6 sm:mb-8">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
           Work Orders ({filteredWorkOrderStats.totalWorkOrders}
           {isWorkOrderFilterActive ? ` of ${stats.totalWorkOrders}` : ""}{" "}
           total)
@@ -1085,8 +1085,8 @@ export default function Dashboard() {
             </span>
           )}
         </h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <div className="grid grid-cols-2 gap-3 sm:gap-6">
             <StatCard
               label="Original"
               value={filteredWorkOrderStats.workOrdersOriginal}
@@ -1129,7 +1129,7 @@ export default function Dashboard() {
 
       {/* Vessel Summary */}
       {vesselSummaries.length > 0 && (
-        <div className="mb-8">
+        <div className="mb-6 sm:mb-8">
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
             <div>
               <div className="flex items-center gap-2.5">
@@ -1380,7 +1380,7 @@ export default function Dashboard() {
           ) : (
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200">
+                <table className="table-stack min-w-full divide-y divide-slate-200">
                   <thead className="bg-slate-50">
                     <tr>
                       {[

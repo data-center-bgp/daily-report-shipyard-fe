@@ -295,11 +295,11 @@ export default function InvoiceList() {
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
             Invoice Management
           </h1>
           <p className="text-gray-600 mt-2">
@@ -317,20 +317,20 @@ export default function InvoiceList() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow border-l-4 border-blue-500">
           <p className="text-xs font-medium text-gray-600">Total Invoices</p>
           <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow border-l-4 border-green-500">
           <p className="text-xs font-medium text-gray-600">Paid</p>
           <p className="text-2xl font-bold text-gray-900">{stats.paid}</p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-red-500">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow border-l-4 border-red-500">
           <p className="text-xs font-medium text-gray-600">Unpaid</p>
           <p className="text-2xl font-bold text-gray-900">{stats.unpaid}</p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-orange-500">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow border-l-4 border-orange-500">
           <p className="text-xs font-medium text-gray-600">Ready for Invoice</p>
           <p className="text-2xl font-bold text-gray-900">{stats.ready}</p>
         </div>
@@ -339,7 +339,7 @@ export default function InvoiceList() {
       {/* View Mode Tabs */}
       <div className="bg-white rounded-lg shadow">
         <div className="border-b border-gray-200">
-          <nav className="flex -mb-px">
+          <nav className="flex -mb-px overflow-x-auto [&>*]:shrink-0 [&>*]:whitespace-nowrap">
             {!isReadOnly && (
               <button
                 onClick={() => setViewMode("ready-bastp")}
@@ -392,7 +392,7 @@ export default function InvoiceList() {
           <div className="overflow-x-auto">
             {paginatedInvoices.length > 0 ? (
               <>
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="table-stack min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -564,7 +564,7 @@ export default function InvoiceList() {
 
                 {/* Pagination */}
                 {totalPages > 1 && (
-                  <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                  <div className="px-6 py-4 border-t border-gray-200 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
                     <div className="text-sm text-gray-700">
                       Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
                       {Math.min(
@@ -573,7 +573,7 @@ export default function InvoiceList() {
                       )}{" "}
                       of {filteredInvoices.length} results
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap justify-center gap-2">
                       <button
                         onClick={() =>
                           setCurrentPage((p) => Math.max(1, p - 1))
@@ -613,7 +613,7 @@ export default function InvoiceList() {
           !isReadOnly && (
             <div className="overflow-x-auto">
               {filteredBASTPs.length > 0 ? (
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="table-stack min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">

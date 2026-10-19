@@ -315,8 +315,8 @@ export default function CompletedWorkDetails() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-gray-500">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow border-l-4 border-gray-500">
           <p className="text-xs font-medium text-gray-600">
             Completed Work Details
           </p>
@@ -324,7 +324,7 @@ export default function CompletedWorkDetails() {
             {bastpCounts.ALL}
           </p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-amber-500">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow border-l-4 border-amber-500">
           <p className="text-xs font-medium text-gray-600">
             Not Yet In a BASTP
           </p>
@@ -332,7 +332,7 @@ export default function CompletedWorkDetails() {
             {bastpCounts.NOT_IN_BASTP}
           </p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow border-l-4 border-green-500">
           <p className="text-xs font-medium text-gray-600">Already In a BASTP</p>
           <p className="text-2xl font-bold text-gray-900">
             {bastpCounts.IN_BASTP}
@@ -406,7 +406,7 @@ export default function CompletedWorkDetails() {
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {filteredRows.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="table-stack min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">

@@ -309,11 +309,11 @@ export default function BASTP() {
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">BASTP Management</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">BASTP Management</h1>
           <p className="text-gray-600 mt-2">
             Berita Acara Serah Terima Pekerjaan (Work Handover Minutes)
           </p>
@@ -341,7 +341,7 @@ export default function BASTP() {
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
-        <nav className="flex gap-6">
+        <nav className="flex gap-6 overflow-x-auto [&>*]:shrink-0 [&>*]:whitespace-nowrap">
           <button
             onClick={() => setPageTab("records")}
             className={`flex items-center gap-2 pb-3 border-b-2 text-sm font-medium transition-colors ${
@@ -370,30 +370,30 @@ export default function BASTP() {
       {pageTab === "records" && (
         <>
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-gray-500">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow border-l-4 border-gray-500">
           <p className="text-xs font-medium text-gray-600">Total</p>
           <p className="text-2xl font-bold text-gray-900">{statusCounts.ALL}</p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-gray-400">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow border-l-4 border-gray-400">
           <p className="text-xs font-medium text-gray-600">Draft</p>
           <p className="text-2xl font-bold text-gray-900">
             {statusCounts.DRAFT}
           </p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow border-l-4 border-blue-500">
           <p className="text-xs font-medium text-gray-600">Verified</p>
           <p className="text-2xl font-bold text-gray-900">
             {statusCounts.VERIFIED}
           </p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow border-l-4 border-green-500">
           <p className="text-xs font-medium text-gray-600">Ready for Invoice</p>
           <p className="text-2xl font-bold text-gray-900">
             {statusCounts.READY_FOR_INVOICE}
           </p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow border-l-4 border-emerald-500">
+        <div className="bg-white p-3 sm:p-4 rounded-lg shadow border-l-4 border-emerald-500">
           <p className="text-xs font-medium text-gray-600">Invoiced</p>
           <p className="text-2xl font-bold text-gray-900">
             {statusCounts.INVOICED}
@@ -441,7 +441,7 @@ export default function BASTP() {
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {filteredBASTPs.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="table-stack min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">

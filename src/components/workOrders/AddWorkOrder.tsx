@@ -864,7 +864,7 @@ export default function AddWorkOrder() {
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6">
             {/* Project Selection with Search */}
             <div className="relative" ref={projectDropdownRef}>
               <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center justify-between">

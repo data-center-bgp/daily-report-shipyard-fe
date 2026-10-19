@@ -56,6 +56,71 @@
     transform: translateY(0);
   }
 }
+/* Stacked tables (src/hooks/useStackedTables.ts). Below md, a table with the
+   `table-stack` class drops its column layout: each row becomes a card laid
+   out as a two-column grid of label-over-value pairs, so nothing needs
+   sideways scrolling on a phone. The first cell (the row's identity or its
+   expand toggle) and the last (usually actions) take the full card width. */
+@media (max-width: 767px) {
+  table.table-stack,
+  table.table-stack > tbody {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  table.table-stack > thead {
+    display: none;
+  }
+  table.table-stack > tbody > tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.625rem 1rem;
+    padding: 0.875rem 1rem;
+    border-top: 1px solid #e5e7eb;
+  }
+  table.table-stack > tbody > tr:first-child {
+    border-top: 0;
+  }
+  table.table-stack > tbody > tr > td {
+    display: block;
+    min-width: 0;
+    padding: 0 !important;
+    border: 0 !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    text-align: left !important;
+  }
+  table.table-stack > tbody > tr > td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.125rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #6b7280;
+  }
+  table.table-stack > tbody > tr > td:first-child,
+  table.table-stack > tbody > tr > td:last-child:not(:first-child),
+  table.table-stack > tbody > tr > td[colspan],
+  table.table-stack > tbody > tr > td[data-label="Description"],
+  table.table-stack > tbody > tr > td[data-label="Activity"],
+  table.table-stack > tbody > tr > td[data-label="Progress"],
+  table.table-stack > tbody > tr > td[data-label="Work Orders"],
+  table.table-stack > tbody > tr > td[data-label="Details"] {
+    grid-column: 1 / -1;
+  }
+  /* Row-number columns are noise once a row is a card. */
+  table.table-stack > tbody > tr > td[data-label="#"] {
+    display: none;
+  }
+  /* A lone cell with nothing to label (empty states, expanded detail rows). */
+  table.table-stack > tbody > tr > td[colspan] {
+    padding: 0 !important;
+  }
+}
+
 /* Skeleton (src/components/common/Skeleton.tsx): a soft highlight sweeping
    left-to-right across gray-200 blocks. */
 .skeleton {

@@ -317,7 +317,7 @@ export default function ProjectDetails() {
   const badge = statusKey ? STATUS_BADGE[statusKey] : null;
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="p-4 sm:p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <button
@@ -455,7 +455,7 @@ export default function ProjectDetails() {
         )}
         {workOrders.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="table-stack w-full">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">

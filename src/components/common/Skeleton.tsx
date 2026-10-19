@@ -15,11 +15,12 @@ export function Skeleton({ className = "" }: { className?: string }) {
 const CELL_WIDTHS = ["w-3/4", "w-1/2", "w-2/3", "w-5/6", "w-2/5", "w-3/5"];
 
 // Literal class names (not built strings) so Tailwind picks them up.
+// Two per row on phones, matching the real pages; a lone last card spans.
 const STAT_GRID: Record<number, string> = {
-  2: "md:grid-cols-2",
-  3: "md:grid-cols-3",
-  4: "md:grid-cols-4",
-  5: "md:grid-cols-5",
+  2: "grid-cols-2",
+  3: "grid-cols-2 md:grid-cols-3 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1",
+  4: "grid-cols-2 md:grid-cols-4",
+  5: "grid-cols-2 md:grid-cols-5 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1",
 };
 
 function SrLabel({ label }: { label: string }) {
@@ -28,12 +29,12 @@ function SrLabel({ label }: { label: string }) {
 
 function StatCards({ count, size }: { count: number; size: "sm" | "lg" }) {
   return (
-    <div className={`grid grid-cols-1 ${STAT_GRID[count] ?? "md:grid-cols-4"} gap-4`}>
+    <div className={`grid ${STAT_GRID[count] ?? "grid-cols-2 md:grid-cols-4"} gap-3 sm:gap-4`}>
       {Array.from({ length: count }, (_, i) => (
         <div
           key={i}
           className={`bg-white rounded-lg shadow border-l-4 border-gray-200 ${
-            size === "lg" ? "p-6 flex items-center justify-between" : "p-4"
+            size === "lg" ? "p-3 sm:p-6 flex items-center justify-between" : "p-3 sm:p-4"
           }`}
         >
           <div className="space-y-2">
@@ -49,7 +50,7 @@ function StatCards({ count, size }: { count: number; size: "sm" | "lg" }) {
 
 function Tabs({ count, boxed }: { count: number; boxed?: boolean }) {
   return (
-    <div className={`flex gap-6 border-b border-gray-200 ${boxed ? "px-6" : ""}`}>
+    <div className={`flex gap-6 overflow-hidden border-b border-gray-200 ${boxed ? "px-4 sm:px-6" : ""}`}>
       {Array.from({ length: count }, (_, i) => (
         <div key={i} className="pb-3 pt-3">
           <Skeleton className={`h-4 ${i % 2 ? "w-28" : "w-36"}`} />
@@ -62,18 +63,18 @@ function Tabs({ count, boxed }: { count: number; boxed?: boolean }) {
 function TableRows({ rows, columns }: { rows: number; columns: number }) {
   return (
     <div className="overflow-hidden">
-      <div className="flex gap-4 bg-gray-50 px-6 py-3 border-b border-gray-200">
+      <div className="flex gap-4 bg-gray-50 px-4 sm:px-6 py-3 border-b border-gray-200">
         {Array.from({ length: columns }, (_, c) => (
-          <div key={c} className="flex-1">
+          <div key={c} className={`flex-1 ${c >= 3 ? "hidden sm:block" : ""}`}>
             <Skeleton className="h-3 w-16" />
           </div>
         ))}
       </div>
       <div className="divide-y divide-gray-100">
         {Array.from({ length: rows }, (_, r) => (
-          <div key={r} className="flex items-center gap-4 px-6 py-4">
+          <div key={r} className="flex items-center gap-4 px-4 sm:px-6 py-4">
             {Array.from({ length: columns }, (_, c) => (
-              <div key={c} className="flex-1">
+              <div key={c} className={`flex-1 ${c >= 3 ? "hidden sm:block" : ""}`}>
                 <Skeleton
                   className={`h-4 ${CELL_WIDTHS[(r + c * 2) % CELL_WIDTHS.length]}`}
                 />
@@ -135,7 +136,7 @@ interface PageSkeletonProps {
   /** Read to screen readers in place of the old "Loading ..." text. */
   label: string;
   /** Match the page's own outer padding so nothing shifts on swap. */
-  padding?: "p-6" | "p-8" | "none";
+  padding?: "p-4 sm:p-6" | "p-4 sm:p-6 lg:p-8" | "none";
   /** Title row; turn off when the page heading is already rendered (tabs). */
   header?: boolean;
   /** Show a primary button placeholder at the right of the title row. */
@@ -161,7 +162,7 @@ interface PageSkeletonProps {
 /** Whole-page skeleton: title row, optional stats/tabs/filters, then the list. */
 export function PageSkeleton({
   label,
-  padding = "p-8",
+  padding = "p-4 sm:p-6 lg:p-8",
   header = true,
   action = false,
   stats = 0,
@@ -182,7 +183,7 @@ export function PageSkeleton({
       <SrLabel label={label} />
       {header && (
         <div className="flex items-center justify-between gap-4">
-          <div className="space-y-3">
+          <div className="min-w-0 flex-1 space-y-3">
             <Skeleton className="h-8 w-64 max-w-full" />
             <Skeleton className="h-4 w-96 max-w-full" />
           </div>

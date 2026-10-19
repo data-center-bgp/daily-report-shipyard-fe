@@ -614,7 +614,7 @@ export default function ImportData() {
 
   if (!canImport) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-700">
             Only PPIC, MASTER, and ADMIN_SHIPPING users can import data.
@@ -991,12 +991,12 @@ export default function ImportData() {
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
       <div className="mb-8">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Import Data</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Import Data</h1>
             <p className="text-gray-600 mt-2">
               Bulk import work orders and work details from CSV or Excel files
             </p>

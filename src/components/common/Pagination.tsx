@@ -18,13 +18,13 @@ export default function Pagination({
   if (totalPages <= 1) return null;
 
   return (
-    <div className="mt-4 flex items-center justify-between">
+    <div className="mt-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
       <div className="text-sm text-gray-600">
         Showing {(page - 1) * pageSize + 1} to{" "}
         {Math.min(page * pageSize, totalItems)} of {totalItems}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-center gap-2">
         <button
           onClick={() => onPageChange(Math.max(1, page - 1))}
           disabled={page === 1}

@@ -140,7 +140,7 @@ export default function UserManagementPage() {
 
   if (!canManage) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 flex items-start gap-3">
           <Lock className="w-6 h-6 text-yellow-600 flex-shrink-0" />
           <div>
@@ -229,7 +229,7 @@ export default function UserManagementPage() {
       ) : (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="table-stack w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-3 text-left font-semibold text-gray-700">

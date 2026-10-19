@@ -208,7 +208,7 @@ export default function BASTPMaterialsPage() {
 
   if (loading) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="flex items-center justify-center py-12">
           <Loader className="w-8 h-8 text-blue-600 animate-spin" />
           <span className="ml-3 text-gray-600">Loading materials...</span>
@@ -219,7 +219,7 @@ export default function BASTPMaterialsPage() {
 
   if (error) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6">
           <div className="flex items-center">
             <AlertTriangle className="w-6 h-6 text-red-600 mr-3" />
@@ -240,7 +240,7 @@ export default function BASTPMaterialsPage() {
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Header with Back Button */}
       <div className="flex items-center justify-between">
         <button

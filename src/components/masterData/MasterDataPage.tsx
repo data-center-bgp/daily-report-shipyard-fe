@@ -20,7 +20,7 @@ export default function MasterDataPage() {
 
   if (!canView) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 flex items-start gap-3">
           <Lock className="w-6 h-6 text-yellow-600 flex-shrink-0" />
           <div>
@@ -48,7 +48,7 @@ export default function MasterDataPage() {
       </div>
 
       <div className="border-b border-gray-200 mb-6">
-        <nav className="flex gap-6">
+        <nav className="flex gap-6 overflow-x-auto [&>*]:shrink-0 [&>*]:whitespace-nowrap">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.key;

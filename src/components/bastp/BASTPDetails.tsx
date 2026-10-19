@@ -567,7 +567,7 @@ export default function BASTPDetails() {
 
   if (error || !bastp) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center">
             <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
@@ -587,11 +587,11 @@ export default function BASTPDetails() {
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">BASTP Details</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">BASTP Details</h1>
           <p className="text-gray-600 mt-2">{bastp.number}</p>
           {exportError && (
             <p className="text-sm text-red-600 mt-1 flex items-center gap-1">

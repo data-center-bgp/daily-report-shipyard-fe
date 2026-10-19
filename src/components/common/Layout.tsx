@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import { useDashboardData } from "../../hooks/useDashboardData";
+import { useStackedTables } from "../../hooks/useStackedTables";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -113,7 +114,24 @@ function SidebarNav({
 }
 
 export default function Layout({ children, onLogout }: LayoutProps) {
+  useStackedTables();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // While the drawer is open the page behind it shouldn't scroll, and
+  // Escape closes it.
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [sidebarOpen]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [_user, setUser] = useState<any>(null);
   const location = useLocation();
@@ -370,51 +388,66 @@ export default function Layout({ children, onLogout }: LayoutProps) {
         </div>
       </div>
 
-      {/* Mobile sidebar */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <div
-            className="fixed inset-0 bg-gray-600 bg-opacity-75"
-            onClick={() => setSidebarOpen(false)}
-          />
-          <div className="relative flex flex-col max-w-xs w-full h-full overflow-hidden bg-gradient-to-b from-blue-950 via-blue-900 to-slate-950 shadow-2xl">
-            <div className="pointer-events-none absolute -top-16 -left-16 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl" />
-            <div className="pointer-events-none absolute bottom-24 -right-16 w-64 h-64 bg-indigo-400/15 rounded-full blur-3xl" />
+      {/* Mobile sidebar — always mounted so it can slide and fade instead of
+          popping in; `invisible` (after the slide finishes) keeps it out of
+          the tab order and hit-testing while closed. */}
+      <div
+        className={`fixed inset-0 z-40 lg:hidden ${
+          sidebarOpen
+            ? ""
+            : "pointer-events-none invisible transition-[visibility] delay-300"
+        }`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigation menu"
+      >
+        <div
+          className={`fixed inset-0 bg-slate-900/50 backdrop-blur-[2px] transition-opacity duration-300 ease-out motion-reduce:transition-none ${
+            sidebarOpen ? "opacity-100" : "opacity-0"
+          }`}
+          onClick={() => setSidebarOpen(false)}
+        />
+        <div
+          className={`relative flex flex-col max-w-xs w-full h-full overflow-hidden bg-gradient-to-b from-blue-950 via-blue-900 to-slate-950 shadow-2xl transition-transform duration-300 ease-out will-change-transform motion-reduce:transition-none ${
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <div className="pointer-events-none absolute -top-16 -left-16 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl" />
+          <div className="pointer-events-none absolute bottom-24 -right-16 w-64 h-64 bg-indigo-400/15 rounded-full blur-3xl" />
 
-            {/* Mobile sidebar header */}
-            <div className="relative z-10 flex-shrink-0 flex items-center justify-between h-16 px-6 bg-blue-950/60 border-b border-white/10">
-              <div className="flex items-center space-x-3">
-                <img
-                  src="/bgp-icon.jpg"
-                  alt="Barokah Galangan Perkasa"
-                  className="w-8 h-8 rounded-lg object-cover ring-1 ring-white/20"
-                />
-                <h1 className="text-xl font-bold text-white">
-                  Shipyard System
-                </h1>
-              </div>
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="text-white hover:text-blue-200 transition-colors p-1"
-              >
-                <span className="text-xl">✕</span>
-              </button>
-            </div>
-
-            {/* Mobile navigation */}
-            <nav className="relative z-10 flex-1 px-4 py-6 overflow-y-auto sidebar-scroll">
-              <SidebarNav
-                groups={visibleGroups}
-                collapsed={false}
-                onNavigate={(href) => {
-                  handleNavigate(href);
-                  setSidebarOpen(false);
-                }}
+          {/* Mobile sidebar header */}
+          <div className="relative z-10 flex-shrink-0 flex items-center justify-between h-16 px-6 bg-blue-950/60 border-b border-white/10">
+            <div className="flex items-center space-x-3">
+              <img
+                src="/bgp-icon.jpg"
+                alt="Barokah Galangan Perkasa"
+                className="w-8 h-8 rounded-lg object-cover ring-1 ring-white/20"
               />
-            </nav>
+              <h1 className="text-xl font-bold text-white">
+                Shipyard System
+              </h1>
+            </div>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="text-white hover:text-blue-200 transition-colors p-1"
+            >
+              <span className="text-xl">✕</span>
+            </button>
           </div>
+
+          {/* Mobile navigation */}
+          <nav className="relative z-10 flex-1 px-4 py-6 overflow-y-auto sidebar-scroll">
+            <SidebarNav
+              groups={visibleGroups}
+              collapsed={false}
+              onNavigate={(href) => {
+                handleNavigate(href);
+                setSidebarOpen(false);
+              }}
+            />
+          </nav>
         </div>
-      )}
+      </div>
 
       {/* Main content */}
       <div
@@ -423,7 +456,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
         }`}
       >
         {/* Top navbar */}
-        <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
+        <div className="flex-shrink-0 sticky top-0 z-20 lg:static bg-white border-b border-gray-200 px-3 sm:px-4 py-2.5 sm:py-3 shadow-sm">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 lg:hidden">
               <button
@@ -437,7 +470,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
                 alt="Barokah Galangan Perkasa"
                 className="w-6 h-6 rounded object-cover"
               />
-              <h1 className="text-lg font-medium text-gray-900">
+              <h1 className="text-base sm:text-lg font-medium text-gray-900 whitespace-nowrap">
                 Shipyard System
               </h1>
             </div>

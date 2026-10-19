@@ -2678,7 +2678,7 @@ export default function WODetailsTable({
             </div>
           ) : currentWorkDetails.length > 0 ? (
             <>
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="table-stack min-w-full divide-y divide-gray-200">
                 {renderTableHeader()}
                 <tbody className="bg-white divide-y divide-gray-200">
                   {currentWorkDetails.map((detail) => renderTableRow(detail))}

@@ -378,7 +378,7 @@ export default function EditWorkProgress() {
 
   if (!progressData) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <h3 className="text-red-800 font-medium">Progress Not Found</h3>
           <p className="text-red-600 mt-1">
@@ -401,7 +401,7 @@ export default function EditWorkProgress() {
     formData.report_date && isValidProgressPercentage(formData.progress_percentage);
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-6">
         <button
           onClick={goBackToWorkProgress}
@@ -409,7 +409,7 @@ export default function EditWorkProgress() {
         >
           <ArrowLeft className="w-4 h-4" /> Back to Work Progress
         </button>
-        <h1 className="text-3xl font-bold text-gray-900">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
           Edit Progress Report
         </h1>
         <p className="text-gray-600">Update the progress report details</p>

@@ -432,7 +432,7 @@ export default function InvoiceDetails() {
 
   if (error || !invoice) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6">
           <h3 className="text-red-800 font-medium text-lg">Error</h3>
           <p className="text-red-600 mt-2">{error || "Invoice not found"}</p>
@@ -458,7 +458,7 @@ export default function InvoiceDetails() {
           >
             <ArrowLeft className="w-4 h-4" /> Back to Invoices
           </button>
-          <h1 className="text-3xl font-bold text-gray-900">Invoice Details</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Invoice Details</h1>
           <p className="text-gray-600 mt-2">
             {invoice.invoice_number || "Draft Invoice"}
           </p>

@@ -125,7 +125,7 @@ export default function ProjectsList() {
   });
 
   if (loading) {
-    return <PageSkeleton label="Loading projects..." padding="p-6" action filters list="grid" rows={6} />;
+    return <PageSkeleton label="Loading projects..." padding="p-4 sm:p-6" action filters list="grid" rows={6} />;
   }
 
   if (error) {
@@ -146,8 +146,8 @@ export default function ProjectsList() {
   }
 
   return (
-    <div className="space-y-8 p-6">
-      <div className="flex justify-between items-center">
+    <div className="p-4 sm:p-6 space-y-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
           <p className="text-gray-600">

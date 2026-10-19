@@ -1077,7 +1077,7 @@ export default function ManageInvoice() {
 
   if (!canWrite) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 flex items-start gap-3">
           <Lock className="w-6 h-6 text-yellow-600 flex-shrink-0" />
           <div>
@@ -1104,7 +1104,7 @@ export default function ManageInvoice() {
 
   if (error && !bastp) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6">
           <h3 className="text-red-800 font-medium text-lg">Error</h3>
           <p className="text-red-600 mt-2">{error}</p>
@@ -1129,7 +1129,7 @@ export default function ManageInvoice() {
         >
           <ArrowLeft className="w-4 h-4" /> Back to Invoices
         </button>
-        <h1 className="text-3xl font-bold text-gray-900">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
           {isEditMode ? "Edit Invoice" : "Create Invoice"}
         </h1>
         <p className="text-gray-600 mt-2">

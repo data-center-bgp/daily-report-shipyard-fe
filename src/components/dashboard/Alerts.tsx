@@ -65,13 +65,13 @@ function Pagination({
   if (totalPages <= 1) return null;
 
   return (
-    <div className="mt-4 flex items-center justify-between">
+    <div className="mt-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
       <div className="text-sm text-gray-600">
         Showing {(page - 1) * PER_PAGE + 1} to{" "}
         {Math.min(page * PER_PAGE, totalCount)} of {totalCount}
       </div>
 
-      <div className="flex items-center space-x-2">
+      <div className="flex flex-wrap items-center justify-center gap-2">
         <button
           onClick={() => onPageChange(Math.max(1, page - 1))}
           disabled={page === 1}
@@ -160,7 +160,7 @@ export default function Alerts() {
 
   if (error) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-600">{error}</p>
           <button
@@ -180,7 +180,7 @@ export default function Alerts() {
   );
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Alerts</h1>
         <p className="text-sm text-gray-600 mt-1">

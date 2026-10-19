@@ -201,7 +201,7 @@ export default function ExportData() {
 
   if (!userProfile) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6">
           <div className="flex items-center">
             <span className="text-red-600 mr-2">⚠️</span>
@@ -219,10 +219,10 @@ export default function ExportData() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header - Same pattern as other pages */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Export Data</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Export Data</h1>
         <p className="text-gray-600">
           Export comprehensive vessel data including work orders, progress, and
           invoices

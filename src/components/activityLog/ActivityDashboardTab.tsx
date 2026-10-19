@@ -361,7 +361,7 @@ export default function ActivityDashboardTab({
               Rekap per user
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="table-stack w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-4 py-2 text-left font-semibold text-gray-700">

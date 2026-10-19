@@ -859,11 +859,11 @@ export default function WorkVerification() {
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
             Work Verification
           </h1>
           <p className="text-gray-600 mt-2">
@@ -891,8 +891,8 @@ export default function WorkVerification() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
+        <div className="bg-white p-3 sm:p-6 rounded-lg shadow border-l-4 border-blue-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">
@@ -902,10 +902,10 @@ export default function WorkVerification() {
                 {completedWorkDetails.length}
               </p>
             </div>
-            <CheckCircle2 className="w-8 h-8 text-blue-500" />
+            <CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8 text-blue-500" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-yellow-500">
+        <div className="bg-white p-3 sm:p-6 rounded-lg shadow border-l-4 border-yellow-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">
@@ -915,10 +915,10 @@ export default function WorkVerification() {
                 {pendingNotInBASTP.length + pendingWithBASTP.length}
               </p>
             </div>
-            <Clock className="w-8 h-8 text-yellow-500" />
+            <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-500" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
+        <div className="bg-white p-3 sm:p-6 rounded-lg shadow border-l-4 border-red-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">
@@ -928,10 +928,10 @@ export default function WorkVerification() {
                 {filteredNeedsRework.length}
               </p>
             </div>
-            <Undo2 className="w-8 h-8 text-red-500" />
+            <Undo2 className="w-6 h-6 sm:w-8 sm:h-8 text-red-500" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
+        <div className="bg-white p-3 sm:p-6 rounded-lg shadow border-l-4 border-green-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Verified</p>
@@ -939,7 +939,7 @@ export default function WorkVerification() {
                 {filteredVerified.length}
               </p>
             </div>
-            <Eye className="w-8 h-8 text-green-500" />
+            <Eye className="w-6 h-6 sm:w-8 sm:h-8 text-green-500" />
           </div>
         </div>
       </div>
@@ -1095,7 +1095,7 @@ export default function WorkVerification() {
         </div>
         {/* Tabs */}
         <div className="border-b border-gray-200">
-          <div className="flex space-x-8 px-6 overflow-x-auto">
+          <div className="flex space-x-6 sm:space-x-8 px-4 sm:px-6 overflow-x-auto">
             <button
               onClick={() => setActiveTab("pending")}
               className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
@@ -1143,7 +1143,7 @@ export default function WorkVerification() {
           {activeTab === "pending" &&
             (pendingNotInBASTP.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="table-stack min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-12">
@@ -1330,7 +1330,7 @@ export default function WorkVerification() {
                       </button>
                       {isExpanded && (
                         <div className="border-t border-gray-200">
-                          <table className="min-w-full divide-y divide-gray-200">
+                          <table className="table-stack min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                               <tr>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-12">
@@ -1457,7 +1457,7 @@ export default function WorkVerification() {
           {activeTab === "needsRework" &&
             (filteredNeedsRework.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="table-stack min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-12">
@@ -1615,7 +1615,7 @@ export default function WorkVerification() {
                       </button>
                       {isExpanded && (
                         <div className="border-t border-gray-200">
-                          <table className="min-w-full divide-y divide-gray-200">
+                          <table className="table-stack min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                               <tr>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-12">

@@ -532,7 +532,7 @@ export default function AddWorkDetails() {
   // Access control - Only PPIC or a full-access creator can add
   if (!isPPIC && !isFullAccessCreator) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-700">
             Only PPIC, MASTER, and ADMIN_SHIPPING users can add new work
@@ -544,12 +544,12 @@ export default function AddWorkDetails() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Page Header */}
       <div className="mb-8">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               Add Work Details
             </h1>
             <p className="text-gray-600 mt-2">

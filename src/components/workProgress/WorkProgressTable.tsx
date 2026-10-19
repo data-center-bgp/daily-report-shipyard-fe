@@ -1841,7 +1841,7 @@ export default function WorkProgressTable({
     return (
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="table-stack min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -1973,9 +1973,9 @@ export default function WorkProgressTable({
     <div className={`${embedded ? "" : "p-8"}`}>
       {!embedded && (
         <div className="mb-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
                 Work Progress Reports
               </h1>
               <p className="text-gray-600">

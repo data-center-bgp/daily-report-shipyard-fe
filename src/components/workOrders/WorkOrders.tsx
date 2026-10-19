@@ -6,12 +6,12 @@ export default function WorkOrders() {
   const { isOperationsReadOnly } = useAuth();
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header Section */}
       <div className="mb-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Work Orders</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Work Orders</h1>
             <p className="text-gray-600">
               {isOperationsReadOnly
                 ? "View all work orders (Read-only access)"
