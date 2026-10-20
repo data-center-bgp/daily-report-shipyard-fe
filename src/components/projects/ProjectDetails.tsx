@@ -21,11 +21,14 @@ import {
   AlertTriangle,
   Link2,
   Loader2,
+  Pencil,
 } from "lucide-react";
 import LoadingState from "../common/LoadingState";
+import RenameProjectModal from "./RenameProjectModal";
 
 interface ProjectDetail {
   id: number;
+  created_at: string;
   project_name: string;
   docking_type: string | null;
   vessel: { id: number; name: string; type: string; company: string } | null;
@@ -97,6 +100,7 @@ export default function ProjectDetails() {
   const [error, setError] = useState<string | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
+  const [showRenameModal, setShowRenameModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [unassignedWOs, setUnassignedWOs] = useState<UnassignedWorkOrder[]>([]);
   const [unassignedLoading, setUnassignedLoading] = useState(false);
@@ -119,6 +123,7 @@ export default function ProjectDetails() {
         .select(
           `
           id,
+          created_at,
           project_name,
           docking_type,
           vessel:vessel_id ( id, name, type, company ),
@@ -318,8 +323,8 @@ export default function ProjectDetails() {
 
   return (
     <div className="p-4 sm:p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="min-w-0">
           <button
             onClick={() => navigate("/projects")}
             className="text-gray-600 hover:text-gray-900 flex items-center gap-2 mb-2"
@@ -327,8 +332,8 @@ export default function ProjectDetails() {
             <ArrowLeft className="w-4 h-4" /> Back to Projects
           </button>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <FolderKanban className="w-7 h-7 text-blue-600" />
-            {project.project_name}
+            <FolderKanban className="w-7 h-7 text-blue-600 shrink-0" />
+            <span className="min-w-0 break-words">{project.project_name}</span>
           </h1>
           <p className="text-gray-600 flex items-center gap-1 mt-1">
             <Ship className="w-4 h-4" /> {project.vessel?.name} —{" "}
@@ -341,7 +346,15 @@ export default function ProjectDetails() {
           )}
         </div>
         {!isOperationsReadOnly && (
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
+            {project.vessel && (
+              <button
+                onClick={() => setShowRenameModal(true)}
+                className="bg-white border border-gray-300 text-gray-700 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+              >
+                <Pencil className="w-4 h-4" /> Rename Project
+              </button>
+            )}
             <button
               onClick={openAssignModal}
               className="bg-white border border-gray-300 text-gray-700 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
@@ -546,6 +559,21 @@ export default function ProjectDetails() {
           </div>
         )}
       </div>
+
+      {showRenameModal && project.vessel && (
+        <RenameProjectModal
+          project={{ ...project, vessel: project.vessel }}
+          onClose={() => setShowRenameModal(false)}
+          onRenamed={(updated) => {
+            setShowRenameModal(false);
+            setProject((prev) => (prev ? { ...prev, ...updated } : prev));
+            // A vessel change reshuffles which work orders belong here.
+            if (updated.vessel.id !== project.vessel?.id) fetchProject();
+            setShowSuccessMessage(true);
+            setTimeout(() => setShowSuccessMessage(false), 5000);
+          }}
+        />
+      )}
 
       {showAssignModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
