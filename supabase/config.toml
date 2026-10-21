@@ -237,3 +237,8 @@ s3_region = "env(S3_REGION)"
 s3_access_key = "env(S3_ACCESS_KEY)"
 # Configures AWS_SECRET_ACCESS_KEY for S3 bucket
 s3_secret_key = "env(S3_SECRET_KEY)"
+
+[functions.shipyard-report]
+# Auth is the function's own API key (see supabase/functions/shipyard-report),
+# not a Supabase login, so the gateway must not demand a JWT.
+verify_jwt = false
