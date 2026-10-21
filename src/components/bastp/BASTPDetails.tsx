@@ -794,6 +794,17 @@ export default function BASTPDetails() {
         )}
       </div>
 
+      {/* A fresh-water-only BASTP has no work details — nothing to list. */}
+      {(bastp.bastp_work_details?.length ?? 0) === 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900">
+          This BASTP has no work details — it records general services only
+          (Fresh Water Supply), so there is nothing to verify or submit
+          materials for.
+        </div>
+      )}
+
+      {(bastp.bastp_work_details?.length ?? 0) > 0 && (
+        <>
       {/* Work Orders Summary */}
       <div className="bg-white rounded-lg shadow">
         <div className="p-6 border-b border-gray-200">
@@ -1184,6 +1195,8 @@ export default function BASTPDetails() {
           </table>
         </div>
       </div>
+        </>
+      )}
 
       {/* General Services Section */}
       {bastp?.general_services &&

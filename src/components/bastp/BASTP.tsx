@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import type { BASTPWithDetails, BASTPStatus } from "../../types/bastp.types";
 import { useAuth } from "../../hooks/useAuth";
+import { isFreshWaterOnly } from "../../utils/generalServices";
 import {
   getLatestVerificationByWorkDetails,
   isApproved,
@@ -81,7 +82,8 @@ export default function BASTP() {
       close_date,
       total_days,
       service_type:service_type_id (
-        uom
+        uom,
+        service_code
       )
     )
   `,
@@ -140,6 +142,42 @@ export default function BASTP() {
   useEffect(() => {
     if (!loading && bastps.length > 0) {
       bastps.forEach(async (bastp) => {
+        // A fresh-water-only BASTP has no work details, so there is nothing
+        // to verify and no materials to submit: it goes straight to VERIFIED,
+        // then to READY_FOR_INVOICE once the Form Penawaran is uploaded.
+        const isFreshWaterOnlyBastp =
+          (bastp.bastp_work_details ?? []).length === 0 &&
+          isFreshWaterOnly(
+            (bastp.general_services ?? []).map(
+              (gs) => gs.service_type?.service_code,
+            ),
+          );
+
+        if (isFreshWaterOnlyBastp && bastp.status === "DRAFT") {
+          await supabase
+            .from("bastp")
+            .update({ status: "VERIFIED" })
+            .eq("id", bastp.id);
+          fetchBASTPs();
+          return;
+        }
+
+        if (
+          isFreshWaterOnlyBastp &&
+          bastp.status === "VERIFIED" &&
+          bastp.form_penawaran_storage_path
+        ) {
+          await supabase
+            .from("bastp")
+            .update({
+              status: "READY_FOR_INVOICE",
+              ready_for_invoice_date: new Date().toISOString(),
+            })
+            .eq("id", bastp.id);
+          fetchBASTPs();
+          return;
+        }
+
         // 1. Check if all work details are verified -> VERIFIED
         if (
           bastp.status === "DRAFT" &&

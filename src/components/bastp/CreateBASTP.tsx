@@ -21,7 +21,11 @@ import type {
 } from "../../types/generalService.types";
 import { ActivityLogService } from "../../services/activityLogService";
 import { fetchAllRows } from "../../utils/fetchAllRows";
-import { formatTons, sortServices } from "../../utils/generalServices";
+import {
+  formatTons,
+  isFreshWaterOnly,
+  sortServices,
+} from "../../utils/generalServices";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -586,6 +590,14 @@ export default function CreateBASTP() {
     (s) => !isTonServiceType(s.service_type_id),
   );
 
+  // Fresh water delivered to a vessel afloat has no work details behind it —
+  // the BASTP is just the delivery record, so it may skip the work details.
+  const isFreshWaterOnlyBastp = isFreshWaterOnly(
+    selectedServices.map(
+      (s) => serviceTypes.find((t) => t.id === s.service_type_id)?.service_code,
+    ),
+  );
+
   // Ton-based services (Fresh Water Supply) can have several deliveries, each
   // its own row with one supply date (stored as both start_date and
   // close_date so date-based code elsewhere still works) — so these are
@@ -891,10 +903,19 @@ export default function CreateBASTP() {
       return;
     }
 
-    if (selectedWorkDetails.length === 0) {
-      setError("Please select at least one completed work detail");
+    if (selectedWorkDetails.length === 0 && !isFreshWaterOnlyBastp) {
+      setError(
+        selectedServices.length > 0
+          ? "Please select at least one completed work detail — only a BASTP whose general services are all Fresh Water Supply can go without"
+          : "Please select at least one completed work detail, or add a Fresh Water Supply delivery",
+      );
       return;
     }
+
+    const currentIds = new Set(selectedWorkDetails.map((wd) => wd.id));
+    const compositionChanged =
+      currentIds.size !== initialWorkDetailIds.size ||
+      [...currentIds].some((id) => !initialWorkDetailIds.has(id));
 
     // General services are optional: repairs done off-yard (typically on
     // external vessels) have nothing to bill under them.
@@ -944,11 +965,6 @@ export default function CreateBASTP() {
         // If the work-detail composition changed, the BASTP needs to go
         // back through review — don't let it stay VERIFIED (or beyond) for
         // items nobody has approved yet.
-        const currentIds = new Set(selectedWorkDetails.map((wd) => wd.id));
-        const compositionChanged =
-          currentIds.size !== initialWorkDetailIds.size ||
-          [...currentIds].some((id) => !initialWorkDetailIds.has(id));
-
         const { error: updateError } = await supabase
           .from("bastp")
           .update({
@@ -1596,6 +1612,11 @@ export default function CreateBASTP() {
               dates (or the supply date and tons for Fresh Water Supply). Skip
               this if none apply.
             </p>
+            <p className="text-sm text-gray-600 mt-1">
+              A BASTP for Fresh Water Supply alone (vessel not docked at the
+              yard) doesn't need any work details — pick only Fresh Water
+              Supply here and leave the work details empty.
+            </p>
           </div>
 
           {loadingServiceTypes ? (
@@ -2030,7 +2051,10 @@ export default function CreateBASTP() {
         <div className="flex gap-3">
           <button
             type="submit"
-            disabled={submitting || selectedWorkDetails.length === 0}
+            disabled={
+              submitting ||
+              (selectedWorkDetails.length === 0 && !isFreshWaterOnlyBastp)
+            }
             className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
           >
             {submitting

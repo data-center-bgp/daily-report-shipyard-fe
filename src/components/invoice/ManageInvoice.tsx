@@ -530,8 +530,12 @@ export default function ManageInvoice() {
       }
 
       setBastp(data);
-      if (!data.bastp_work_details || data.bastp_work_details.length === 0) {
-        setError("This BASTP has no work details to invoice");
+      // A fresh-water-only BASTP is invoiced from its general services alone.
+      if (
+        (!data.bastp_work_details || data.bastp_work_details.length === 0) &&
+        (!data.general_services || data.general_services.length === 0)
+      ) {
+        setError("This BASTP has no work details or general services to invoice");
         setLoading(false);
         return;
       }

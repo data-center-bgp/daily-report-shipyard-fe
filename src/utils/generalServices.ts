@@ -16,7 +16,19 @@ export const isTonService = (s: ServiceLike): boolean =>
 export const billableQuantity = (s: ServiceLike): number =>
   isTonService(s) ? Number(s.quantity) || 0 : Number(s.total_days) || 0;
 
-export const formatTons = (value: number | string | null | undefined): string =>
+export const FRESH_WATER_SERVICE_CODE = "FRESH_WATER_SUPPLY";
+
+// A BASTP normally hands over completed work details. The one exception is a
+// fresh-water-only BASTP: water delivered to a vessel afloat (not docked at
+// the yard) has no work details behind it, so the services alone make the
+// BASTP. At least one service is required, and every one must be fresh water.
+export const isFreshWaterOnly = (
+  serviceCodes: (string | null | undefined)[],
+): boolean =>
+  serviceCodes.length > 0 &&
+  serviceCodes.every((code) => code === FRESH_WATER_SERVICE_CODE);
+
+export const formatTons =(value: number | string | null | undefined): string =>
   (Math.round((Number(value) || 0) * 100) / 100).toLocaleString("id-ID");
 
 // e.g. "12,5 ton" or "3 days"
