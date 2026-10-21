@@ -3,9 +3,11 @@
 // may use it. The signing secret lives here on the server and never reaches the
 // browser — which is the whole reason this is a function and not app code.
 //
-//   POST { "action": "create", "name": "Vendor X", "duration": "7d" | "30d" | "90d" | "permanent", "schemas"?: [...] }
+//   POST { "action": "create", "name": "Vendor X", "duration": "7d" | "30d" | "90d" | "permanent",
+//          "schemas"?: [...], "tables"?: [...] }     (tables omitted = every table)
 //        -> { token, key }          (the token is returned once and can't be recovered)
-//   POST { "action": "list" }       -> { keys: [...] }
+//   POST { "action": "list" }       -> { keys: [...], available_tables: [...] }
+//   POST { "action": "set_tables", "id": 12, "tables": [...] | null } -> { key }
 //   POST { "action": "revoke", "id": 12 } -> { key }
 //
 // Who is calling is checked from their own login (the Authorization header),
@@ -50,7 +52,34 @@ function statusOf(row: { expires_at: string | null; revoked_at: string | null })
 }
 
 const COLUMNS =
-  "id, key_id, name, schemas, created_at, created_by_name, expires_at, revoked_at, revoked_by_name";
+  "id, key_id, name, schemas, tables, created_at, created_by_name, expires_at, revoked_at, revoked_by_name";
+
+// The client's schema-generic types add nothing here and fight the helpers below.
+// deno-lint-ignore no-explicit-any
+type Admin = any;
+
+/** Every table a key can be limited to (the registry itself is never offered). */
+async function availableTables(admin: Admin): Promise<string[]> {
+  const { data, error } = await admin.rpc("api_readable_tables");
+  if (error) throw error;
+  return (data ?? []) as string[];
+}
+
+/**
+ * Reads a "tables" value from a request: absent/null means every table;
+ * otherwise a non-empty list of real tables. Returns the cleaned list (null =
+ * every table) or an error message.
+ */
+function parseTables(value: unknown, available: string[]): { tables: string[] | null } | { error: string } {
+  if (value === undefined || value === null) return { tables: null };
+  if (!Array.isArray(value) || value.length === 0) {
+    return { error: "Choose at least one table, or leave it as all tables" };
+  }
+  const unique = [...new Set(value)];
+  const unknown = unique.filter((t) => typeof t !== "string" || !available.includes(t));
+  if (unknown.length > 0) return { error: `Unknown table: ${String(unknown[0])}` };
+  return { tables: (unique as string[]).sort() };
+}
 
 async function handle(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
@@ -100,7 +129,11 @@ async function handle(req: Request): Promise<Response> {
         .order("created_at", { ascending: false })
         .limit(200);
       if (error) throw error;
-      return json({ keys: (data ?? []).map((k) => ({ ...k, status: statusOf(k) })) });
+      return json({
+        keys: (data ?? []).map((k) => ({ ...k, status: statusOf(k) })),
+        // For the table picker in the app.
+        available_tables: await availableTables(admin),
+      });
     }
 
     case "create": {
@@ -121,6 +154,9 @@ async function handle(req: Request): Promise<Response> {
         return json({ error: `schemas must be a non-empty list from: ${permitted.join(", ")}` }, 400);
       }
 
+      const parsed = parseTables(body.tables, await availableTables(admin));
+      if ("error" in parsed) return json({ error: parsed.error }, 400);
+
       const exp = days === null ? undefined : Math.floor(Date.now() / 1000 + days * 86400);
       const payload: KeyPayload = { v: 1, id: newKeyId(), name, schemas: [...new Set(schemas as string[])], ...(exp ? { exp } : {}) };
 
@@ -131,6 +167,7 @@ async function handle(req: Request): Promise<Response> {
           key_id: payload.id,
           name,
           schemas: payload.schemas,
+          tables: parsed.tables,
           created_by: profile.id,
           created_by_name: profile.name,
           expires_at: exp ? new Date(exp * 1000).toISOString() : null,
@@ -141,6 +178,28 @@ async function handle(req: Request): Promise<Response> {
 
       const token = await encodeKey(payload, signingSecret);
       return json({ token, key: { ...row, status: statusOf(row) } }, 201);
+    }
+
+    case "set_tables": {
+      const id = Number(body.id);
+      if (!Number.isInteger(id) || id <= 0) return json({ error: "id must be a key's number" }, 400);
+
+      const parsed = parseTables(body.tables, await availableTables(admin));
+      if ("error" in parsed) return json({ error: parsed.error }, 400);
+
+      // Takes effect on the key's very next request — the key itself doesn't change.
+      const { data: row, error } = await admin
+        .from("api_keys")
+        .update({ tables: parsed.tables })
+        .eq("id", id)
+        .is("revoked_at", null)
+        .select(COLUMNS)
+        .maybeSingle();
+      if (error) throw error;
+      if (row) return json({ key: { ...row, status: statusOf(row) } });
+
+      const { data: existing } = await admin.from("api_keys").select("id").eq("id", id).maybeSingle();
+      return existing ? json({ error: "A revoked key can't be changed" }, 409) : json({ error: "Key not found" }, 404);
     }
 
     case "revoke": {
@@ -162,7 +221,7 @@ async function handle(req: Request): Promise<Response> {
     }
 
     default:
-      return json({ error: "action must be create, list or revoke" }, 400);
+      return json({ error: "action must be create, list, set_tables or revoke" }, 400);
   }
 }
 

@@ -77,9 +77,9 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
         title: "Who am I? (key info)",
         path: "",
         description:
-          "Returns the name the key was issued to, when it expires (null means never) and the schemas it may read. Use it to check that a key works.",
+          "Returns the name the key was issued to, when it expires (null means never), the schemas it may read and the tables it is limited to (null means every table). Use it to check that a key works.",
         status: "200 OK",
-        response: { caller: "supervisor", expires_at: null, schemas: [SCHEMA] },
+        response: { caller: "supervisor", expires_at: null, schemas: [SCHEMA], tables: null },
       },
       {
         id: "schema",
@@ -154,6 +154,11 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
   },
 ];
 
+// Tables that hold people's details or who-did-what rather than shipyard work.
+// The key table picker offers "everything except these" in one click, because
+// that is the most common wish for a monitoring site.
+export const SENSITIVE_TABLES = ["profiles", "activity_logs"];
+
 export const KEY_DURATIONS = [
   { id: "7d", label: "7 days" },
   { id: "30d", label: "30 days" },
@@ -167,7 +172,10 @@ export const KEY_ERRORS = [
   ["401 Missing or invalid API key", "No key was sent, or it is wrong or has been edited."],
   ["401 This API key has expired", "The expiry time has passed. Ask for a new key."],
   ["401 This API key has been revoked", "It was cancelled before it expired. Ask for a new key."],
-  ["404 Unknown schema or table", "The name doesn't exist, or your key isn't allowed to read it."],
+  [
+    "404 Unknown schema or table",
+    "The name doesn't exist, or your key isn't allowed to read it (a key can be limited to certain tables).",
+  ],
 ] as const;
 
 export const STATUS_ERRORS = [

@@ -34,7 +34,7 @@ const MAX_LIMIT = 5000;
 
 interface Config {
   schemas: Record<string, { db_url: string }>;
-  keys: { name: string; key: string; schemas: string[] }[];
+  keys: { name: string; key: string; schemas: string[]; tables?: string[] }[];
 }
 
 interface Caller {
@@ -42,6 +42,8 @@ interface Caller {
   schemas: string[];
   /** ISO time the key stops working, or null for a key that never expires. */
   expires_at: string | null;
+  /** The only tables the key may read, or null for every table. */
+  tables: string[] | null;
 }
 
 type AuthResult = { caller: Caller } | { error: string };
@@ -120,14 +122,17 @@ async function verifySignedKey(supplied: string, config: Config): Promise<AuthRe
     return { error: "This API key has expired" };
   }
 
-  // Registry check. A key that isn't in the registry (made with mint-key.mjs)
-  // simply counts as not revoked. If the check itself fails we refuse rather
-  // than let a possibly-cancelled key through (handled by the 500 below).
+  // Registry check: is it cancelled, and is it limited to certain tables? A key
+  // that isn't in the registry (made with mint-key.mjs) counts as not revoked
+  // and unlimited. If the lookup itself fails we refuse rather than let a
+  // possibly-cancelled key through (handled by the 500 below).
+  let tables: string[] | null = null;
   if (config.schemas[REGISTRY_SCHEMA]) {
     const sql = getDb(REGISTRY_SCHEMA, config);
-    const [row] = await sql<{ revoked: boolean }[]>`
-      select ${sql(REGISTRY_SCHEMA + ".api_key_is_revoked")}(${payload.id}) as revoked`;
-    if (row?.revoked) return { error: "This API key has been revoked" };
+    const [row] = await sql<{ policy: { revoked: boolean; tables: string[] | null } | null }[]>`
+      select ${sql(REGISTRY_SCHEMA + ".api_key_policy")}(${payload.id}) as policy`;
+    if (row?.policy?.revoked) return { error: "This API key has been revoked" };
+    tables = row?.policy?.tables ?? null;
   }
 
   return {
@@ -135,6 +140,7 @@ async function verifySignedKey(supplied: string, config: Config): Promise<AuthRe
       name: payload.name,
       schemas: payload.schemas,
       expires_at: payload.exp === undefined ? null : new Date(payload.exp * 1000).toISOString(),
+      tables,
     },
   };
 }
@@ -151,7 +157,9 @@ async function authenticate(req: Request, config: Config): Promise<AuthResult> {
   for (const entry of config.keys) {
     if (equalBytes(await sha256(entry.key), suppliedHash)) match = entry;
   }
-  if (match) return { caller: { name: match.name, schemas: match.schemas, expires_at: null } };
+  if (match) {
+    return { caller: { name: match.name, schemas: match.schemas, expires_at: null, tables: match.tables ?? null } };
+  }
 
   return (await verifySignedKey(supplied, config)) ?? { error: "Missing or invalid API key" };
 }
@@ -205,6 +213,8 @@ async function handle(req: Request): Promise<Response> {
       caller: caller.name,
       expires_at: caller.expires_at,
       schemas: caller.schemas.filter((s) => config.schemas[s]),
+      // null = every table; otherwise the only tables this key can read.
+      tables: caller.tables,
     });
   }
 
@@ -215,7 +225,16 @@ async function handle(req: Request): Promise<Response> {
   }
 
   const sql = getDb(schema, config);
+
+  // What the database login can see, narrowed to what this key may read. A
+  // table outside the key's list is simply absent, so it answers 404 exactly
+  // like a table that doesn't exist — nothing reveals that it's there.
   const tables = await readableTables(schema, config);
+  if (caller.tables) {
+    for (const name of [...tables.keys()]) {
+      if (!caller.tables.includes(name)) tables.delete(name);
+    }
+  }
 
   // Schema index: its tables.
   if (!table) {

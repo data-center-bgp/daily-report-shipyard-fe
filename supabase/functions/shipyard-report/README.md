@@ -60,7 +60,7 @@ curl -H "x-api-key: $KEY" \
 ```
 
 Errors: `401` missing, wrong, expired or revoked key (the message says which),
-`404` unknown schema/table (also when the key isn't allowed that schema),
+`404` unknown schema/table (also when the key isn't allowed that schema or table),
 `400` bad `limit`/`offset`/`updated_since`, `405` anything other than GET.
 
 ## Keys
@@ -87,9 +87,29 @@ are recorded in the Activity Log (never the key itself).
   `supabase/migrations/20261021120000_api_keys_registry.sql`) and signs the key. **The key itself is not
   stored**, so a database leak doesn't leak keys.
 - The `api_keys` table can't be read by the browser or by the read-only API login, so it never appears in
-  the data API. The read API only asks one question, `api_key_is_revoked(key_id)`, on every request.
+  the data API. On every request the read API asks one question, `api_key_policy(key_id)`: is the key
+  revoked, and which tables may it read?
 - The function has its gateway JWT check switched off (`verify_jwt = false` in `config.toml`) because it
   verifies the login itself against Supabase Auth.
+
+### Limiting a key to certain tables
+
+A key can read **every table** (the default) or **only the tables you choose** — for example everything
+except `profiles` and `activity_logs`, which hold staff details and who-did-what. Pick this when creating the
+key (the picker has a one-click "everything except staff and activity data"), and change it later with the
+**Tables** button on the key's row.
+
+- The limit is stored with the key in the registry, **not inside the key string**, so changing it takes
+  effect on the key's very next request and nobody has to be sent a new key.
+- A table outside the limit answers `404 Unknown schema or table`, exactly like a table that doesn't exist,
+  and is left out of the schema listing — so a limited key can't even tell the table is there.
+- `GET /` (who am I) reports the limit: `"tables": null` means every table, otherwise the list.
+- The limit applies by table name to every schema the key can read. (Only one schema exists today; revisit
+  this if more are added.)
+- Keys made with `mint-key.mjs` have no registry entry, so they always read every table. Prefer app-made
+  keys when you want a limit. A permanent config key can carry an optional `"tables": [...]` list.
+- New tables added to the schema later are readable by "all tables" keys automatically, and by limited
+  keys only after you add them under **Tables**.
 
 ### Creating a key on the command line (alternative)
 
@@ -123,7 +143,7 @@ app's key list. Cancel one by adding its **id** to the `DATA_API_REVOKED` secret
 
 ## How it is locked down
 
-- Each key is tied to the schemas it may read; anything else answers `404`.
+- Each key is tied to the schemas it may read, and optionally to chosen tables; anything else answers `404`.
 - Each schema is read through its own database login,
   `data_api_ro_<schema>` (`supabase/migrations/20261021100000_data_api_readonly_role.sql`).
   The database itself refuses writes from it, it can only see its own schema,
@@ -189,11 +209,12 @@ No code change or redeploy is needed for steps 1 to 4.
 ## Deploying
 
 Order matters: apply the migrations first, then deploy the functions (the read function calls
-`api_key_is_revoked`, which the second migration creates).
+`api_key_policy`, which the table-limits migration creates).
 
 ```bash
 npx supabase db query --linked --file supabase/migrations/20261021100000_data_api_readonly_role.sql
 npx supabase db query --linked --file supabase/migrations/20261021120000_api_keys_registry.sql
+npx supabase db query --linked --file supabase/migrations/20261021130000_api_key_table_limits.sql
 npx supabase functions deploy shipyard-report --use-api --no-verify-jwt
 npx supabase functions deploy shipyard-report-keys --use-api --no-verify-jwt
 ```

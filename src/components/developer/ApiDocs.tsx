@@ -566,8 +566,9 @@ export default function ApiDocs() {
             <button type="button" onClick={() => setTab("manage")} className="font-medium text-blue-600 hover:underline">
               Manage keys
             </button>{" "}
-            tab: pick how long it should work (7, 30 or 90 days, or permanent) and copy it. The same tab lists every key made there and
-            lets you revoke one. A revoked key stops working straight away, and revoking one never affects anyone else's.
+            tab: pick how long it should work (7, 30 or 90 days, or permanent), which tables it may read, and copy it. The same tab lists
+            every key made there, lets you change its tables later and lets you revoke it. A revoked key stops working straight away, and
+            revoking one never affects anyone else's.
           </p>
 
           <div className="my-4 flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">

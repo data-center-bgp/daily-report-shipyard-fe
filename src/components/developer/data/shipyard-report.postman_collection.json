@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "5b1f6c3e-7a1e-4a53-9f55-0f0c9e1a7e21",
     "name": "Shipyard Report API",
-    "description": "Read-only JSON API for the Daily Report Shipyard data. It only returns data — it can't change anything.\n\n## Get started\n1. Import this collection (and, optionally, the environment file).\n2. Put your key in the **`apiKey`** variable (collection variable, or the environment's `apiKey`).\n3. Run **Who am I?** — it should return 200 with your schemas.\n4. Run **List tables in a schema**, then read any table.\n\n## Keys\nSend the key in the `x-api-key` header (already set on every request). A key is either **permanent** or **expiring** (starts with `srt_`); expiring keys stop working at the time shown by *Who am I?* and the API then answers `401 This API key has expired`.\n\n## Errors\n| Status | Meaning |\n|---|---|\n| 400 | bad `limit`, `offset` or `updated_since` |\n| 401 | missing, wrong, expired or revoked key (the message says which) |\n| 404 | unknown schema or table — also returned for a schema your key isn't allowed |\n| 405 | anything other than GET |\n| 500 | server problem; try again, then contact the administrator |\n\nBase URL: `https://mgxdvnnvruoyhnzgrtur.supabase.co/functions/v1/shipyard-report`",
+    "description": "Read-only JSON API for the Daily Report Shipyard data. It only returns data — it can't change anything.\n\n## Get started\n1. Import this collection (and, optionally, the environment file).\n2. Put your key in the **`apiKey`** variable (collection variable, or the environment's `apiKey`).\n3. Run **Who am I?** — it should return 200 with your schemas.\n4. Run **List tables in a schema**, then read any table.\n\n## Keys\nSend the key in the `x-api-key` header (already set on every request). A key is either **permanent** or **expiring** (starts with `srt_`); expiring keys stop working at the time shown by *Who am I?* and the API then answers `401 This API key has expired`.\n\n## Errors\n| Status | Meaning |\n|---|---|\n| 400 | bad `limit`, `offset` or `updated_since` |\n| 401 | missing, wrong, expired or revoked key (the message says which) |\n| 404 | unknown schema or table — also returned for a schema or table your key isn't allowed |\n| 405 | anything other than GET |\n| 500 | server problem; try again, then contact the administrator |\n\nBase URL: `https://mgxdvnnvruoyhnzgrtur.supabase.co/functions/v1/shipyard-report`",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -93,7 +93,7 @@
               "path": [],
               "query": []
             },
-            "description": "Returns the name your key was issued for, **when it expires** (`null` = never) and the schemas it may read.\n\nUse this first to confirm the key works."
+            "description": "Returns the name your key was issued to, **when it expires** (`null` = never), the schemas it may read and the **tables** it is limited to (`null` = every table).\n\nUse this first to confirm the key works."
           },
           "response": [
             {
@@ -125,7 +125,7 @@
                   "value": "application/json; charset=utf-8"
                 }
               ],
-              "body": "{\n  \"caller\": \"supervisor\",\n  \"expires_at\": null,\n  \"schemas\": [\n    \"daily_report_shipyard\"\n  ]\n}"
+              "body": "{\n  \"caller\": \"supervisor\",\n  \"expires_at\": null,\n  \"schemas\": [\n    \"daily_report_shipyard\"\n  ],\n  \"tables\": null\n}"
             },
             {
               "name": "200 OK (expiring key)",
@@ -156,7 +156,7 @@
                   "value": "application/json; charset=utf-8"
                 }
               ],
-              "body": "{\n  \"caller\": \"Vendor X\",\n  \"expires_at\": \"2026-10-28T00:50:04.000Z\",\n  \"schemas\": [\n    \"daily_report_shipyard\"\n  ]\n}"
+              "body": "{\n  \"caller\": \"Vendor X\",\n  \"expires_at\": \"2026-10-28T00:50:04.000Z\",\n  \"schemas\": [\n    \"daily_report_shipyard\"\n  ],\n  \"tables\": [\n    \"projects\",\n    \"vessel\",\n    \"work_details\"\n  ]\n}"
             },
             {
               "name": "401 Missing or invalid API key",
@@ -285,7 +285,7 @@
               ],
               "query": []
             },
-            "description": "Every table in the schema with its **columns** and **row count**. Counts are exact and are taken one table at a time, so this takes about a second.\n\nChange the `schema` collection variable to read another schema your key allows."
+            "description": "Every table in the schema with its **columns** and **row count**. Counts are exact and are taken one table at a time, so this takes about a second.\n\nChange the `schema` collection variable to read another schema your key allows.\n\nIf your key is limited to certain tables, only those are listed."
           },
           "response": [
             {

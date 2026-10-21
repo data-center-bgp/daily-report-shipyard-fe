@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { FunctionsHttpError } from "@supabase/supabase-js";
-import { AlertTriangle, Check, Copy, KeySquare, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, Check, Copy, KeySquare, Loader2, Plus, RefreshCw, Table2, Trash2, X } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { ActivityLogService } from "../../services/activityLogService";
 import { KEY_DURATIONS, SCHEMA, type KeyDurationId } from "./apiDocsContent";
+import TablePicker from "./TablePicker";
 
 interface ApiKeyRow {
   id: number;
   key_id: string;
   name: string;
   schemas: string[];
+  /** The only tables the key may read; null = every table. */
+  tables: string[] | null;
   created_at: string;
   created_by_name: string | null;
   expires_at: string | null;
@@ -34,6 +37,9 @@ async function callKeys<T>(body: Record<string, unknown>): Promise<T> {
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
+const describeTables = (tables: string[] | null) =>
+  tables === null ? "all tables" : `${tables.length} table${tables.length === 1 ? "" : "s"}`;
+
 const STATUS_STYLE: Record<ApiKeyRow["status"], string> = {
   active: "bg-emerald-100 text-emerald-800",
   expired: "bg-gray-200 text-gray-700",
@@ -42,10 +48,20 @@ const STATUS_STYLE: Record<ApiKeyRow["status"], string> = {
 
 export default function KeyManager() {
   const [keys, setKeys] = useState<ApiKeyRow[] | null>(null);
+  const [available, setAvailable] = useState<string[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [duration, setDuration] = useState<KeyDurationId>("30d");
+  const [access, setAccess] = useState<"all" | "choose">("all");
+  const [chosen, setChosen] = useState<string[]>([]);
+
+  // Changing the tables of a key that already exists.
+  const [editing, setEditing] = useState<ApiKeyRow | null>(null);
+  const [editAccess, setEditAccess] = useState<"all" | "choose">("all");
+  const [editChosen, setEditChosen] = useState<string[]>([]);
+  const [savingTables, setSavingTables] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [fresh, setFresh] = useState<{ token: string; key: ApiKeyRow } | null>(null);
@@ -58,8 +74,9 @@ export default function KeyManager() {
   const load = useCallback(async () => {
     setLoadError(null);
     try {
-      const res = await callKeys<{ keys: ApiKeyRow[] }>({ action: "list" });
+      const res = await callKeys<{ keys: ApiKeyRow[]; available_tables?: string[] }>({ action: "list" });
       setKeys(res.keys);
+      if (res.available_tables) setAvailable(res.available_tables);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Couldn't load keys");
       setKeys((prev) => prev ?? []);
@@ -72,9 +89,11 @@ export default function KeyManager() {
 
   const durationLabel = (id: KeyDurationId) => KEY_DURATIONS.find((d) => d.id === id)?.label ?? id;
 
+  const needsTables = access === "choose" && chosen.length === 0;
+
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || creating) return;
+    if (!name.trim() || creating || needsTables) return;
     setCreating(true);
     setCreateError(null);
     try {
@@ -83,17 +102,21 @@ export default function KeyManager() {
         name: name.trim(),
         duration,
         schemas: [SCHEMA],
+        // Left out = every table.
+        ...(access === "choose" ? { tables: chosen } : {}),
       });
       setFresh(res);
       setCopied(false);
       setName("");
-      // The token is deliberately left out of the log — only who/what/how long.
+      setAccess("all");
+      setChosen([]);
+      // The token is deliberately left out of the log — only who/what/how long/which tables.
       await ActivityLogService.logActivity({
         action: "create",
         tableName: "api_keys",
         recordId: res.key.id,
-        newData: { name: res.key.name, schemas: res.key.schemas, expires_at: res.key.expires_at },
-        description: `Created API key "${res.key.name}" (${durationLabel(duration)})`,
+        newData: { name: res.key.name, schemas: res.key.schemas, tables: res.key.tables, expires_at: res.key.expires_at },
+        description: `Created API key "${res.key.name}" (${durationLabel(duration)}, ${describeTables(res.key.tables)})`,
       });
       await load();
     } catch (err) {
@@ -116,6 +139,37 @@ export default function KeyManager() {
       document.body.removeChild(area);
     }
     setCopied(true);
+  };
+
+  const openEdit = (row: ApiKeyRow) => {
+    setEditing(row);
+    setEditAccess(row.tables === null ? "all" : "choose");
+    setEditChosen(row.tables ?? []);
+    setEditError(null);
+  };
+
+  const saveTables = async () => {
+    if (!editing) return;
+    setSavingTables(true);
+    setEditError(null);
+    try {
+      const tables = editAccess === "choose" ? editChosen : null;
+      const res = await callKeys<{ key: ApiKeyRow }>({ action: "set_tables", id: editing.id, tables });
+      await ActivityLogService.logActivity({
+        action: "update",
+        tableName: "api_keys",
+        recordId: editing.id,
+        oldData: { tables: editing.tables },
+        newData: { tables: res.key.tables },
+        description: `Changed which tables API key "${editing.name}" can read (${describeTables(editing.tables)} → ${describeTables(res.key.tables)})`,
+      });
+      setEditing(null);
+      await load();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Couldn't change the tables");
+    } finally {
+      setSavingTables(false);
+    }
   };
 
   const revoke = async (row: ApiKeyRow) => {
@@ -197,9 +251,43 @@ export default function KeyManager() {
             )}
           </fieldset>
 
-          <div className="text-sm text-gray-600">
-            Can read: <code className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[12.5px]">{SCHEMA}</code>
-          </div>
+          <fieldset>
+            <legend className="mb-1 block text-sm font-medium text-gray-700">
+              Which tables can it read? <span className="font-normal text-gray-500">(in {SCHEMA})</span>
+            </legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {(
+                [
+                  ["all", "All tables", "Everything, including staff and activity data"],
+                  ["choose", "Only tables I choose", "Limit it to what the site or person actually needs"],
+                ] as const
+              ).map(([id, title, hint]) => (
+                <label
+                  key={id}
+                  className={`cursor-pointer rounded-lg border px-3 py-2.5 transition-colors ${
+                    access === id ? "border-blue-600 bg-blue-50" : "border-gray-300 bg-white hover:border-blue-400"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="key-access"
+                    value={id}
+                    checked={access === id}
+                    onChange={() => setAccess(id)}
+                    className="sr-only"
+                  />
+                  <span className={`block text-sm font-semibold ${access === id ? "text-blue-700" : "text-gray-800"}`}>{title}</span>
+                  <span className="block text-xs text-gray-500">{hint}</span>
+                </label>
+              ))}
+            </div>
+            {access === "choose" && (
+              <div className="mt-3">
+                <TablePicker available={available} selected={chosen} onChange={setChosen} />
+                {needsTables && <p className="mt-2 text-xs text-red-600">Choose at least one table.</p>}
+              </div>
+            )}
+          </fieldset>
 
           {createError && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{createError}</div>
@@ -207,7 +295,7 @@ export default function KeyManager() {
 
           <button
             type="submit"
-            disabled={!name.trim() || creating}
+            disabled={!name.trim() || creating || needsTables}
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -237,7 +325,8 @@ export default function KeyManager() {
             </button>
           </div>
           <p className="mt-3 text-sm text-emerald-900">
-            {fresh.key.expires_at ? `Works until ${formatDate(fresh.key.expires_at)}.` : "Never expires."} Send it in the{" "}
+            {fresh.key.expires_at ? `Works until ${formatDate(fresh.key.expires_at)}.` : "Never expires."} Can read{" "}
+            {fresh.key.tables === null ? "all tables" : `only ${describeTables(fresh.key.tables)}`}. Send it in the{" "}
             <code className="rounded border border-emerald-200 bg-white px-1.5 py-0.5 font-mono text-[12.5px]">x-api-key</code> header.
           </p>
           <button
@@ -280,7 +369,7 @@ export default function KeyManager() {
             <table className="table-stack min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  {["Name", "Created", "Expires", "Status", "Actions"].map((h) => (
+                  {["Name", "Created", "Expires", "Can read", "Status", "Actions"].map((h) => (
                     <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                       {h}
                     </th>
@@ -299,6 +388,15 @@ export default function KeyManager() {
                       {k.created_by_name && <div className="text-xs text-gray-500">by {k.created_by_name}</div>}
                     </td>
                     <td className="px-4 py-3 align-top text-gray-700">{k.expires_at ? formatDate(k.expires_at) : "Never"}</td>
+                    <td className="px-4 py-3 align-top text-gray-700">
+                      <span className="capitalize">{describeTables(k.tables)}</span>
+                      {k.tables && (
+                        <div className="mt-0.5 max-w-[14rem] break-words font-mono text-[11px] text-gray-400" title={k.tables.join(", ")}>
+                          {k.tables.slice(0, 3).join(", ")}
+                          {k.tables.length > 3 ? ` +${k.tables.length - 3} more` : ""}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-3 align-top">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${STATUS_STYLE[k.status]}`}>
                         {k.status}
@@ -331,16 +429,25 @@ export default function KeyManager() {
                           </button>
                         </div>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRevokeError(null);
-                            setConfirmId(k.id);
-                          }}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" /> Revoke
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEdit(k)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                          >
+                            <Table2 className="h-3.5 w-3.5" /> Tables
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRevokeError(null);
+                              setConfirmId(k.id);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" /> Revoke
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -350,6 +457,96 @@ export default function KeyManager() {
           </div>
         )}
       </div>
+
+      {editing && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          onClick={() => !savingTables && setEditing(null)}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Change which tables the key can read"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-gray-200 p-4">
+              <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                <Table2 className="h-5 w-5" /> Tables for "{editing.name}"
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditing(null)}
+                disabled={savingTables}
+                aria-label="Close"
+                className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 p-4">
+              <p className="text-sm text-gray-600">
+                The key itself doesn't change — whoever already has it simply sees the new list from their very next request.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(
+                  [
+                    ["all", "All tables"],
+                    ["choose", "Only tables I choose"],
+                  ] as const
+                ).map(([id, title]) => (
+                  <label
+                    key={id}
+                    className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-semibold ${
+                      editAccess === id ? "border-blue-600 bg-blue-50 text-blue-700" : "border-gray-300 bg-white text-gray-700"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="edit-access"
+                      value={id}
+                      checked={editAccess === id}
+                      onChange={() => setEditAccess(id)}
+                      className="sr-only"
+                    />
+                    {title}
+                  </label>
+                ))}
+              </div>
+              {editAccess === "choose" && (
+                <>
+                  <TablePicker available={available} selected={editChosen} onChange={setEditChosen} />
+                  {editChosen.length === 0 && <p className="text-xs text-red-600">Choose at least one table.</p>}
+                </>
+              )}
+              {editError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{editError}</div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-gray-200 p-4">
+              <button
+                type="button"
+                onClick={() => setEditing(null)}
+                disabled={savingTables}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveTables}
+                disabled={savingTables || (editAccess === "choose" && editChosen.length === 0)}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingTables && <Loader2 className="h-4 w-4 animate-spin" />}
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
