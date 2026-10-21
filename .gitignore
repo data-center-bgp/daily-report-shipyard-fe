@@ -23,3 +23,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# one-off schema move (contains auth password hashes)
+supabase/_move_rumah_quran/
