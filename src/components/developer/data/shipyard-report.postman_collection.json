@@ -1,0 +1,1745 @@
+{
+  "info": {
+    "_postman_id": "5b1f6c3e-7a1e-4a53-9f55-0f0c9e1a7e21",
+    "name": "Shipyard Report API",
+    "description": "Read-only JSON API for the Daily Report Shipyard data. It only returns data — it can't change anything.\n\n## Get started\n1. Import this collection (and, optionally, the environment file).\n2. Put your key in the **`apiKey`** variable (collection variable, or the environment's `apiKey`).\n3. Run **Who am I?** — it should return 200 with your schemas.\n4. Run **List tables in a schema**, then read any table.\n\n## Keys\nSend the key in the `x-api-key` header (already set on every request). A key is either **permanent** or **expiring** (starts with `srt_`); expiring keys stop working at the time shown by *Who am I?* and the API then answers `401 This API key has expired`.\n\n## Errors\n| Status | Meaning |\n|---|---|\n| 400 | bad `limit`, `offset` or `updated_since` |\n| 401 | missing, wrong, expired or revoked key (the message says which) |\n| 404 | unknown schema or table — also returned for a schema your key isn't allowed |\n| 405 | anything other than GET |\n| 500 | server problem; try again, then contact the administrator |\n\nBase URL: `https://mgxdvnnvruoyhnzgrtur.supabase.co/functions/v1/shipyard-report`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "x-api-key",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{apiKey}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.variables.get('apiKey')) {",
+          "  console.warn('apiKey is empty — set it in the collection variables or your environment before sending.');",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://mgxdvnnvruoyhnzgrtur.supabase.co/functions/v1/shipyard-report",
+      "type": "string",
+      "description": "API base URL."
+    },
+    {
+      "key": "apiKey",
+      "value": "",
+      "type": "string",
+      "description": "Your API key. Paste it here (or in the environment)."
+    },
+    {
+      "key": "schema",
+      "value": "daily_report_shipyard",
+      "type": "string",
+      "description": "Schema to read."
+    },
+    {
+      "key": "table",
+      "value": "projects",
+      "type": "string",
+      "description": "Table to read in the generic requests."
+    },
+    {
+      "key": "nextOffset",
+      "value": "",
+      "type": "string",
+      "description": "Set automatically while paging."
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Start here",
+      "description": "Check that your key works, see which schemas it can read, then list a schema's tables.",
+      "item": [
+        {
+          "name": "Who am I? (schemas and key expiry)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [],
+              "query": []
+            },
+            "description": "Returns the name your key was issued for, **when it expires** (`null` = never) and the schemas it may read.\n\nUse this first to confirm the key works."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [],
+                  "query": []
+                },
+                "description": "Returns the name your key was issued for, **when it expires** (`null` = never) and the schemas it may read.\n\nUse this first to confirm the key works."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"caller\": \"supervisor\",\n  \"expires_at\": null,\n  \"schemas\": [\n    \"daily_report_shipyard\"\n  ]\n}"
+            },
+            {
+              "name": "200 OK (expiring key)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [],
+                  "query": []
+                },
+                "description": "Returns the name your key was issued for, **when it expires** (`null` = never) and the schemas it may read.\n\nUse this first to confirm the key works."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"caller\": \"Vendor X\",\n  \"expires_at\": \"2026-10-28T00:50:04.000Z\",\n  \"schemas\": [\n    \"daily_report_shipyard\"\n  ]\n}"
+            },
+            {
+              "name": "401 Missing or invalid API key",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [],
+                  "query": []
+                },
+                "description": "Returns the name your key was issued for, **when it expires** (`null` = never) and the schemas it may read.\n\nUse this first to confirm the key works."
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": \"Missing or invalid API key\"\n}"
+            },
+            {
+              "name": "401 This API key has expired",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [],
+                  "query": []
+                },
+                "description": "Returns the name your key was issued for, **when it expires** (`null` = never) and the schemas it may read.\n\nUse this first to confirm the key works."
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": \"This API key has expired\"\n}"
+            },
+            {
+              "name": "401 This API key has been revoked",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [],
+                  "query": []
+                },
+                "description": "Returns the name your key was issued for, **when it expires** (`null` = never) and the schemas it may read.\n\nUse this first to confirm the key works."
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": \"This API key has been revoked\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Key is accepted', () => pm.response.to.have.status(200));",
+                  "pm.test('Lists at least one schema', () => pm.expect(pm.response.json().schemas).to.be.an('array').that.is.not.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List tables in a schema",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/{{schema}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{schema}}"
+              ],
+              "query": []
+            },
+            "description": "Every table in the schema with its **columns** and **row count**. Counts are exact and are taken one table at a time, so this takes about a second.\n\nChange the `schema` collection variable to read another schema your key allows."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/{{schema}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "{{schema}}"
+                  ],
+                  "query": []
+                },
+                "description": "Every table in the schema with its **columns** and **row count**. Counts are exact and are taken one table at a time, so this takes about a second.\n\nChange the `schema` collection variable to read another schema your key allows."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"schema\": \"daily_report_shipyard\",\n  \"tables\": [\n    {\n      \"table\": \"projects\",\n      \"rows\": 72,\n      \"columns\": [\n        \"id\",\n        \"created_at\",\n        \"updated_at\",\n        \"deleted_at\",\n        \"project_name\",\n        \"vessel_id\",\n        \"readiness_form_id\",\n        \"user_id\",\n        \"docking_type\"\n      ]\n    },\n    {\n      \"table\": \"vessel\",\n      \"rows\": 130,\n      \"columns\": [\n        \"id\",\n        \"created_at\",\n        \"updated_at\",\n        \"deleted_at\",\n        \"name\",\n        \"type\",\n        \"company\"\n      ]\n    }\n  ]\n}"
+            },
+            {
+              "name": "404 Schema not available to this key",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/{{schema}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "{{schema}}"
+                  ],
+                  "query": []
+                },
+                "description": "Every table in the schema with its **columns** and **row count**. Counts are exact and are taken one table at a time, so this takes about a second.\n\nChange the `schema` collection variable to read another schema your key allows."
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": \"Unknown schema or table: other_schema\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Read a table",
+      "description": "Fetch one table's rows. Page through with `offset` until `next_offset` is `null`.",
+      "item": [
+        {
+          "name": "Get rows (first page)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/{{schema}}/{{table}}?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{schema}}",
+                "{{table}}"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000, default 1000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start. 0 or more, default 0."
+                }
+              ]
+            },
+            "description": "Returns up to `limit` rows ordered by `id`.\n\n| Field | Meaning |\n|---|---|\n| `total` | rows matching the filters |\n| `returned` | rows in this response |\n| `next_offset` | pass as `offset` for the next page, `null` on the last page |\n\n`numeric` columns (prices) are returned as text so no precision is lost. Ids are numbers. Soft-deleted rows are hidden unless `include_deleted=true`."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/{{schema}}/{{table}}?limit=1000&offset=0",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "{{schema}}",
+                    "{{table}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "1000",
+                      "description": "Rows per page. 1 to 5000, default 1000."
+                    },
+                    {
+                      "key": "offset",
+                      "value": "0",
+                      "description": "Where to start. 0 or more, default 0."
+                    }
+                  ]
+                },
+                "description": "Returns up to `limit` rows ordered by `id`.\n\n| Field | Meaning |\n|---|---|\n| `total` | rows matching the filters |\n| `returned` | rows in this response |\n| `next_offset` | pass as `offset` for the next page, `null` on the last page |\n\n`numeric` columns (prices) are returned as text so no precision is lost. Ids are numbers. Soft-deleted rows are hidden unless `include_deleted=true`."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"schema\": \"daily_report_shipyard\",\n  \"table\": \"projects\",\n  \"total\": 72,\n  \"limit\": 1000,\n  \"offset\": 0,\n  \"returned\": 72,\n  \"next_offset\": null,\n  \"data\": [\n    {\n      \"id\": 1,\n      \"created_at\": \"2026-07-21T01:41:06.354Z\",\n      \"updated_at\": \"2026-07-28T03:29:22.559Z\",\n      \"deleted_at\": null,\n      \"project_name\": \"Example Company-EXAMPLE VESSEL-Repair-2026-01\",\n      \"vessel_id\": 12,\n      \"readiness_form_id\": 3,\n      \"user_id\": 2,\n      \"docking_type\": \"Repair\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "400 Bad limit",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/{{schema}}/{{table}}?limit=1000&offset=0",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "{{schema}}",
+                    "{{table}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "1000",
+                      "description": "Rows per page. 1 to 5000, default 1000."
+                    },
+                    {
+                      "key": "offset",
+                      "value": "0",
+                      "description": "Where to start. 0 or more, default 0."
+                    }
+                  ]
+                },
+                "description": "Returns up to `limit` rows ordered by `id`.\n\n| Field | Meaning |\n|---|---|\n| `total` | rows matching the filters |\n| `returned` | rows in this response |\n| `next_offset` | pass as `offset` for the next page, `null` on the last page |\n\n`numeric` columns (prices) are returned as text so no precision is lost. Ids are numbers. Soft-deleted rows are hidden unless `include_deleted=true`."
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": \"limit must be a whole number from 1 to 5000\"\n}"
+            },
+            {
+              "name": "404 Unknown table",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/{{schema}}/{{table}}?limit=1000&offset=0",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "{{schema}}",
+                    "{{table}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "1000",
+                      "description": "Rows per page. 1 to 5000, default 1000."
+                    },
+                    {
+                      "key": "offset",
+                      "value": "0",
+                      "description": "Where to start. 0 or more, default 0."
+                    }
+                  ]
+                },
+                "description": "Returns up to `limit` rows ordered by `id`.\n\n| Field | Meaning |\n|---|---|\n| `total` | rows matching the filters |\n| `returned` | rows in this response |\n| `next_offset` | pass as `offset` for the next page, `null` on the last page |\n\n`numeric` columns (prices) are returned as text so no precision is lost. Ids are numbers. Soft-deleted rows are hidden unless `include_deleted=true`."
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": \"Unknown schema or table: daily_report_shipyard/nope\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has data array', () => pm.expect(b.data).to.be.an('array'));",
+                  "// Handy for paging: remember where the next page starts.",
+                  "pm.collectionVariables.set('nextOffset', b.next_offset === null ? '' : String(b.next_offset));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get rows (next page)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/{{schema}}/{{table}}?limit=1000&offset={{nextOffset}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{schema}}",
+                "{{table}}"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page."
+                },
+                {
+                  "key": "offset",
+                  "value": "{{nextOffset}}",
+                  "description": "Filled in from the previous response."
+                }
+              ]
+            },
+            "description": "Run **Get rows (first page)** first; it stores `next_offset` in the `nextOffset` collection variable. Keep running this request until the response's `next_offset` is `null`."
+          },
+          "response": [
+            {
+              "name": "200 OK (last page)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/{{schema}}/{{table}}?limit=1000&offset={{nextOffset}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "{{schema}}",
+                    "{{table}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "1000",
+                      "description": "Rows per page."
+                    },
+                    {
+                      "key": "offset",
+                      "value": "{{nextOffset}}",
+                      "description": "Filled in from the previous response."
+                    }
+                  ]
+                },
+                "description": "Run **Get rows (first page)** first; it stores `next_offset` in the `nextOffset` collection variable. Keep running this request until the response's `next_offset` is `null`."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"schema\": \"daily_report_shipyard\",\n  \"table\": \"work_details\",\n  \"total\": 3055,\n  \"limit\": 1000,\n  \"offset\": 3000,\n  \"returned\": 55,\n  \"next_offset\": null,\n  \"data\": []\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('nextOffset', b.next_offset === null ? '' : String(b.next_offset));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Only rows created or changed since",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/{{schema}}/{{table}}?updated_since=2026-10-01T00:00:00Z&limit=1000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{schema}}",
+                "{{table}}"
+              ],
+              "query": [
+                {
+                  "key": "updated_since",
+                  "value": "2026-10-01T00:00:00Z",
+                  "description": "ISO date or date-time."
+                },
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page."
+                }
+              ]
+            },
+            "description": "For syncing: returns only rows created or changed after the given time (ISO 8601, e.g. `2026-10-01T00:00:00Z`). A row that was never edited counts by its `created_at`.\n\nA table with neither `updated_at` nor `created_at` can't be filtered this way (400)."
+          },
+          "response": [
+            {
+              "name": "400 Bad date",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/{{schema}}/{{table}}?updated_since=2026-10-01T00:00:00Z&limit=1000",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "{{schema}}",
+                    "{{table}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "updated_since",
+                      "value": "2026-10-01T00:00:00Z",
+                      "description": "ISO date or date-time."
+                    },
+                    {
+                      "key": "limit",
+                      "value": "1000",
+                      "description": "Rows per page."
+                    }
+                  ]
+                },
+                "description": "For syncing: returns only rows created or changed after the given time (ISO 8601, e.g. `2026-10-01T00:00:00Z`). A row that was never edited counts by its `created_at`.\n\nA table with neither `updated_at` nor `created_at` can't be filtered this way (400)."
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": \"updated_since must be an ISO date or date-time, e.g. 2026-10-01T00:00:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Include soft-deleted rows",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/{{schema}}/{{table}}?include_deleted=true&limit=1000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{schema}}",
+                "{{table}}"
+              ],
+              "query": [
+                {
+                  "key": "include_deleted",
+                  "value": "true",
+                  "description": "Also return rows whose deleted_at is set."
+                },
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page."
+                }
+              ]
+            },
+            "description": "Most tables mark removed rows with `deleted_at` instead of deleting them, and the API hides those by default. Add `include_deleted=true` to get them too (check `deleted_at` in each row)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Tables in daily_report_shipyard",
+      "description": "One ready-made request per table (generated from the live API, 2026-10-21). Each fetches the first page; page through with `offset` as above.",
+      "item": [
+        {
+          "name": "activity_logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/activity_logs?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "activity_logs"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**activity_logs** — 10524 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `user_id`, `user_name`, `user_email`, `action`, `table_name`, `old_data`, `new_data`, `changes`, `ip_address`, `user_agent`, `description`, `record_id`"
+          },
+          "response": []
+        },
+        {
+          "name": "additional_wo_requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/additional_wo_requests?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "additional_wo_requests"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**additional_wo_requests** — 0 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `project_id`, `vessel_id`, `requested_by`, `reason`, `status`, `decided_by`, `decided_at`, `decision_notes`, `work_order_id`, `is_chairman_directive`"
+          },
+          "response": []
+        },
+        {
+          "name": "bastp",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/bastp?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "bastp"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**bastp** — 48 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `number`, `date`, `bastp_upload_date`, `document_url`, `storage_path`, `status`, `is_invoiced`, `invoiced_date`, `total_work_details`, `bastp_id`, `user_id`, `vessel_id`, `ready_for_invoice_date`, `form_penawaran_storage_path`, `form_penawaran_uploaded_at`, `tanggal_sandar`, `tanggal_naik_docking`, `tanggal_turun_docking`, `tanggal_tambat_setelah_turun_dock`, `to_name`, `to_role`"
+          },
+          "response": []
+        },
+        {
+          "name": "bastp_work_details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/bastp_work_details?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "bastp_work_details"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**bastp_work_details** — 1128 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `bastp_id`, `work_details_id`, `materials_status`, `materials_submitted_at`, `materials_submitted_by`"
+          },
+          "response": []
+        },
+        {
+          "name": "general_service_types",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/general_service_types?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "general_service_types"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**general_service_types** — 15 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `service_name`, `service_code`, `display_order`, `uom`"
+          },
+          "response": []
+        },
+        {
+          "name": "general_services",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/general_services?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "general_services"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**general_services** — 146 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `bastp_id`, `service_type_id`, `total_days`, `remarks`, `unit_price`, `payment_price`, `start_date`, `close_date`, `quantity`"
+          },
+          "response": []
+        },
+        {
+          "name": "invoice_details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/invoice_details?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "invoice_details"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**invoice_details** — 30 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `bastp_collection_date`, `invoice_number`, `faktur_number`, `due_date`, `delivery_date`, `collection_date`, `receiver_name`, `payment_status`, `payment_date`, `remarks`, `work_order_id`, `user_id`, `company`, `bastp_id`, `total_price_before`, `ppn`, `pph_23`, `total_price_after`, `ppn_applicable`"
+          },
+          "response": []
+        },
+        {
+          "name": "invoice_work_details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/invoice_work_details?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "invoice_work_details"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**invoice_work_details** — 768 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `invoice_details_id`, `work_details_id`, `payment_price`, `unit_price`"
+          },
+          "response": []
+        },
+        {
+          "name": "kapro",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/kapro?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "kapro"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**kapro** — 8 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `kapro_name`"
+          },
+          "response": []
+        },
+        {
+          "name": "location",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/location?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "location"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**location** — 171 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `location`"
+          },
+          "response": []
+        },
+        {
+          "name": "material_control",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/material_control?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "material_control"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**material_control** — 2870 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `size`, `amount`, `uom`, `work_details_id`, `bastp_id`, `material_id`, `length`, `width`, `thickness`, `density`, `total_amount`, `material_density_id`, `calc_mode`, `layers`, `diameter`, `area`"
+          },
+          "response": []
+        },
+        {
+          "name": "material_densities",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/material_densities?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "material_densities"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**material_densities** — 22 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `name`, `density`, `unit`"
+          },
+          "response": []
+        },
+        {
+          "name": "material_lists",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/material_lists?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "material_lists"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**material_lists** — 1044 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `material`, `specification`, `category`, `material_density_id`, `calc_mode`"
+          },
+          "response": []
+        },
+        {
+          "name": "profiles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/profiles?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "profiles"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**profiles** — 53 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `name`, `email`, `company`, `role`, `auth_user_id`"
+          },
+          "response": []
+        },
+        {
+          "name": "projects",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/projects?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "projects"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**projects** — 72 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `project_name`, `vessel_id`, `readiness_form_id`, `user_id`, `docking_type`"
+          },
+          "response": []
+        },
+        {
+          "name": "readiness_approval_roles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/readiness_approval_roles?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "readiness_approval_roles"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**readiness_approval_roles** — 1 rows when this collection was generated.\n\nColumns: `id`, `party`, `role_code`, `role_label`, `action_label`, `display_order`"
+          },
+          "response": []
+        },
+        {
+          "name": "readiness_checklist_items",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/readiness_checklist_items?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "readiness_checklist_items"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**readiness_checklist_items** — 11 rows when this collection was generated.\n\nColumns: `id`, `section`, `section_label`, `item_text`, `display_order`"
+          },
+          "response": []
+        },
+        {
+          "name": "readiness_form_approvals",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/readiness_form_approvals?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "readiness_form_approvals"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**readiness_form_approvals** — 41 rows when this collection was generated.\n\nColumns: `id`, `readiness_form_id`, `approval_role_id`, `signer_name`, `signed_date`"
+          },
+          "response": []
+        },
+        {
+          "name": "readiness_form_responses",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/readiness_form_responses?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "readiness_form_responses"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**readiness_form_responses** — 451 rows when this collection was generated.\n\nColumns: `id`, `readiness_form_id`, `checklist_item_id`, `is_compliant`, `explanation`, `hsse_status`, `hsse_notes`, `hsse_reviewed_by`, `hsse_reviewed_at`"
+          },
+          "response": []
+        },
+        {
+          "name": "vessel",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/vessel?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "vessel"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**vessel** — 130 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `name`, `type`, `company`, `fleet`, `fleet_number`"
+          },
+          "response": []
+        },
+        {
+          "name": "vessel_readiness_forms",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/vessel_readiness_forms?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "vessel_readiness_forms"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**vessel_readiness_forms** — 41 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `project_id`, `vessel_id`, `docking_date`, `owner_name`, `last_cargo_info`, `gas_test_document_url`, `gas_test_storage_path`, `status`, `user_id`"
+          },
+          "response": []
+        },
+        {
+          "name": "work_details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/work_details?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "work_details"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**work_details** — 3246 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `description`, `pic`, `planned_start_date`, `target_close_date`, `period_close_target`, `actual_start_date`, `actual_close_date`, `work_permit_url`, `storage_path`, `user_id`, `work_order_id`, `work_scope_id`, `uom`, `quantity`, `is_additional_wo_details`, `spk_number`, `spkk_number`, `notes`, `ptw_number`, `is_in_bastp`, `bastp_id`, `bastp_added_date`, `location_id`, `ppic_price`, `cancelled_at`, `cancelled_by`, `cancellation_reason`"
+          },
+          "response": []
+        },
+        {
+          "name": "work_order",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/work_order?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "work_order"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**work_order** — 241 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `customer_wo_number`, `customer_wo_date`, `shipyard_wo_date`, `user_id`, `vessel_id`, `shipyard_wo_number`, `is_additional_wo`, `kapro_id`, `work_location`, `work_type`, `project_id`, `wo_print_number`"
+          },
+          "response": []
+        },
+        {
+          "name": "work_order_general_services",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/work_order_general_services?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "work_order_general_services"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**work_order_general_services** — 9 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `work_order_id`, `service_type_id`, `start_date`, `close_date`, `total_days`, `remarks`"
+          },
+          "response": []
+        },
+        {
+          "name": "work_progress",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/work_progress?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "work_progress"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**work_progress** — 3223 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `progress_percentage`, `report_date`, `evidence_url`, `storage_path`, `work_details_id`, `user_id`, `notes`, `is_imported`"
+          },
+          "response": []
+        },
+        {
+          "name": "work_scope",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/work_scope?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "work_scope"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**work_scope** — 40 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `work_scope`"
+          },
+          "response": []
+        },
+        {
+          "name": "work_verification",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/daily_report_shipyard/work_verification?limit=1000&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily_report_shipyard",
+                "work_verification"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1000",
+                  "description": "Rows per page. 1 to 5000."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Where to start."
+                }
+              ]
+            },
+            "description": "**work_verification** — 2491 rows when this collection was generated.\n\nColumns: `id`, `created_at`, `updated_at`, `deleted_at`, `verification_date`, `user_id`, `work_details_id`, `verification_notes`, `status`, `is_auto_verified`"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

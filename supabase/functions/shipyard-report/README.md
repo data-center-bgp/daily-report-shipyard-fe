@@ -4,6 +4,22 @@ Read-only JSON API for people who only need to fetch this app's data. It never
 writes, never asks anyone to log in to the app, and doesn't touch the app's own
 accounts or keys.
 
+## Documentation for users
+
+- **Web page:** **Developer → API Documentation** in the shipyard app's sidebar
+  (`/developer/api`). Only users with the **MASTER** role see it; anyone else who types
+  the address is sent to the dashboard. It has an overview, access keys, an integration
+  guide with a "try it" box, and a table reference. It is hidden in the app, not secret:
+  the API itself is protected by its keys, and the page contains none.
+- **Postman / Apidog:** download the collection (and, optionally, the environment) from
+  the page's Integration guide tab, or take the files from
+  `src/components/developer/data/`.
+- The page is self-contained in `src/components/developer/` (plus one route in `App.tsx`,
+  one sidebar entry in `Layout.tsx` and a `developer` entry in `useAuth.tsx`), so it can be
+  moved into a separate documentation project later.
+- The table list comes from `src/components/developer/data/tables.json`; refresh it (and
+  the collection's per-table requests) when tables are added.
+
 ## Using it
 
 Base URL: `https://<project-ref>.supabase.co/functions/v1/shipyard-report`
@@ -47,19 +63,38 @@ Errors: `401` missing, wrong, expired or revoked key (the message says which),
 `404` unknown schema/table (also when the key isn't allowed that schema),
 `400` bad `limit`/`offset`/`updated_since`, `405` anything other than GET.
 
-## The two kinds of key
+## Keys
 
-**Permanent keys** never expire. They live in the `DATA_API_CONFIG` secret (see
-below). Use these for people or systems that need standing access.
+A key is either **permanent** or **expiring**. Both only ever read.
 
-**Expiring keys** (they start with `srt_`) carry their own expiry and are
-created on your own computer, so nothing has to change in Supabase when you hand
-one out. Use these for one-off or temporary access.
+| | Where it comes from | Lasts | Cancel it by |
+|---|---|---|---|
+| **Made in the app** (recommended) | **Developer → API Documentation → Manage keys**, MASTER users only | 7 days, 30 days, 90 days or permanent | the **Revoke** button on the same page |
+| **Permanent, in the config** | the `keys` list in the `DATA_API_CONFIG` secret | never | removing it from the secret |
+| **Made on the command line** | `mint-key.mjs` (below) | any length, or permanent | adding its id to `DATA_API_REVOKED` |
 
-### Creating an expiring key
+Keys made in the app start with `srt_`, are shown **once** when created (copy it then; it can't be
+recovered) and are listed afterwards with who made them, when, when they expire and their status.
+Revoking one stops it working straight away, and never affects any other key. Creating and revoking
+are recorded in the Activity Log (never the key itself).
 
-You need the signing secret (the `DATA_API_SIGNING_SECRET` value, kept in your
-password manager). Then, from this folder:
+### How app-made keys work
+
+- The page calls the **`shipyard-report-keys`** function, which first checks the caller's own login and
+  that their profile is an **active MASTER** (anyone else gets 403). The signing secret lives only in that
+  function — it can't reach the browser, which is why this isn't done in app code.
+- It records the key (name, schemas, expiry, who made it) in `daily_report_shipyard.api_keys` (see
+  `supabase/migrations/20261021120000_api_keys_registry.sql`) and signs the key. **The key itself is not
+  stored**, so a database leak doesn't leak keys.
+- The `api_keys` table can't be read by the browser or by the read-only API login, so it never appears in
+  the data API. The read API only asks one question, `api_key_is_revoked(key_id)`, on every request.
+- The function has its gateway JWT check switched off (`verify_jwt = false` in `config.toml`) because it
+  verifies the login itself against Supabase Auth.
+
+### Creating a key on the command line (alternative)
+
+Only needed for scripting. You need the signing secret (the `DATA_API_SIGNING_SECRET` value, kept in your
+password manager). From this folder:
 
 ```bash
 # valid for 7 days
@@ -72,22 +107,19 @@ node mint-key.mjs --name "Quick check" --minutes 30
 # limited to specific schemas (default: daily_report_shipyard)
 node mint-key.mjs --name "Vendor X" --days 7 --schemas daily_report_shipyard
 
-# a signed key that never expires (it can still be cancelled, see below)
+# a signed key that never expires (it can still be cancelled)
 node mint-key.mjs --name "Dashboard" --permanent
 ```
 
-The key is printed on its own line; the id and expiry are printed under it. Give
-the key to the person. Once it expires the API answers `401 This API key has
-expired`; you don't have to do anything.
+The key is printed on its own line; the id and expiry are printed under it. These keys are not in the
+app's key list. Cancel one by adding its **id** to the `DATA_API_REVOKED` secret, comma-separated:
+`npx supabase secrets set DATA_API_REVOKED=id1,id2`.
 
-### Cancelling a key early
+### Cancelling in bulk
 
-- **An expiring or signed key:** add its **id** (printed when you made it) to the
-  `DATA_API_REVOKED` secret, comma-separated:
-  `npx supabase secrets set DATA_API_REVOKED=id1,id2`
-- **A permanent key:** remove its entry from `DATA_API_CONFIG` (below) and set
-  the secret again.
-- **Every expiring key at once:** set a new `DATA_API_SIGNING_SECRET`.
+- **Every signed key at once** (app-made and command-line): set a new `DATA_API_SIGNING_SECRET`. Do this
+  if the signing secret ever leaks.
+- **A permanent config key:** remove its entry from `DATA_API_CONFIG` (below) and set the secret again.
 
 ## How it is locked down
 
@@ -110,8 +142,8 @@ copy of anything you'll need again.
 | Secret | What it holds |
 |---|---|
 | `DATA_API_CONFIG` | which schemas exist and how to connect to each, plus the permanent keys |
-| `DATA_API_SIGNING_SECRET` | signs expiring keys; without it, only permanent keys work |
-| `DATA_API_REVOKED` | ids of cancelled expiring keys (optional) |
+| `DATA_API_SIGNING_SECRET` | signs app-made and command-line keys (used by both functions); without it, only permanent config keys work |
+| `DATA_API_REVOKED` | ids of cancelled command-line keys (optional; app-made keys are revoked in the app) |
 
 `DATA_API_CONFIG` is JSON:
 
@@ -156,9 +188,15 @@ No code change or redeploy is needed for steps 1 to 4.
 
 ## Deploying
 
+Order matters: apply the migrations first, then deploy the functions (the read function calls
+`api_key_is_revoked`, which the second migration creates).
+
 ```bash
+npx supabase db query --linked --file supabase/migrations/20261021100000_data_api_readonly_role.sql
+npx supabase db query --linked --file supabase/migrations/20261021120000_api_keys_registry.sql
 npx supabase functions deploy shipyard-report --use-api --no-verify-jwt
+npx supabase functions deploy shipyard-report-keys --use-api --no-verify-jwt
 ```
 
-`--no-verify-jwt` matters: this function checks its own keys, so Supabase's
-gateway must not also demand a Supabase login.
+`--no-verify-jwt` matters for both: they check their own credentials (an API key, or a MASTER login), so
+Supabase's gateway must not also demand a Supabase login.

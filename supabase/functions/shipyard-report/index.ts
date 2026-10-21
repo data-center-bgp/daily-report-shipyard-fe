@@ -27,6 +27,7 @@
 //     adding its id to the DATA_API_REVOKED secret (comma-separated).
 
 import postgres from "npm:postgres@3.4.5";
+import { decodeKey, equalBytes } from "../_shared/signedKey.ts";
 
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
@@ -44,16 +45,6 @@ interface Caller {
 }
 
 type AuthResult = { caller: Caller } | { error: string };
-
-interface TokenPayload {
-  v: 1;
-  /** Random id, so one signed key can be revoked without touching the others. */
-  id: string;
-  name: string;
-  schemas: string[];
-  /** Expiry as seconds since the epoch; absent means it never expires. */
-  exp?: number;
-}
 
 const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
@@ -106,48 +97,18 @@ async function sha256(text: string): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.digest("SHA-256", data));
 }
 
-function base64UrlDecode(text: string): Uint8Array {
-  const padded = text.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(text.length / 4) * 4, "=");
-  return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
-}
+// Which schema's database holds the key registry (see the api_keys migration).
+const REGISTRY_SCHEMA = "daily_report_shipyard";
 
-function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
-  return diff === 0;
-}
-
-async function hmacSha256(secret: string, data: string): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  return new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data)));
-}
-
-// A signed key is "srt_<payload>.<signature>": the payload says who it is for,
-// which schemas it may read and when it expires; the signature proves it was
-// made with DATA_API_SIGNING_SECRET and has not been edited.
-async function verifySignedKey(supplied: string): Promise<AuthResult | null> {
+// A signed key proves who it is for, which schemas it may read and when it
+// expires by itself. On top of that it can be cancelled: ids listed in the
+// DATA_API_REVOKED secret, and keys revoked in the registry, stop working.
+async function verifySignedKey(supplied: string, config: Config): Promise<AuthResult | null> {
   const secret = Deno.env.get("DATA_API_SIGNING_SECRET");
   if (!secret || !supplied.startsWith("srt_")) return null;
 
-  const [encodedPayload, encodedSignature, ...rest] = supplied.slice(4).split(".");
-  if (!encodedPayload || !encodedSignature || rest.length > 0) return null;
-
-  let payload: TokenPayload;
-  try {
-    const expected = await hmacSha256(secret, encodedPayload);
-    if (!equalBytes(expected, base64UrlDecode(encodedSignature))) return null;
-    payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(encodedPayload)));
-  } catch {
-    return null;
-  }
-  if (payload.v !== 1 || !payload.id || !Array.isArray(payload.schemas)) return null;
+  const payload = await decodeKey(supplied, secret);
+  if (!payload) return null;
 
   const revoked = (Deno.env.get("DATA_API_REVOKED") ?? "")
     .split(",")
@@ -157,6 +118,16 @@ async function verifySignedKey(supplied: string): Promise<AuthResult | null> {
 
   if (payload.exp !== undefined && Date.now() / 1000 >= payload.exp) {
     return { error: "This API key has expired" };
+  }
+
+  // Registry check. A key that isn't in the registry (made with mint-key.mjs)
+  // simply counts as not revoked. If the check itself fails we refuse rather
+  // than let a possibly-cancelled key through (handled by the 500 below).
+  if (config.schemas[REGISTRY_SCHEMA]) {
+    const sql = getDb(REGISTRY_SCHEMA, config);
+    const [row] = await sql<{ revoked: boolean }[]>`
+      select ${sql(REGISTRY_SCHEMA + ".api_key_is_revoked")}(${payload.id}) as revoked`;
+    if (row?.revoked) return { error: "This API key has been revoked" };
   }
 
   return {
@@ -171,7 +142,7 @@ async function verifySignedKey(supplied: string): Promise<AuthResult | null> {
 // Permanent keys are compared as fixed-length hashes in constant time, against
 // every key, so response timing can't leak how much of a guess was right.
 async function authenticate(req: Request, config: Config): Promise<AuthResult> {
-  const bearer = req.headers.get("authorization")?.match(/^Bearers+(.+)$/i)?.[1];
+  const bearer = req.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
   const supplied = req.headers.get("x-api-key") ?? bearer;
   if (!supplied) return { error: "Missing or invalid API key" };
 
@@ -182,7 +153,7 @@ async function authenticate(req: Request, config: Config): Promise<AuthResult> {
   }
   if (match) return { caller: { name: match.name, schemas: match.schemas, expires_at: null } };
 
-  return (await verifySignedKey(supplied)) ?? { error: "Missing or invalid API key" };
+  return (await verifySignedKey(supplied, config)) ?? { error: "Missing or invalid API key" };
 }
 
 // Tables (and columns) the schema's read-only role can actually see — so the

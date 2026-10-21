@@ -242,3 +242,8 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # Auth is the function's own API key (see supabase/functions/shipyard-report),
 # not a Supabase login, so the gateway must not demand a JWT.
 verify_jwt = false
+
+[functions.shipyard-report-keys]
+# The function checks the caller itself (Supabase Auth + an active MASTER profile),
+# so the gateway check is switched off here for the same reason as shipyard-report.
+verify_jwt = false

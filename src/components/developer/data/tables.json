@@ -1,0 +1,451 @@
+{
+ "schema": "daily_report_shipyard",
+ "generated": "2026-10-21",
+ "tables": [
+  {
+   "table": "activity_logs",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "user_id",
+    "user_name",
+    "user_email",
+    "action",
+    "table_name",
+    "old_data",
+    "new_data",
+    "changes",
+    "ip_address",
+    "user_agent",
+    "description",
+    "record_id"
+   ]
+  },
+  {
+   "table": "additional_wo_requests",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "project_id",
+    "vessel_id",
+    "requested_by",
+    "reason",
+    "status",
+    "decided_by",
+    "decided_at",
+    "decision_notes",
+    "work_order_id",
+    "is_chairman_directive"
+   ]
+  },
+  {
+   "table": "bastp",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "number",
+    "date",
+    "bastp_upload_date",
+    "document_url",
+    "storage_path",
+    "status",
+    "is_invoiced",
+    "invoiced_date",
+    "total_work_details",
+    "bastp_id",
+    "user_id",
+    "vessel_id",
+    "ready_for_invoice_date",
+    "form_penawaran_storage_path",
+    "form_penawaran_uploaded_at",
+    "tanggal_sandar",
+    "tanggal_naik_docking",
+    "tanggal_turun_docking",
+    "tanggal_tambat_setelah_turun_dock",
+    "to_name",
+    "to_role"
+   ]
+  },
+  {
+   "table": "bastp_work_details",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "bastp_id",
+    "work_details_id",
+    "materials_status",
+    "materials_submitted_at",
+    "materials_submitted_by"
+   ]
+  },
+  {
+   "table": "general_service_types",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "service_name",
+    "service_code",
+    "display_order",
+    "uom"
+   ]
+  },
+  {
+   "table": "general_services",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "bastp_id",
+    "service_type_id",
+    "total_days",
+    "remarks",
+    "unit_price",
+    "payment_price",
+    "start_date",
+    "close_date",
+    "quantity"
+   ]
+  },
+  {
+   "table": "invoice_details",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "bastp_collection_date",
+    "invoice_number",
+    "faktur_number",
+    "due_date",
+    "delivery_date",
+    "collection_date",
+    "receiver_name",
+    "payment_status",
+    "payment_date",
+    "remarks",
+    "work_order_id",
+    "user_id",
+    "company",
+    "bastp_id",
+    "total_price_before",
+    "ppn",
+    "pph_23",
+    "total_price_after",
+    "ppn_applicable"
+   ]
+  },
+  {
+   "table": "invoice_work_details",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "invoice_details_id",
+    "work_details_id",
+    "payment_price",
+    "unit_price"
+   ]
+  },
+  {
+   "table": "kapro",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "kapro_name"
+   ]
+  },
+  {
+   "table": "location",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "location"
+   ]
+  },
+  {
+   "table": "material_control",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "size",
+    "amount",
+    "uom",
+    "work_details_id",
+    "bastp_id",
+    "material_id",
+    "length",
+    "width",
+    "thickness",
+    "density",
+    "total_amount",
+    "material_density_id",
+    "calc_mode",
+    "layers",
+    "diameter",
+    "area"
+   ]
+  },
+  {
+   "table": "material_densities",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "name",
+    "density",
+    "unit"
+   ]
+  },
+  {
+   "table": "material_lists",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "material",
+    "specification",
+    "category",
+    "material_density_id",
+    "calc_mode"
+   ]
+  },
+  {
+   "table": "profiles",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "name",
+    "email",
+    "company",
+    "role",
+    "auth_user_id"
+   ]
+  },
+  {
+   "table": "projects",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "project_name",
+    "vessel_id",
+    "readiness_form_id",
+    "user_id",
+    "docking_type"
+   ]
+  },
+  {
+   "table": "readiness_approval_roles",
+   "columns": [
+    "id",
+    "party",
+    "role_code",
+    "role_label",
+    "action_label",
+    "display_order"
+   ]
+  },
+  {
+   "table": "readiness_checklist_items",
+   "columns": [
+    "id",
+    "section",
+    "section_label",
+    "item_text",
+    "display_order"
+   ]
+  },
+  {
+   "table": "readiness_form_approvals",
+   "columns": [
+    "id",
+    "readiness_form_id",
+    "approval_role_id",
+    "signer_name",
+    "signed_date"
+   ]
+  },
+  {
+   "table": "readiness_form_responses",
+   "columns": [
+    "id",
+    "readiness_form_id",
+    "checklist_item_id",
+    "is_compliant",
+    "explanation",
+    "hsse_status",
+    "hsse_notes",
+    "hsse_reviewed_by",
+    "hsse_reviewed_at"
+   ]
+  },
+  {
+   "table": "vessel",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "name",
+    "type",
+    "company",
+    "fleet",
+    "fleet_number"
+   ]
+  },
+  {
+   "table": "vessel_readiness_forms",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "project_id",
+    "vessel_id",
+    "docking_date",
+    "owner_name",
+    "last_cargo_info",
+    "gas_test_document_url",
+    "gas_test_storage_path",
+    "status",
+    "user_id"
+   ]
+  },
+  {
+   "table": "work_details",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "description",
+    "pic",
+    "planned_start_date",
+    "target_close_date",
+    "period_close_target",
+    "actual_start_date",
+    "actual_close_date",
+    "work_permit_url",
+    "storage_path",
+    "user_id",
+    "work_order_id",
+    "work_scope_id",
+    "uom",
+    "quantity",
+    "is_additional_wo_details",
+    "spk_number",
+    "spkk_number",
+    "notes",
+    "ptw_number",
+    "is_in_bastp",
+    "bastp_id",
+    "bastp_added_date",
+    "location_id",
+    "ppic_price",
+    "cancelled_at",
+    "cancelled_by",
+    "cancellation_reason"
+   ]
+  },
+  {
+   "table": "work_order",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "customer_wo_number",
+    "customer_wo_date",
+    "shipyard_wo_date",
+    "user_id",
+    "vessel_id",
+    "shipyard_wo_number",
+    "is_additional_wo",
+    "kapro_id",
+    "work_location",
+    "work_type",
+    "project_id",
+    "wo_print_number"
+   ]
+  },
+  {
+   "table": "work_order_general_services",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "work_order_id",
+    "service_type_id",
+    "start_date",
+    "close_date",
+    "total_days",
+    "remarks"
+   ]
+  },
+  {
+   "table": "work_progress",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "progress_percentage",
+    "report_date",
+    "evidence_url",
+    "storage_path",
+    "work_details_id",
+    "user_id",
+    "notes",
+    "is_imported"
+   ]
+  },
+  {
+   "table": "work_scope",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "work_scope"
+   ]
+  },
+  {
+   "table": "work_verification",
+   "columns": [
+    "id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "verification_date",
+    "user_id",
+    "work_details_id",
+    "verification_notes",
+    "status",
+    "is_auto_verified"
+   ]
+  }
+ ]
+}

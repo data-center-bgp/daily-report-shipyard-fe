@@ -26,6 +26,7 @@ import {
   ClipboardCheck,
   Bell,
   Database,
+  Braces,
   type LucideIcon,
 } from "lucide-react";
 
@@ -289,6 +290,18 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           icon: Upload,
           current: location.pathname === "/import-data",
           show: canAccess("importData"),
+        },
+      ],
+    },
+    {
+      title: "Developer",
+      items: [
+        {
+          name: "API Documentation",
+          href: "/developer/api",
+          icon: Braces,
+          current: location.pathname.startsWith("/developer"),
+          show: canAccess("developer"),
         },
       ],
     },

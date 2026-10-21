@@ -174,6 +174,10 @@ const FEATURE_ACCESS = {
   activityLogs: ["MASTER", "MANAGER"],
   additionalWoApprovals: ["MASTER", "OP_HEAD", "MANAGER"],
   readinessQueue: ["MASTER", "HSSE", "MANAGER"],
+  // The Shipyard Report API documentation. MASTER only — deliberately not
+  // MANAGER, unlike most MASTER features (this is about how data leaves the
+  // system, not about viewing it).
+  developer: ["MASTER"],
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

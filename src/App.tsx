@@ -6,6 +6,7 @@ import {
   Navigate,
 } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
+import { RoleGuard } from "./components/auth/RoleGuard";
 import { DashboardDataProvider } from "./hooks/useDashboardData";
 
 import Layout from "./components/common/Layout";
@@ -102,6 +103,7 @@ const UserManagementPage = lazy(
 const MasterDataPage = lazy(
   () => import("./components/masterData/MasterDataPage"),
 );
+const ApiDocs = lazy(() => import("./components/developer/ApiDocs"));
 
 function AppRoutes() {
   const { user, loading, signOut } = useAuth();
@@ -224,6 +226,17 @@ function AppRoutes() {
 
           {/* Master Data Routes */}
           <Route path="/master-data" element={<MasterDataPage />} />
+
+          {/* Developer — MASTER only. Anyone else who types the address is
+              sent home, and the page code is never even loaded for them. */}
+          <Route
+            path="/developer/api"
+            element={
+              <RoleGuard feature="developer" fallback={<Navigate to="/" replace />}>
+                <ApiDocs />
+              </RoleGuard>
+            }
+          />
 
           {/* Import/Export Routes */}
           <Route path="/export-data" element={<ExportData />} />
