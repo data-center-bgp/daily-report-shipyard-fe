@@ -69,7 +69,7 @@ interface WorkOrderPrintProps {
     work_details: WorkOrderPrintWorkDetail[];
     work_order_general_services?: WorkOrderGeneralServiceEntry[];
   };
-  printNumber: number;
+  printNumber: number | null;
   // "WO" = Perintah Kerja (FM-OPS-04-02); "KOM" = Kick Off Meeting
   // (FM-OPS-04-04), which carries the same work items under its own header,
   // numbering and unsigned signature block.
@@ -282,7 +282,9 @@ const WorkOrderPrint = forwardRef<HTMLDivElement, WorkOrderPrintProps>(
     // leading category is present.
     const categoryNumberOffset = hasDockingPlanning ? 2 : 1;
 
-    const printNumberDisplay = String(printNumber).padStart(3, "0");
+    // Typed in by hand; left blank when not entered yet.
+    const printNumberDisplay =
+      printNumber == null ? "" : String(printNumber).padStart(3, "0");
 
     return (
       <div ref={ref} className="bg-white text-xs">

@@ -10,7 +10,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { ActivityLogService } from "../../services/activityLogService";
 import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import { isWorkOrderFullyCompleted } from "../../utils/workOrderCompletion";
-import { ensureWorkOrderPrintNumber } from "../../utils/workOrderPrintNumbering";
+import { saveWorkOrderPrintNumber } from "../../utils/workOrderPrintNumbering";
 import WorkOrderPrint, {
   type WorkOrderPrintDocument,
   type WorkOrderPrintScope,
@@ -162,9 +162,9 @@ export default function VesselWorkOrders() {
   // Work Order document (Perintah Kerja) print preview state
   const [printPreviewWO, setPrintPreviewWO] =
     useState<WorkOrderWithProgress | null>(null);
-  const [printPreviewNumber, setPrintPreviewNumber] = useState<number | null>(
-    null,
-  );
+  // The "No." on the printed document, typed in by hand (the staff's own
+  // paper documents are numbered separately). Kept as the raw input text.
+  const [printNumberInput, setPrintNumberInput] = useState("");
   const [printLoading, setPrintLoading] = useState<number | null>(null);
   const [printError, setPrintError] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
@@ -342,21 +342,59 @@ export default function VesselWorkOrders() {
     }
   };
 
+  // Blank is allowed (the number can be written on the paper); anything else
+  // must be a whole number above 0.
+  const printNumberValid = /^([1-9]\d*)?$/.test(printNumberInput.trim());
+  const parsedPrintNumber =
+    printNumberInput.trim() === "" ? null : Number(printNumberInput.trim());
+
+  // Saves the typed No. onto the work order so it is remembered the next time
+  // this document is opened. Returns false (with the reason shown) when it
+  // couldn't be saved, so printing/downloading doesn't go ahead with a number
+  // that isn't stored.
+  const persistPrintNumber = async (): Promise<boolean> => {
+    if (!printPreviewWO) return false;
+    if (!printNumberValid) {
+      setPrintError("The No. must be a whole number above 0.");
+      return false;
+    }
+    if ((printPreviewWO.wo_print_number ?? null) === parsedPrintNumber) {
+      return true;
+    }
+    try {
+      setPrintError(null);
+      await saveWorkOrderPrintNumber(printPreviewWO.id, parsedPrintNumber);
+      const updated = { ...printPreviewWO, wo_print_number: parsedPrintNumber };
+      setPrintPreviewWO(updated);
+      setWorkOrders((prev) =>
+        prev.map((w) => (w.id === updated.id ? updated : w)),
+      );
+      return true;
+    } catch (err) {
+      console.error("Error saving work order print number:", err);
+      setPrintError(
+        err instanceof Error ? err.message : "Failed to save the No.",
+      );
+      return false;
+    }
+  };
+
+  const handleSaveAndPrint = async () => {
+    if (await persistPrintNumber()) handlePrintWorkOrder();
+  };
+
+  const handleSaveAndDownload = async () => {
+    if (await persistPrintNumber()) handleDownloadWorkOrderPdf();
+  };
+
   const handleOpenPrintPreview = async (wo: WorkOrderWithProgress) => {
     try {
       setPrintLoading(wo.id);
       setPrintError(null);
-      const number = await ensureWorkOrderPrintNumber(
-        wo.id,
-        wo.shipyard_wo_date,
-        wo.wo_print_number,
+      setPrintPreviewWO(wo);
+      setPrintNumberInput(
+        wo.wo_print_number != null ? String(wo.wo_print_number) : "",
       );
-      const woWithNumber = { ...wo, wo_print_number: number };
-      setWorkOrders((prev) =>
-        prev.map((w) => (w.id === wo.id ? woWithNumber : w)),
-      );
-      setPrintPreviewWO(woWithNumber);
-      setPrintPreviewNumber(number);
       setPrintDocType("WO");
       setPrintScope("all");
       setCustomSelectedIds([]);
@@ -1052,7 +1090,7 @@ export default function VesselWorkOrders() {
   };
 
   const renderPrintPreviewModal = () => {
-    if (!printPreviewWO || printPreviewNumber == null) return null;
+    if (!printPreviewWO) return null;
 
     return (
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1070,15 +1108,17 @@ export default function VesselWorkOrders() {
             </h3>
             <div className="flex gap-2">
               <button
-                onClick={handlePrintWorkOrder}
-                disabled={customSelectionEmpty}
+                onClick={handleSaveAndPrint}
+                disabled={customSelectionEmpty || !printNumberValid}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Printer className="w-4 h-4" /> Print
               </button>
               <button
-                onClick={handleDownloadWorkOrderPdf}
-                disabled={downloadingPdf || customSelectionEmpty}
+                onClick={handleSaveAndDownload}
+                disabled={
+                  downloadingPdf || customSelectionEmpty || !printNumberValid
+                }
                 className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {downloadingPdf ? (
@@ -1091,7 +1131,7 @@ export default function VesselWorkOrders() {
               <button
                 onClick={() => {
                   setPrintPreviewWO(null);
-                  setPrintPreviewNumber(null);
+                  setPrintNumberInput("");
                 }}
                 className="text-gray-500 hover:text-gray-700 px-2"
               >
@@ -1128,6 +1168,26 @@ export default function VesselWorkOrders() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <label
+                htmlFor="print-number"
+                className="text-gray-600 font-medium"
+              >
+                No.
+              </label>
+              <input
+                id="print-number"
+                type="text"
+                inputMode="numeric"
+                value={printNumberInput}
+                onChange={(e) => setPrintNumberInput(e.target.value)}
+                placeholder="e.g. 25"
+                aria-invalid={!printNumberValid}
+                className={`w-24 px-2 py-1 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                  printNumberValid ? "border-gray-300" : "border-red-400"
+                }`}
+              />
+            </div>
+            <div className="flex items-center gap-2">
               <span className="text-gray-600 font-medium">Work details</span>
               <div className="inline-flex rounded-lg bg-gray-200 p-0.5">
                 {(
@@ -1160,7 +1220,11 @@ export default function VesselWorkOrders() {
               modal vertically centered, make the whole dialog jump under the
               cursor between clicks. */}
           <div className="no-print h-6 px-4 text-xs text-gray-500 bg-gray-50 border-b border-gray-200 flex items-center truncate flex-shrink-0">
-            {printScope === "custom"
+            {printError ? (
+              <span className="text-red-600 font-medium truncate">
+                {printError}
+              </span>
+            ) : printScope === "custom"
               ? customSelectedIds.length === 0
                 ? "Select at least one work detail below to print."
                 : `${customSelectedIds.length} work detail(s) selected${
@@ -1191,7 +1255,7 @@ export default function VesselWorkOrders() {
             <WorkOrderPrint
               ref={printRef}
               workOrder={printPreviewWO}
-              printNumber={printPreviewNumber}
+              printNumber={printNumberValid ? parsedPrintNumber : null}
               documentType={printDocType}
               scope={printScope}
               selectedWorkDetailIds={customSelectedIds}
