@@ -86,7 +86,7 @@ export default function ExportData() {
     setLoading(true);
     try {
       // Determine if user has access to financial data
-      const hasFinancialAccess = ["MASTER", "FINANCE"].includes(
+      const hasFinancialAccess = ["MASTER", "FINANCE", "MANAGER"].includes(
         userProfile.role.toUpperCase()
       );
 
@@ -193,7 +193,7 @@ export default function ExportData() {
   // Check if user has financial access
   const hasFinancialAccess =
     userProfile &&
-    ["MASTER", "FINANCE"].includes(userProfile.role.toUpperCase());
+    ["MASTER", "FINANCE", "MANAGER"].includes(userProfile.role.toUpperCase());
 
   if (profileLoading) {
     return <LoadingState label="Loading user profile..." />;
