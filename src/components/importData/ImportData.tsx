@@ -612,6 +612,19 @@ export default function ImportData() {
   // the app (see isShippingCreateOnly in useAuth.tsx).
   const canImportProgress = profile?.role === "PPIC" || profile?.role === "MASTER";
 
+  if (profile?.role === "MANAGER") {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-blue-700">
+            Import Data is view-only for your account. Importing work orders,
+            work details and progress is done by PPIC, MASTER and ADMIN_SHIPPING.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!canImport) {
     return (
       <div className="p-4 sm:p-6 lg:p-8">

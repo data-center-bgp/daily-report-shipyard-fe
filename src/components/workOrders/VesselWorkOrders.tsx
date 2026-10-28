@@ -102,7 +102,8 @@ export default function VesselWorkOrders() {
   const { vesselId } = useParams<{ vesselId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { isOperationsReadOnly, isShippingCreateOnly, profile } = useAuth();
+  const { isOperationsReadOnly, isShippingCreateOnly, profile, isReadOnly } =
+    useAuth();
   // ADMIN_SHIPPING can create work orders/details here but never edit/delete
   // one, and has no Progress access at all.
   const canEditHere = !isOperationsReadOnly && !isShippingCreateOnly;
@@ -354,6 +355,9 @@ export default function VesselWorkOrders() {
   // that isn't stored.
   const persistPrintNumber = async (): Promise<boolean> => {
     if (!printPreviewWO) return false;
+    // MANAGER is a view-only account: it can print/download what is already
+    // saved, but never writes the number back.
+    if (isReadOnly) return true;
     if (!printNumberValid) {
       setPrintError("The No. must be a whole number above 0.");
       return false;
@@ -1180,6 +1184,7 @@ export default function VesselWorkOrders() {
                 inputMode="numeric"
                 value={printNumberInput}
                 onChange={(e) => setPrintNumberInput(e.target.value)}
+                readOnly={isReadOnly}
                 placeholder="e.g. 25"
                 aria-invalid={!printNumberValid}
                 className={`w-24 px-2 py-1 border rounded-lg focus:ring-2 focus:ring-blue-500 ${

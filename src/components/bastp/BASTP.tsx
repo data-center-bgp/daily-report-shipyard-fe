@@ -29,7 +29,7 @@ type PageTab = "records" | "completedWork";
 
 export default function BASTP() {
   const navigate = useNavigate();
-  const { isBastpReadOnly } = useAuth();
+  const { isBastpReadOnly, isReadOnly } = useAuth();
   const [pageTab, setPageTab] = useState<PageTab>("records");
   const [bastps, setBastps] = useState<BASTPWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
@@ -140,7 +140,8 @@ export default function BASTP() {
 
   // --- AUTO UPDATE STATUS ---
   useEffect(() => {
-    if (!loading && bastps.length > 0) {
+    // MANAGER is view-only: another role's visit does the promotion instead.
+    if (!isReadOnly && !loading && bastps.length > 0) {
       bastps.forEach(async (bastp) => {
         // A fresh-water-only BASTP has no work details, so there is nothing
         // to verify and no materials to submit: it goes straight to VERIFIED,
