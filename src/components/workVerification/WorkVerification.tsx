@@ -119,7 +119,12 @@ export default function WorkVerification() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isReadOnly, canAccess, canVerifyExternalVesselWork } = useAuth();
-  const canReviewAll = canAccess("verification") && !isReadOnly;
+  // Who sees the whole queue vs. who may act on it are different questions:
+  // MANAGER (isReadOnly) sees every vessel but never reviews. Only the
+  // external-vessel verifier, who has no "verification" access, is scoped
+  // down to vessels outside our own fleet.
+  const canViewAll = canAccess("verification");
+  const canReviewAll = canViewAll && !isReadOnly;
   const canReview = canReviewAll || canVerifyExternalVesselWork;
 
   const browseState = location.state?.browseState as
@@ -395,7 +400,7 @@ export default function WorkVerification() {
       // fleet — scope their whole view down to that instead of showing the
       // full internal-fleet queue they have no role-based access to.
       setCompletedWorkDetails(
-        canReviewAll ? completed : completed.filter(isExternalVessel),
+        canViewAll ? completed : completed.filter(isExternalVessel),
       );
 
       const verificationData = await fetchAllRows((from, to) =>
@@ -444,7 +449,7 @@ export default function WorkVerification() {
       const verificationsTyped =
         verificationData as unknown as VerificationWithDetails[];
       setVerifications(
-        canReviewAll
+        canViewAll
           ? verificationsTyped
           : verificationsTyped.filter((v) => isExternalVessel(v.work_details)),
       );
@@ -505,7 +510,7 @@ export default function WorkVerification() {
 
       if (vesselError) throw vesselError;
       setVessels(
-        canReviewAll
+        canViewAll
           ? vesselData || []
           : (vesselData || []).filter(
               (v: Vessel & { fleet_number?: number | null }) =>
@@ -518,7 +523,7 @@ export default function WorkVerification() {
     } finally {
       setLoading(false);
     }
-  }, [canReviewAll]);
+  }, [canViewAll]);
 
   useEffect(() => {
     fetchData();
