@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import type { ReturnTarget } from "../../types/navigation";
 import { supabase } from "../../lib/supabase";
 import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import SearchableSelect from "../common/SearchableSelect";
@@ -52,7 +53,13 @@ type BastpFilter = "ALL" | "IN_BASTP" | "NOT_IN_BASTP";
 
 const PAGE_SIZE = 25;
 
-export default function CompletedWorkDetails() {
+export default function CompletedWorkDetails({
+  returnTo,
+}: {
+  // Where a BASTP opened from this tab should send the user back to (the
+  // BASTP page on this same tab).
+  returnTo?: ReturnTarget;
+}) {
   const navigate = useNavigate();
   const [rows, setRows] = useState<CompletedWorkDetailRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -454,7 +461,11 @@ export default function CompletedWorkDetails() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       {wd.inBastp ? (
                         <button
-                          onClick={() => navigate(`/bastp/${wd.bastpId}`)}
+                          onClick={() =>
+                            navigate(`/bastp/${wd.bastpId}`, {
+                              state: { from: returnTo },
+                            })
+                          }
                           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 hover:bg-green-200 transition-colors"
                         >
                           <CheckCircle2 className="w-3 h-3" />

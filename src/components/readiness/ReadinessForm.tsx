@@ -1,6 +1,7 @@
 import DocumentViewerModal from "../common/DocumentViewerModal";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { returnTargetFrom } from "../../types/navigation";
 import { supabase } from "../../lib/supabase";
 import { ActivityLogService } from "../../services/activityLogService";
 import { useAuth } from "../../hooks/useAuth";
@@ -71,7 +72,20 @@ function getStatusMessage(status: ReadinessFormStatus): string {
 export default function ReadinessForm() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isReadOnly, profile } = useAuth();
+
+  // Opened from the Readiness Queue: Back/Cancel return there. Otherwise
+  // (from the project page, or a direct link) they go to the project.
+  const from = returnTargetFrom(location.state);
+  const goBack = () =>
+    from
+      ? navigate(from.path, { state: from.state })
+      : navigate(`/projects/${projectId}`);
+  const backLabel =
+    from?.path === "/readiness-queue"
+      ? "Back to Readiness Queue"
+      : "Back to Project";
 
   // ADMIN_SHIPPING can fill/submit/resubmit the readiness form for a project
   // it created, same as PPIC/MASTER — it's part of the same create-only
@@ -644,10 +658,10 @@ export default function ReadinessForm() {
     <div className="p-6 space-y-6 max-w-4xl mx-auto">
       <div>
         <button
-          onClick={() => navigate(`/projects/${project.id}`)}
+          onClick={goBack}
           className="text-gray-600 hover:text-gray-900 flex items-center gap-2 mb-2"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to Project
+          <ArrowLeft className="w-4 h-4" /> {backLabel}
         </button>
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <ClipboardCheck className="w-7 h-7 text-blue-600" /> Vessel Readiness
@@ -1019,7 +1033,7 @@ export default function ReadinessForm() {
             </button>
             <button
               type="button"
-              onClick={() => navigate(`/projects/${project.id}`)}
+              onClick={goBack}
               className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
             >
               Cancel

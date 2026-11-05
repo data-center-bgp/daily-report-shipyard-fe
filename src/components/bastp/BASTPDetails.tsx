@@ -1,6 +1,7 @@
 import FormPenawaranMissingBadge from "./FormPenawaranMissingBadge";
 import { useState, useEffect, useCallback, useRef, Fragment } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { returnTargetFrom } from "../../types/navigation";
 import { useReactToPrint } from "react-to-print";
 import { supabase } from "../../lib/supabase";
 import type { BASTPWithDetails } from "../../types/bastp.types";
@@ -42,8 +43,22 @@ import LoadingState from "../common/LoadingState";
 
 export default function BASTPDetails() {
   const navigate = useNavigate();
-  const { isBastpReadOnly } = useAuth();
+  const location = useLocation();
+  const { isBastpReadOnly, canAccess } = useAuth();
   const { bastpId } = useParams<{ bastpId: string }>();
+
+  // Where this BASTP was opened from: the BASTP list on its tab, an invoice,
+  // or Work Verification. Edit / Material Control / View Invoice carry it on
+  // so coming back here still knows the way home.
+  const from = returnTargetFrom(location.state);
+  const backLabel = from?.path.startsWith("/invoices")
+    ? "Back to Invoice"
+    : from?.path.startsWith("/work-verification")
+      ? "Back to Work Verification"
+      : "Back to BASTP List";
+  const goBack = () =>
+    navigate(from?.path ?? "/bastp", { state: from?.state });
+  const hereWithOrigin = { path: `/bastp/${bastpId}`, state: { from } };
 
   const [bastp, setBastp] = useState<BASTPWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -577,10 +592,10 @@ export default function BASTPDetails() {
           </div>
         </div>
         <button
-          onClick={() => navigate("/bastp")}
+          onClick={goBack}
           className="mt-4 flex items-center gap-2 text-blue-600 hover:text-blue-800"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to BASTP List
+          <ArrowLeft className="w-4 h-4" /> {backLabel}
         </button>
       </div>
     );
@@ -624,13 +639,17 @@ export default function BASTPDetails() {
           {canEditBastp ? (
             <>
               <button
-                onClick={() => navigate(`/bastp/edit/${bastp.id}`)}
+                onClick={() =>
+                  navigate(`/bastp/edit/${bastp.id}`, { state: { from } })
+                }
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
               >
                 <Edit className="w-4 h-4" /> Edit
               </button>
               <button
-                onClick={() => navigate(`/bastp/${bastp.id}/materials`)}
+                onClick={() =>
+                  navigate(`/bastp/${bastp.id}/materials`, { state: { from } })
+                }
                 className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
               >
                 <Package className="w-4 h-4" /> Material Control
@@ -646,10 +665,10 @@ export default function BASTPDetails() {
             )
           )}
           <button
-            onClick={() => navigate("/bastp")}
+            onClick={goBack}
             className="flex items-center gap-2 text-blue-600 hover:text-blue-800"
           >
-            <ArrowLeft className="w-4 h-4" /> Back to List
+            <ArrowLeft className="w-4 h-4" /> {backLabel}
           </button>
         </div>
       </div>
@@ -722,11 +741,13 @@ export default function BASTPDetails() {
                 Invoiced Date
               </label>
               <p className="text-gray-900">{formatDate(bastp.invoiced_date)}</p>
-              {invoiceId && (
+              {/* Only roles that can open invoices get the link — the invoice
+                  pages refuse everyone else. */}
+              {invoiceId && canAccess("invoices") && (
                 <button
                   onClick={() =>
                     navigate(`/invoices/${invoiceId}`, {
-                      state: { from: { path: `/bastp/${bastpId}` } },
+                      state: { from: hereWithOrigin },
                     })
                   }
                   className="mt-1 flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
@@ -979,8 +1000,18 @@ export default function BASTPDetails() {
           <button
             onClick={() =>
               bastp.status === "VERIFIED"
-                ? navigate(`/bastp/${bastp.id}/materials`)
-                : navigate("/work-verification")
+                ? navigate(`/bastp/${bastp.id}/materials`, { state: { from } })
+                : // A BASTP's work details only ever appear under "Pending
+                  // Review with BASTP", so open that tab with this BASTP's
+                  // group already expanded.
+                  navigate("/work-verification", {
+                    state: {
+                      browseState: {
+                        activeTab: "pendingWithBastp",
+                        expandedGroups: [bastp.id],
+                      },
+                    },
+                  })
             }
             className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 whitespace-nowrap"
           >

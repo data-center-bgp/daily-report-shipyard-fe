@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Upload,
   Download,
@@ -568,6 +568,7 @@ function UploadZone({
 
 export default function ImportData() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { profile } = useAuth();
 
   const [activeTab, setActiveTab] = useState<Tab>("work-orders");
@@ -1015,7 +1016,11 @@ export default function ImportData() {
             </p>
           </div>
           <button
-            onClick={() => navigate(-1)}
+            onClick={() =>
+              // Opened by link or in a new tab: there is no earlier page in
+              // this tab to go back to, so go to the Dashboard instead.
+              location.key !== "default" ? navigate(-1) : navigate("/")
+            }
             className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors flex items-center gap-2"
           >
             <ArrowLeft className="w-4 h-4" /> Back

@@ -507,7 +507,16 @@ export default function InvoiceDetails() {
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:justify-end [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">
             {invoice.bastp?.id && (
               <button
-                onClick={() => navigate(`/bastp/${invoice.bastp?.id}`)}
+                onClick={() =>
+                  navigate(`/bastp/${invoice.bastp?.id}`, {
+                    state: {
+                      from: {
+                        path: `/invoices/${invoice.id}`,
+                        state: { from },
+                      },
+                    },
+                  })
+                }
                 className={`${actionButton} ${actionNeutral}`}
               >
                 <ExternalLink className="w-4 h-4" /> View Full BASTP

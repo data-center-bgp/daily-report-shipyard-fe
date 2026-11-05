@@ -1753,7 +1753,11 @@ export default function VesselWorkOrders() {
                                 {!isOperationsReadOnly && (
                                   <button
                                     onClick={() =>
-                                      navigate(`/work-details/add/${wo.id}`)
+                                      navigate(`/work-details/add/${wo.id}`, {
+                                        state: {
+                                          returnTo: `/vessel/${vesselId}/work-orders`,
+                                        },
+                                      })
                                     }
                                     className="bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1.5 text-sm font-medium"
                                   >
@@ -2097,7 +2101,11 @@ export default function VesselWorkOrders() {
                                   {!isOperationsReadOnly && (
                                     <button
                                       onClick={() =>
-                                        navigate(`/work-order/${wo.id}`)
+                                        navigate(`/work-details/add/${wo.id}`, {
+                                          state: {
+                                            returnTo: `/vessel/${vesselId}/work-orders`,
+                                          },
+                                        })
                                       }
                                       className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
                                     >

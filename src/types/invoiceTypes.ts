@@ -1,5 +1,6 @@
 import type { GeneralService } from "./generalService.types";
 import type { MaterialControlWithDetails } from "./materialControl.types";
+import type { ReturnTarget } from "./navigation";
 
 export interface InvoiceWorkDetails {
   id: number;
@@ -91,10 +92,7 @@ export interface Invoice {
  * details/edit pages hand it on, so "Back" and "after saving" end up where the
  * user started instead of on a fresh invoice list.
  */
-export interface InvoiceReturnTarget {
-  path: string;
-  state?: unknown;
-}
+export type InvoiceReturnTarget = ReturnTarget;
 
 /** The invoice list's own view, kept so returning to it looks unchanged. */
 export interface InvoiceListViewState {

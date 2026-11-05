@@ -492,19 +492,7 @@ export default function AddWorkDetails() {
         }
       }
 
-      // Navigate back with filter state
-      const returnFilters = location.state?.returnFilters;
-
-      if (workOrderId) {
-        navigate(`/work-order/${workOrderId}`);
-      } else if (returnFilters) {
-        // Pass the filters back to the table
-        navigate("/work-details", {
-          state: { returnFilters },
-        });
-      } else {
-        navigate("/work-details");
-      }
+      goBack();
     } catch (err) {
       console.error("Error creating work details:", err);
       setError(
@@ -515,19 +503,30 @@ export default function AddWorkDetails() {
     }
   };
 
-  const handleCancel = () => {
+  // After saving or cancelling: back to the page this form was opened from.
+  // A vessel's work order list passes returnTo and gets the work order
+  // re-opened; the Work Details table passes its filters; a bare link to
+  // /work-details/add/:workOrderId falls back to that work order's vessel.
+  const goBack = () => {
+    const returnTo = location.state?.returnTo as string | undefined;
     const returnFilters = location.state?.returnFilters;
+    const highlightWorkOrderId = selectedWorkOrderId || undefined;
+    const vesselId = selectedWorkOrder?.vessel_id;
 
-    if (workOrderId) {
-      navigate(`/work-order/${workOrderId}`);
+    if (returnTo) {
+      navigate(returnTo, { state: { highlightWorkOrderId } });
     } else if (returnFilters) {
-      navigate("/work-details", {
-        state: { returnFilters },
+      navigate("/work-details", { state: { returnFilters } });
+    } else if (workOrderId && vesselId) {
+      navigate(`/vessel/${vesselId}/work-orders`, {
+        state: { highlightWorkOrderId },
       });
     } else {
       navigate("/work-details");
     }
   };
+
+  const handleCancel = () => goBack();
 
   // Access control - Only PPIC or a full-access creator can add
   if (!isPPIC && !isFullAccessCreator) {

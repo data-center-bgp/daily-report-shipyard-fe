@@ -2541,7 +2541,14 @@ export default function WODetailsTable({
             {!workOrderId && (
               <button
                 onClick={() =>
-                  navigate(`/work-order/${selectedWorkOrderDetails.id}`)
+                  navigate(
+                    `/vessel/${selectedWorkOrderDetails.vessel_id}/work-orders`,
+                    {
+                      state: {
+                        highlightWorkOrderId: selectedWorkOrderDetails.id,
+                      },
+                    },
+                  )
                 }
                 className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
               >

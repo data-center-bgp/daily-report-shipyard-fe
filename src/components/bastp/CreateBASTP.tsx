@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { returnTargetFrom } from "../../types/navigation";
 import {
   supabase,
   type Vessel,
@@ -82,7 +83,18 @@ interface WorkDetailsWithProgress extends WorkDetails {
 
 export default function CreateBASTP() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { bastpId } = useParams<{ bastpId: string }>();
+
+  // Where the user came from (the BASTP list on its tab, or — when editing —
+  // the BASTP's own origin). Editing returns to that BASTP's details, creating
+  // returns to the list; either way the origin travels along.
+  const from = returnTargetFrom(location.state);
+  const goBack = () =>
+    bastpId
+      ? navigate(`/bastp/${bastpId}`, { state: { from } })
+      : navigate(from?.path ?? "/bastp", { state: from?.state });
+  const backLabel = bastpId ? "Back to BASTP Details" : "Back to BASTP List";
   const isEditMode = !!bastpId;
   const { isBastpReadOnly, profile } = useAuth();
   // FINANCE consumes BASTPs to create invoices — it shouldn't create/edit
@@ -1058,7 +1070,7 @@ export default function CreateBASTP() {
           description: `Updated BASTP ${formData.number}`,
         });
 
-        navigate(`/bastp/${bastpId}`);
+        navigate(`/bastp/${bastpId}`, { replace: true, state: { from } });
       } else {
         // ========== CREATE MODE ==========
         const { data: bastpData, error: bastpError } = await supabase
@@ -1139,7 +1151,7 @@ export default function CreateBASTP() {
           description: `Created BASTP ${bastpData.number}`,
         });
 
-        navigate(`/bastp/${bastpData.id}`);
+        navigate(`/bastp/${bastpData.id}`, { replace: true, state: { from } });
       }
     } catch (err) {
       console.error("Error saving BASTP:", err);
@@ -1204,10 +1216,10 @@ export default function CreateBASTP() {
           </div>
         </div>
         <button
-          onClick={() => navigate("/bastp")}
+          onClick={goBack}
           className="mt-4 flex items-center gap-2 text-blue-600 hover:text-blue-800"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to BASTP List
+          <ArrowLeft className="w-4 h-4" /> {backLabel}
         </button>
       </div>
     );
@@ -1233,7 +1245,7 @@ export default function CreateBASTP() {
           </div>
         </div>
         <button
-          onClick={() => navigate(`/bastp/${bastpId}`)}
+          onClick={goBack}
           className="mt-4 flex items-center gap-2 text-blue-600 hover:text-blue-800"
         >
           <ArrowLeft className="w-4 h-4" /> Back to BASTP Details
@@ -1257,10 +1269,10 @@ export default function CreateBASTP() {
           </p>
         </div>
         <button
-          onClick={() => navigate("/bastp")}
+          onClick={goBack}
           className="flex items-center gap-2 text-blue-600 hover:text-blue-800"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to BASTP List
+          <ArrowLeft className="w-4 h-4" /> {backLabel}
         </button>
       </div>
 
@@ -2065,7 +2077,7 @@ export default function CreateBASTP() {
           </button>
           <button
             type="button"
-            onClick={() => navigate("/bastp")}
+            onClick={goBack}
             className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
           >
             Cancel

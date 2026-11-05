@@ -4,6 +4,7 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation,
 } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { RoleGuard } from "./components/auth/RoleGuard";
@@ -104,6 +105,49 @@ const MasterDataPage = lazy(
   () => import("./components/masterData/MasterDataPage"),
 );
 const ApiDocs = lazy(() => import("./components/developer/ApiDocs"));
+const NotFound = lazy(() => import("./components/common/NotFound"));
+
+// A link opened while logged out (a shared invoice, a BASTP) goes to the
+// login page carrying the address it asked for...
+function RedirectToLogin() {
+  const location = useLocation();
+  return (
+    <Navigate
+      to="/login"
+      replace
+      state={{ from: location.pathname + location.search }}
+    />
+  );
+}
+
+// ...and once logged in, the still-open /login address sends the user on to
+// that page instead of always to the Dashboard.
+function AfterLoginRedirect() {
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from;
+  return (
+    <Navigate to={from && from !== "/login" ? from : "/"} replace />
+  );
+}
+
+// Pages the sidebar hides from a role must also refuse that role when the
+// address is typed in. Waits for the profile (it arrives a moment after the
+// user right after logging in) so a permitted user is never bounced home.
+function RequireAccess({
+  feature,
+  allowExternalVerifier = false,
+  children,
+}: {
+  feature: string;
+  allowExternalVerifier?: boolean;
+  children: React.ReactNode;
+}) {
+  const { profile, canAccess, canVerifyExternalVesselWork } = useAuth();
+  if (!profile) return <LoadingState />;
+  const allowed =
+    canAccess(feature) || (allowExternalVerifier && canVerifyExternalVesselWork);
+  return allowed ? <>{children}</> : <Navigate to="/" replace />;
+}
 
 function AppRoutes() {
   const { user, loading, signOut } = useAuth();
@@ -121,7 +165,7 @@ function AppRoutes() {
       <Suspense fallback={<LoadingState variant="fullScreen" />}>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="*" element={<Navigate to="/login" />} />
+          <Route path="*" element={<RedirectToLogin />} />
         </Routes>
       </Suspense>
     );
@@ -132,6 +176,9 @@ function AppRoutes() {
       <Layout onLogout={handleLogout}>
         <Suspense fallback={<LoadingState />}>
           <Routes>
+          {/* Just logged in: continue to the page the user originally asked for */}
+          <Route path="/login" element={<AfterLoginRedirect />} />
+
           {/* Dashboard */}
           <Route path="/" element={<Dashboard />} />
           <Route path="/dashboard" element={<Dashboard />} />
@@ -196,27 +243,98 @@ function AppRoutes() {
           />
 
           {/* Verification Routes */}
-          <Route path="/work-verification" element={<WorkVerification />} />
+          <Route
+            path="/work-verification"
+            element={
+              <RequireAccess feature="verification" allowExternalVerifier>
+                <WorkVerification />
+              </RequireAccess>
+            }
+          />
           <Route
             path="/work-verification/verify/:workDetailsId"
-            element={<VerifyWorkDetails />}
+            element={
+              <RequireAccess feature="verification" allowExternalVerifier>
+                <VerifyWorkDetails />
+              </RequireAccess>
+            }
           />
 
           {/* BASTP Routes */}
-          <Route path="/bastp" element={<BASTP />} />
-          <Route path="/bastp/create" element={<CreateBASTP />} />
-          <Route path="/bastp/edit/:bastpId" element={<CreateBASTP />} />
-          <Route path="/bastp/:bastpId" element={<BASTPDetails />} />
+          <Route
+            path="/bastp"
+            element={
+              <RequireAccess feature="bastp">
+                <BASTP />
+              </RequireAccess>
+            }
+          />
+          <Route
+            path="/bastp/create"
+            element={
+              <RequireAccess feature="bastp">
+                <CreateBASTP />
+              </RequireAccess>
+            }
+          />
+          <Route
+            path="/bastp/edit/:bastpId"
+            element={
+              <RequireAccess feature="bastp">
+                <CreateBASTP />
+              </RequireAccess>
+            }
+          />
+          <Route
+            path="/bastp/:bastpId"
+            element={
+              <RequireAccess feature="bastp">
+                <BASTPDetails />
+              </RequireAccess>
+            }
+          />
           <Route
             path="/bastp/:bastpId/materials"
-            element={<BASTPMaterialsPage />}
+            element={
+              <RequireAccess feature="bastp">
+                <BASTPMaterialsPage />
+              </RequireAccess>
+            }
           />
 
           {/* Invoice Routes */}
-          <Route path="/invoices" element={<InvoiceList />} />
-          <Route path="/invoices/create/:bastpId" element={<ManageInvoice />} />
-          <Route path="/invoices/edit/:invoiceId" element={<ManageInvoice />} />
-          <Route path="/invoices/:invoiceId" element={<InvoiceDetails />} />
+          <Route
+            path="/invoices"
+            element={
+              <RequireAccess feature="invoices">
+                <InvoiceList />
+              </RequireAccess>
+            }
+          />
+          <Route
+            path="/invoices/create/:bastpId"
+            element={
+              <RequireAccess feature="invoices">
+                <ManageInvoice />
+              </RequireAccess>
+            }
+          />
+          <Route
+            path="/invoices/edit/:invoiceId"
+            element={
+              <RequireAccess feature="invoices">
+                <ManageInvoice />
+              </RequireAccess>
+            }
+          />
+          <Route
+            path="/invoices/:invoiceId"
+            element={
+              <RequireAccess feature="invoices">
+                <InvoiceDetails />
+              </RequireAccess>
+            }
+          />
 
           {/* Activity Log Routes */}
           <Route path="/activity-logs" element={<ActivityLogPage />} />
@@ -242,8 +360,8 @@ function AppRoutes() {
           <Route path="/export-data" element={<ExportData />} />
           <Route path="/import-data" element={<ImportData />} />
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" />} />
+          {/* Fallback: say so, instead of quietly opening the Dashboard */}
+          <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
       </Layout>

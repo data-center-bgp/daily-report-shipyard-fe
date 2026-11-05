@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useLocation, useParams, useNavigate } from "react-router-dom";
+import { returnTargetFrom } from "../../types/navigation";
 import { supabase } from "../../lib/supabase";
 import MaterialControl from "./MaterialControl";
 import type { MaterialsStatus } from "../../types/bastp.types";
@@ -35,6 +36,9 @@ interface BastpInfo {
 export default function BASTPMaterialsPage() {
   const { bastpId } = useParams<{ bastpId: string }>();
   const navigate = useNavigate();
+  // Handed back to the BASTP page so its Back button still knows where the
+  // BASTP was opened from.
+  const location = useLocation();
   const [bastp, setBastp] = useState<BastpInfo | null>(null);
   const [workDetails, setWorkDetails] = useState<WorkDetail[]>([]);
   const [loading, setLoading] = useState(true);
@@ -229,7 +233,11 @@ export default function BASTPMaterialsPage() {
             </div>
           </div>
           <button
-            onClick={() => navigate(`/bastp/${bastpId}`)}
+            onClick={() =>
+              navigate(`/bastp/${bastpId}`, {
+                state: { from: returnTargetFrom(location.state) },
+              })
+            }
             className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" /> Back to BASTP Details
@@ -244,7 +252,11 @@ export default function BASTPMaterialsPage() {
       {/* Header with Back Button */}
       <div className="flex items-center justify-between">
         <button
-          onClick={() => navigate(`/bastp/${bastpId}`)}
+          onClick={() =>
+              navigate(`/bastp/${bastpId}`, {
+                state: { from: returnTargetFrom(location.state) },
+              })
+            }
           className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />

@@ -179,7 +179,9 @@ export default function ReadinessQueue() {
               return (
                 <div
                   key={form.id}
-                  onClick={() => navigate(`/projects/${form.project_id}/readiness`)}
+                  onClick={() => navigate(`/projects/${form.project_id}/readiness`, {
+                    state: { from: { path: "/readiness-queue" } },
+                  })}
                   className="p-6 hover:bg-gray-50 cursor-pointer transition-colors"
                 >
                   <div className="flex items-start justify-between gap-4">
@@ -220,7 +222,9 @@ export default function ReadinessQueue() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate(`/projects/${form.project_id}/readiness`);
+                          navigate(`/projects/${form.project_id}/readiness`, {
+                    state: { from: { path: "/readiness-queue" } },
+                  });
                         }}
                         className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex-shrink-0"
                       >

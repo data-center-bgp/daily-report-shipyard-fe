@@ -294,27 +294,40 @@ export default function WorkVerification() {
     setShowWorkOrderDropdown(false);
   };
 
+  // This page's current tab/filters/scroll, handed to any page opened from
+  // here so coming back restores it.
+  const currentBrowseState = (): BrowseState => ({
+    activeTab,
+    searchTerm,
+    selectedVesselId,
+    selectedProjectId,
+    selectedWorkOrderId,
+    vesselSearchTerm,
+    projectSearchTerm,
+    workOrderSearchTerm,
+    expandedGroups: Array.from(expandedGroups),
+    scrollY: window.scrollY,
+  });
+
   const handleReviewClick = (workDetailsId: number) => {
     if (!canReview) {
       alert("❌ You don't have permission to review work details.");
       return;
     }
-    const browseStateToCarry: BrowseState = {
-      activeTab,
-      searchTerm,
-      selectedVesselId,
-      selectedProjectId,
-      selectedWorkOrderId,
-      vesselSearchTerm,
-      projectSearchTerm,
-      workOrderSearchTerm,
-      expandedGroups: Array.from(expandedGroups),
-      scrollY: window.scrollY,
-    };
     navigate(`/work-verification/verify/${workDetailsId}`, {
-      state: { browseState: browseStateToCarry },
+      state: { browseState: currentBrowseState() },
     });
   };
+
+  const openBastp = (bastpId: number) =>
+    navigate(`/bastp/${bastpId}`, {
+      state: {
+        from: {
+          path: "/work-verification",
+          state: { browseState: currentBrowseState() },
+        },
+      },
+    });
 
   const fetchData = useCallback(async () => {
     try {
@@ -1324,7 +1337,7 @@ export default function WorkVerification() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`/bastp/${group.bastp!.id}`);
+                                openBastp(group.bastp!.id);
                               }}
                               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
                             >
@@ -1609,7 +1622,7 @@ export default function WorkVerification() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`/bastp/${group.bastp!.id}`);
+                                openBastp(group.bastp!.id);
                               }}
                               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
                             >

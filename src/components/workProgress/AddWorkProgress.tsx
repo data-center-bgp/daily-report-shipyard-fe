@@ -1299,7 +1299,18 @@ export default function AddWorkProgress({
             <div className="flex justify-between items-center">
               <button
                 type="button"
-                onClick={() => navigate(-1)}
+                onClick={() =>
+                  // No earlier page in this tab (opened by link or in a new
+                  // tab): going "back" would leave the app, so go to the
+                  // progress list for this work detail instead.
+                  location.key !== "default"
+                    ? navigate(-1)
+                    : navigate(
+                        effectiveWorkDetailsId
+                          ? `/work-details/${effectiveWorkDetailsId}/progress`
+                          : "/work-progress",
+                      )
+                }
                 className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 disabled={submitting}
               >

@@ -163,6 +163,11 @@ export default function Layout({ children, onLogout }: LayoutProps) {
     localStorage.setItem("sidebar-collapsed", JSON.stringify(newState));
   };
 
+  // One work detail's progress reports: /work-details/:id/progress.
+  const isWorkDetailProgressPage = /^\/work-details\/[^/]+\/progress$/.test(
+    location.pathname,
+  );
+
   const navGroups: NavGroup[] = [
     {
       title: null,
@@ -171,7 +176,8 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           name: "Dashboard",
           href: "/",
           icon: LayoutDashboard,
-          current: location.pathname === "/",
+          current:
+            location.pathname === "/" || location.pathname === "/dashboard",
           show: true,
         },
       ],
@@ -190,10 +196,11 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           name: "Work Orders",
           href: "/work-orders",
           icon: FileText,
+          // /work-order/:id/add-work-details is adding work details, so it
+          // belongs to Work Details below, not here.
           current:
             location.pathname === "/work-orders" ||
             location.pathname.startsWith("/vessel/") ||
-            location.pathname.startsWith("/work-order/") ||
             location.pathname.startsWith("/add-work-order") ||
             location.pathname.startsWith("/edit-work-order"),
           show: canAccess("workOrders"),
@@ -202,11 +209,13 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           name: "Work Details",
           href: "/work-details",
           icon: Wrench,
+          // /work-details/:id/progress is a progress page (Work Progress).
           current:
-            location.pathname === "/work-details" ||
-            location.pathname.startsWith("/work-details/") ||
-            location.pathname.includes("/add-work-details") ||
-            location.pathname.includes("/edit-work-details"),
+            (location.pathname === "/work-details" ||
+              location.pathname.startsWith("/work-details/") ||
+              location.pathname.includes("/add-work-details") ||
+              location.pathname.startsWith("/edit-work-details")) &&
+            !isWorkDetailProgressPage,
           show: canAccess("workDetails"),
         },
         {
@@ -216,8 +225,8 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           current:
             location.pathname === "/work-progress" ||
             location.pathname.startsWith("/work-progress/") ||
-            location.pathname.includes("/add-progress") ||
-            location.pathname.includes("/edit-progress"),
+            location.pathname.startsWith("/add-work-progress") ||
+            isWorkDetailProgressPage,
           show: canAccess("progress"),
         },
       ],

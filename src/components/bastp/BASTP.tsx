@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import type { ReturnTarget } from "../../types/navigation";
 import { supabase } from "../../lib/supabase";
 import type { BASTPWithDetails, BASTPStatus } from "../../types/bastp.types";
 import { useAuth } from "../../hooks/useAuth";
@@ -27,15 +28,37 @@ import { PageSkeleton } from "../common/Skeleton";
 
 type PageTab = "records" | "completedWork";
 
+/** The BASTP list's own view, kept so coming back to it looks unchanged. */
+export interface BastpListView {
+  pageTab: PageTab;
+  searchTerm?: string;
+  statusFilter?: BASTPStatus | "ALL";
+}
+
 export default function BASTP() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isBastpReadOnly, isReadOnly } = useAuth();
-  const [pageTab, setPageTab] = useState<PageTab>("records");
+  // Set when the user comes back from a BASTP opened from here.
+  const restoredView = (
+    location.state as { bastpListView?: BastpListView } | null
+  )?.bastpListView;
+  const [pageTab, setPageTab] = useState<PageTab>(
+    restoredView?.pageTab ?? "records",
+  );
   const [bastps, setBastps] = useState<BASTPWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<BASTPStatus | "ALL">("ALL");
+  const [searchTerm, setSearchTerm] = useState(restoredView?.searchTerm ?? "");
+  const [statusFilter, setStatusFilter] = useState<BASTPStatus | "ALL">(
+    restoredView?.statusFilter ?? "ALL",
+  );
+
+  // What a BASTP opened from here should send the user back to.
+  const returnToList: ReturnTarget = {
+    path: "/bastp",
+    state: { bastpListView: { pageTab, searchTerm, statusFilter } },
+  };
 
   const fetchBASTPs = useCallback(async () => {
     try {
@@ -360,7 +383,9 @@ export default function BASTP() {
 
         {!isBastpReadOnly && (
           <button
-            onClick={() => navigate("/bastp/create")}
+            onClick={() =>
+              navigate("/bastp/create", { state: { from: returnToList } })
+            }
             className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-3 rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
           >
             <Plus className="w-5 h-5" /> Create BASTP
@@ -404,7 +429,9 @@ export default function BASTP() {
         </nav>
       </div>
 
-      {pageTab === "completedWork" && <CompletedWorkDetails />}
+      {pageTab === "completedWork" && (
+        <CompletedWorkDetails returnTo={returnToList} />
+      )}
 
       {pageTab === "records" && (
         <>
@@ -590,14 +617,22 @@ export default function BASTP() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                       <button
-                        onClick={() => navigate(`/bastp/${bastp.id}`)}
+                        onClick={() =>
+                          navigate(`/bastp/${bastp.id}`, {
+                            state: { from: returnToList },
+                          })
+                        }
                         className="text-blue-600 hover:text-blue-900"
                       >
                         View
                       </button>
                       {!isBastpReadOnly && (
                         <button
-                          onClick={() => navigate(`/bastp/edit/${bastp.id}`)}
+                          onClick={() =>
+                            navigate(`/bastp/edit/${bastp.id}`, {
+                              state: { from: returnToList },
+                            })
+                          }
                           className="text-indigo-600 hover:text-indigo-900"
                         >
                           Edit
@@ -615,7 +650,9 @@ export default function BASTP() {
             <p className="text-gray-500 text-lg">No BASTPs found</p>
             {!isBastpReadOnly && (
               <button
-                onClick={() => navigate("/bastp/create")}
+                onClick={() =>
+              navigate("/bastp/create", { state: { from: returnToList } })
+            }
                 className="mt-4 text-blue-600 hover:text-blue-800"
               >
                 Create your first BASTP
