@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import type { BASTPWithDetails } from "../../types/bastp.types";
-import type { Invoice } from "../../types/invoiceTypes";
+import type { Invoice, InvoiceReturnTarget } from "../../types/invoiceTypes";
 import { ActivityLogService } from "../../services/activityLogService";
-import { suggestInvoiceNumber } from "../../utils/invoiceNumbering";
+import {
+  renumberForInvoiceDate,
+  suggestInvoiceNumber,
+} from "../../utils/invoiceNumbering";
 import {
   formatMaterialDimensionDisplay,
   formatMaterialTotal,
@@ -98,10 +101,22 @@ export default function ManageInvoice() {
     invoiceId?: string;
   }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { profile, isReadOnly, canAccess } = useAuth();
 
   const isEditMode = !!invoiceId;
   const isCreateMode = !!bastpId;
+
+  // Where the user opened this page from (invoice list with its tab/page, or a
+  // BASTP). Passed on to the details page so its Back button still returns
+  // there after saving.
+  const from = (location.state as { from?: InvoiceReturnTarget } | null)?.from;
+  // Back/Cancel: editing goes back to that invoice's details; creating has no
+  // details page yet, so it goes back to where "Create Invoice" was clicked.
+  const goBack = () =>
+    isEditMode && invoiceId
+      ? navigate(`/invoices/${invoiceId}`, { state: { from } })
+      : navigate(from?.path ?? "/invoices", { state: from?.state });
   // FEATURE_ACCESS.invoices = MASTER/FINANCE/MANAGER, but MANAGER is
   // read-only everywhere — this page previously had no permission check at
   // all, so a MANAGER (or anyone who knew a bastp/invoice id) could hit this
@@ -174,15 +189,16 @@ export default function ManageInvoice() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bastpId, invoiceId]);
 
-  // Auto-generate the invoice number from the BASTP Collection Date (falls
-  // back to today if that isn't set yet), same convention as the Work Order
-  // number — locked/read-only in create mode (see the input below); edit
-  // mode leaves it manually editable, pre-filled from the loaded row.
+  // Auto-generate the invoice number from the Invoice Date (falls back to
+  // today if it is cleared), same convention as the Work Order number —
+  // locked/read-only in create mode (see the input below); edit mode leaves it
+  // manually editable, pre-filled from the loaded row and re-dated by
+  // handleInvoiceDateChange.
   useEffect(() => {
     if (!isCreateMode) return;
 
     const effectiveDate =
-      formData.bastp_collection_date || new Date().toISOString().split("T")[0];
+      formData.invoice_date || new Date().toLocaleDateString("en-CA");
 
     let cancelled = false;
     suggestInvoiceNumber(effectiveDate)
@@ -197,7 +213,28 @@ export default function ManageInvoice() {
     return () => {
       cancelled = true;
     };
-  }, [isCreateMode, formData.bastp_collection_date]);
+  }, [isCreateMode, formData.invoice_date]);
+
+  // Editing an existing invoice's date moves its number to the new month (and
+  // year) too. Only runs on a real edit of the field, never when the saved
+  // invoice loads, so opening an invoice never rewrites its number.
+  const handleInvoiceDateChange = async (value: string) => {
+    setFormData((prev) => ({ ...prev, invoice_date: value }));
+    if (!isEditMode || !value) return;
+
+    try {
+      const next = await renumberForInvoiceDate(
+        formData.invoice_number,
+        value,
+        existingInvoice?.invoice_number,
+      );
+      if (next) {
+        setFormData((prev) => ({ ...prev, invoice_number: next }));
+      }
+    } catch (err) {
+      console.error("Error renumbering invoice for the new date:", err);
+    }
+  };
 
   // Fetch existing invoice for edit mode
   const fetchExistingInvoice = async () => {
@@ -844,7 +881,14 @@ export default function ManageInvoice() {
         });
 
         setSuccess("Invoice updated successfully!");
-        setTimeout(() => navigate(`/invoices/${invoiceId}`), 1500);
+        setTimeout(
+          () =>
+            navigate(`/invoices/${invoiceId}`, {
+              replace: true,
+              state: { from },
+            }),
+          1500,
+        );
       } else if (isCreateMode && bastpId) {
         // CREATE NEW INVOICE
         // Claim the BASTP before creating the invoice row, conditioned on it
@@ -937,7 +981,14 @@ export default function ManageInvoice() {
         });
 
         setSuccess("Invoice created successfully!");
-        setTimeout(() => navigate(`/invoices/${invoiceData.id}`), 1500);
+        setTimeout(
+          () =>
+            navigate(`/invoices/${invoiceData.id}`, {
+              replace: true,
+              state: { from },
+            }),
+          1500,
+        );
       }
     } catch (err) {
       console.error("Error saving invoice:", err);
@@ -1017,8 +1068,13 @@ export default function ManageInvoice() {
         description: `Deleted invoice ${existingInvoice?.invoice_number || invoiceId}`,
       });
 
-      navigate("/invoices", {
-        state: { successMessage: "Invoice deleted successfully" },
+      // The details page is gone now, so go straight back to where the user
+      // started (the list on the same tab/page, or the BASTP).
+      navigate(from?.path ?? "/invoices", {
+        state: {
+          ...(from?.state as object | undefined),
+          successMessage: "Invoice deleted successfully",
+        },
       });
     } catch (err) {
       console.error("Error deleting invoice:", err);
@@ -1109,7 +1165,7 @@ export default function ManageInvoice() {
           </div>
         </div>
         <button
-          onClick={() => navigate("/invoices")}
+          onClick={goBack}
           className="mt-4 flex items-center gap-2 text-blue-600 hover:text-blue-800"
         >
           <ArrowLeft className="w-4 h-4" /> Back to Invoices
@@ -1125,7 +1181,7 @@ export default function ManageInvoice() {
           <h3 className="text-red-800 font-medium text-lg">Error</h3>
           <p className="text-red-600 mt-2">{error}</p>
           <button
-            onClick={() => navigate("/invoices")}
+            onClick={goBack}
             className="mt-4 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
           >
             Back to Invoices
@@ -1140,7 +1196,7 @@ export default function ManageInvoice() {
       {/* Header */}
       <div className="mb-6">
         <button
-          onClick={() => navigate("/invoices")}
+          onClick={goBack}
           className="text-blue-600 hover:text-blue-800 mb-4 flex items-center gap-2"
         >
           <ArrowLeft className="w-4 h-4" /> Back to Invoices
@@ -1365,8 +1421,8 @@ export default function ManageInvoice() {
               />
               {isCreateMode && (
                 <p className="text-xs text-gray-500 mt-1">
-                  Auto-generated from the BASTP Collection Date. Need to
-                  change it? Edit the invoice after creating it.
+                  Auto-generated from the Invoice Date. Need to change it?
+                  Edit the invoice after creating it.
                 </p>
               )}
             </div>
@@ -1378,13 +1434,13 @@ export default function ManageInvoice() {
               <input
                 type="date"
                 value={formData.invoice_date}
-                onChange={(e) =>
-                  setFormData({ ...formData, invoice_date: e.target.value })
-                }
+                onChange={(e) => handleInvoiceDateChange(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <p className="text-xs text-gray-500 mt-1">
                 The date printed on the invoice.
+                {isEditMode &&
+                  " Changing its month also updates the invoice number."}
               </p>
             </div>
 
@@ -1980,7 +2036,7 @@ export default function ManageInvoice() {
           <div className={`flex gap-4 ${!isEditMode ? "ml-auto" : ""}`}>
             <button
               type="button"
-              onClick={() => navigate("/invoices")}
+              onClick={goBack}
               className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
               disabled={saving}
             >

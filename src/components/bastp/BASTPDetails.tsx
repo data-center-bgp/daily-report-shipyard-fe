@@ -724,7 +724,11 @@ export default function BASTPDetails() {
               <p className="text-gray-900">{formatDate(bastp.invoiced_date)}</p>
               {invoiceId && (
                 <button
-                  onClick={() => navigate(`/invoices/${invoiceId}`)}
+                  onClick={() =>
+                    navigate(`/invoices/${invoiceId}`, {
+                      state: { from: { path: `/bastp/${bastpId}` } },
+                    })
+                  }
                   className="mt-1 flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
                 >
                   <Receipt className="w-3.5 h-3.5" /> View Invoice

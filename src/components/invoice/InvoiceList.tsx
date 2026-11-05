@@ -1,7 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
-import type { Invoice } from "../../types/invoiceTypes";
+import type {
+  Invoice,
+  InvoiceListViewState,
+  InvoiceReturnTarget,
+} from "../../types/invoiceTypes";
 import type { BASTPWithDetails } from "../../types/bastp.types";
 import { useAuth } from "../../hooks/useAuth";
 import {
@@ -20,7 +24,12 @@ import { PageSkeleton } from "../common/Skeleton";
 
 export default function InvoiceList() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isReadOnly } = useAuth();
+  // Set when the user comes back from an invoice's details/edit page.
+  const restoredView = (
+    location.state as { listView?: InvoiceListViewState } | null
+  )?.listView;
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [readyBASTPs, setReadyBASTPs] = useState<BASTPWithDetails[]>([]);
@@ -28,13 +37,19 @@ export default function InvoiceList() {
   const [error, setError] = useState<string | null>(null);
 
   // Filter states
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(restoredView?.searchTerm ?? "");
   const [viewMode, setViewMode] = useState<"ready-bastp" | "unpaid" | "paid">(
-    "unpaid",
+    restoredView?.viewMode ?? "unpaid",
   );
 
   // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(restoredView?.currentPage ?? 1);
+
+  // What an invoice opened from here should send the user back to.
+  const returnToList: InvoiceReturnTarget = {
+    path: "/invoices",
+    state: { listView: { viewMode, currentPage, searchTerm } },
+  };
   const itemsPerPage = 10;
 
   // Document viewer states
@@ -160,8 +175,17 @@ export default function InvoiceList() {
   // Otherwise a search/filter that narrows the results while on page 2+ can
   // land on an empty page and render the "No invoices found" empty state
   // even though matches exist on page 1.
+  // Only when the filter actually changed: on first render this would wipe the
+  // page restored from a returning details/edit page.
+  const lastFilters = useRef({ searchTerm, viewMode });
   useEffect(() => {
-    setCurrentPage(1);
+    if (
+      lastFilters.current.searchTerm !== searchTerm ||
+      lastFilters.current.viewMode !== viewMode
+    ) {
+      lastFilters.current = { searchTerm, viewMode };
+      setCurrentPage(1);
+    }
   }, [searchTerm, viewMode]);
 
   // Filtering
@@ -551,7 +575,11 @@ export default function InvoiceList() {
                         </td>
                         <td className="px-6 py-4 text-center">
                           <button
-                            onClick={() => navigate(`/invoices/${invoice.id}`)}
+                            onClick={() =>
+                              navigate(`/invoices/${invoice.id}`, {
+                                state: { from: returnToList },
+                              })
+                            }
                             className="flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-medium mx-auto"
                           >
                             View Details <ArrowRight className="w-4 h-4" />
@@ -723,7 +751,9 @@ export default function InvoiceList() {
                         <td className="px-6 py-4 text-center">
                           <button
                             onClick={() =>
-                              navigate(`/invoices/create/${bastp.id}`)
+                              navigate(`/invoices/create/${bastp.id}`, {
+                                state: { from: returnToList },
+                              })
                             }
                             className="inline-flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
                           >

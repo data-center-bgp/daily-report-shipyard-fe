@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
-import type { Invoice } from "../../types/invoiceTypes";
+import type { Invoice, InvoiceReturnTarget } from "../../types/invoiceTypes";
 import { useReactToPrint } from "react-to-print";
 import InvoicePrint from "./InvoicePrint";
 import BastpPrintButton from "../bastp/BastpPrintButton";
@@ -41,6 +41,15 @@ import LoadingState from "../common/LoadingState";
 export default function InvoiceDetails() {
   const { invoiceId } = useParams<{ invoiceId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Where this page was opened from (invoice list with its tab/page, or a
+  // BASTP). Falls back to the plain list for a direct link.
+  const from = (location.state as { from?: InvoiceReturnTarget } | null)?.from;
+  const backLabel = from?.path.startsWith("/bastp")
+    ? "Back to BASTP"
+    : "Back to Invoices";
+  const goBack = () =>
+    navigate(from?.path ?? "/invoices", { state: from?.state });
   const { isReadOnly, canAccess } = useAuth();
   const canWrite = canAccess("invoices") && !isReadOnly;
 
@@ -437,10 +446,10 @@ export default function InvoiceDetails() {
           <h3 className="text-red-800 font-medium text-lg">Error</h3>
           <p className="text-red-600 mt-2">{error || "Invoice not found"}</p>
           <button
-            onClick={() => navigate("/invoices")}
+            onClick={goBack}
             className="mt-4 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
           >
-            Back to Invoices
+            {backLabel}
           </button>
         </div>
       </div>
@@ -453,10 +462,10 @@ export default function InvoiceDetails() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <button
-            onClick={() => navigate("/invoices")}
+            onClick={goBack}
             className="text-blue-600 hover:text-blue-800 mb-4 flex items-center gap-2"
           >
-            <ArrowLeft className="w-4 h-4" /> Back to Invoices
+            <ArrowLeft className="w-4 h-4" /> {backLabel}
           </button>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Invoice Details</h1>
           <p className="text-gray-600 mt-2">
@@ -508,7 +517,9 @@ export default function InvoiceDetails() {
           </button>
           {!isReadOnly && (
             <button
-              onClick={() => navigate(`/invoices/edit/${invoice.id}`)}
+              onClick={() =>
+                navigate(`/invoices/edit/${invoice.id}`, { state: { from } })
+              }
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Edit className="w-4 h-4" /> Edit Invoice

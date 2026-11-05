@@ -85,6 +85,24 @@ export interface Invoice {
   invoice_work_details?: InvoiceWorkDetails[];
 }
 
+/**
+ * Where the invoice pages should send the user back to. The page that opens
+ * an invoice (the list, a BASTP) passes this as router `state.from`, and the
+ * details/edit pages hand it on, so "Back" and "after saving" end up where the
+ * user started instead of on a fresh invoice list.
+ */
+export interface InvoiceReturnTarget {
+  path: string;
+  state?: unknown;
+}
+
+/** The invoice list's own view, kept so returning to it looks unchanged. */
+export interface InvoiceListViewState {
+  viewMode: "ready-bastp" | "unpaid" | "paid";
+  currentPage: number;
+  searchTerm: string;
+}
+
 export interface InvoiceFormData {
   bastp_id: number;
   bastp_collection_date?: string;
