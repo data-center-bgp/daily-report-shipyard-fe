@@ -236,7 +236,7 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
                               Invoice Date:
                             </span>
                             <span className="font-medium">
-                              {formatDate(invoice.created_at)}
+                              {formatDate(invoice.invoice_date || invoice.created_at)}
                             </span>
                           </div>
                         </div>

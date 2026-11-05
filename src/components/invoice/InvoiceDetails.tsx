@@ -1112,6 +1112,12 @@ export default function InvoiceDetails() {
               Important Dates
             </h2>
             <div className="space-y-3">
+              <div>
+                <p className="text-sm text-gray-600">Invoice Date</p>
+                <p className="font-medium text-gray-900">
+                  {formatDate(invoice.invoice_date || invoice.created_at)}
+                </p>
+              </div>
               {invoice.bastp_collection_date && (
                 <div>
                   <p className="text-sm text-gray-600">BASTP Collection</p>

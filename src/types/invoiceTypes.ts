@@ -44,6 +44,7 @@ export interface Invoice {
   bastp_id: number;
   user_id: number;
   bastp_collection_date?: string | null;
+  invoice_date?: string | null;
   company?: string | null;
   invoice_number?: string | null;
   faktur_number?: string | null;
@@ -87,6 +88,7 @@ export interface Invoice {
 export interface InvoiceFormData {
   bastp_id: number;
   bastp_collection_date?: string;
+  invoice_date?: string;
   company?: string;
   invoice_number?: string;
   faktur_number?: string;

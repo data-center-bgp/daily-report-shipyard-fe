@@ -128,6 +128,9 @@ export default function ManageInvoice() {
   // Form state
   const [formData, setFormData] = useState({
     bastp_collection_date: "",
+    // New invoices start on today's date (local, not UTC, so it doesn't show
+    // yesterday early in the morning); edit mode overwrites this on load.
+    invoice_date: new Date().toLocaleDateString("en-CA"),
     company: "",
     invoice_number: "",
     faktur_number: "",
@@ -346,6 +349,13 @@ export default function ManageInvoice() {
       // Populate form data
       setFormData({
         bastp_collection_date: data.bastp_collection_date || "",
+        // Invoices made before invoice_date existed printed their creation
+        // date, so show that here rather than a blank field.
+        invoice_date:
+          data.invoice_date ||
+          (data.created_at
+            ? new Date(data.created_at).toLocaleDateString("en-CA")
+            : ""),
         company: data.company || "",
         invoice_number: data.invoice_number || "",
         faktur_number: data.faktur_number || "",
@@ -767,6 +777,7 @@ export default function ManageInvoice() {
           .from("invoice_details")
           .update({
             bastp_collection_date: formData.bastp_collection_date || null,
+            invoice_date: formData.invoice_date || null,
             company: formData.company || null,
             invoice_number: formData.invoice_number || null,
             faktur_number: formData.faktur_number || null,
@@ -869,6 +880,7 @@ export default function ManageInvoice() {
             bastp_id: parseInt(bastpId),
             user_id: profile.id,
             bastp_collection_date: formData.bastp_collection_date || null,
+            invoice_date: formData.invoice_date || null,
             company: formData.company || null,
             invoice_number: formData.invoice_number || null,
             faktur_number: formData.faktur_number || null,
@@ -1357,6 +1369,23 @@ export default function ManageInvoice() {
                   change it? Edit the invoice after creating it.
                 </p>
               )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Invoice Date
+              </label>
+              <input
+                type="date"
+                value={formData.invoice_date}
+                onChange={(e) =>
+                  setFormData({ ...formData, invoice_date: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                The date printed on the invoice.
+              </p>
             </div>
 
             <div>
