@@ -38,6 +38,16 @@ import {
 } from "lucide-react";
 import LoadingState from "../common/LoadingState";
 
+// Header action buttons: one shared shape, three tones (the one main action,
+// a blue outline for printing, and a quiet outline for the BASTP documents).
+const actionButton =
+  "inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50";
+const actionPrimary = "bg-blue-600 text-white shadow-sm hover:bg-blue-700";
+const actionAccent =
+  "border border-blue-200 bg-white text-blue-700 hover:bg-blue-50";
+const actionNeutral =
+  "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50";
+
 export default function InvoiceDetails() {
   const { invoiceId } = useParams<{ invoiceId: string }>();
   const navigate = useNavigate();
@@ -457,10 +467,10 @@ export default function InvoiceDetails() {
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
+      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
           <button
             onClick={goBack}
             className="text-blue-600 hover:text-blue-800 mb-4 flex items-center gap-2"
@@ -468,63 +478,77 @@ export default function InvoiceDetails() {
             <ArrowLeft className="w-4 h-4" /> {backLabel}
           </button>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Invoice Details</h1>
-          <p className="text-gray-600 mt-2">
+          <p className="text-gray-600 mt-2 break-words">
             {invoice.invoice_number || "Draft Invoice"}
           </p>
         </div>
-        <div className="flex gap-3">
-          {invoice.bastp?.id && (
+        {/* Two groups so the main actions read first: Print / Edit the
+            invoice itself, then the BASTP documents behind it. Two buttons
+            per row on a phone, a wrapping row from sm up. */}
+        <div className="flex flex-col gap-2 lg:items-end">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:justify-end">
             <button
-              onClick={() => navigate(`/bastp/${invoice.bastp?.id}`)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              onClick={() => setShowPrintPreview(true)}
+              className={`${actionButton} ${actionAccent}`}
             >
-              <ExternalLink className="w-4 h-4" /> View Full BASTP
+              <Printer className="w-4 h-4" /> Print Invoice
             </button>
-          )}
-          {invoice.bastp?.id && (
-            <BastpPrintButton bastpId={invoice.bastp.id} label="Print BASTP" />
-          )}
-          {invoice.bastp?.storage_path && (
-            <button
-              onClick={() =>
-                handleViewDocument(invoice.bastp?.storage_path, "BASTP Document")
-              }
-              disabled={viewingDocument}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <FileText className="w-4 h-4" /> View BASTP
-            </button>
-          )}
-          {invoice.bastp?.form_penawaran_storage_path && (
-            <button
-              onClick={() =>
-                handleViewDocument(
-                  invoice.bastp?.form_penawaran_storage_path,
-                  "Form Penawaran",
-                )
-              }
-              disabled={viewingDocument}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <FileText className="w-4 h-4" /> Form Penawaran
-            </button>
-          )}
-          <button
-            onClick={() => setShowPrintPreview(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-          >
-            <Printer className="w-4 h-4" /> Print Invoice
-          </button>
-          {!isReadOnly && (
-            <button
-              onClick={() =>
-                navigate(`/invoices/edit/${invoice.id}`, { state: { from } })
-              }
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Edit className="w-4 h-4" /> Edit Invoice
-            </button>
-          )}
+            {!isReadOnly && (
+              <button
+                onClick={() =>
+                  navigate(`/invoices/edit/${invoice.id}`, { state: { from } })
+                }
+                className={`${actionButton} ${actionPrimary}`}
+              >
+                <Edit className="w-4 h-4" /> Edit Invoice
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:justify-end [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">
+            {invoice.bastp?.id && (
+              <button
+                onClick={() => navigate(`/bastp/${invoice.bastp?.id}`)}
+                className={`${actionButton} ${actionNeutral}`}
+              >
+                <ExternalLink className="w-4 h-4" /> View Full BASTP
+              </button>
+            )}
+            {invoice.bastp?.id && (
+              <BastpPrintButton
+                bastpId={invoice.bastp.id}
+                label="Print BASTP"
+                className={`${actionButton} ${actionNeutral}`}
+              />
+            )}
+            {invoice.bastp?.storage_path && (
+              <button
+                onClick={() =>
+                  handleViewDocument(
+                    invoice.bastp?.storage_path,
+                    "BASTP Document",
+                  )
+                }
+                disabled={viewingDocument}
+                className={`${actionButton} ${actionNeutral}`}
+              >
+                <FileText className="w-4 h-4" /> View BASTP
+              </button>
+            )}
+            {invoice.bastp?.form_penawaran_storage_path && (
+              <button
+                onClick={() =>
+                  handleViewDocument(
+                    invoice.bastp?.form_penawaran_storage_path,
+                    "Form Penawaran",
+                  )
+                }
+                disabled={viewingDocument}
+                className={`${actionButton} ${actionNeutral}`}
+              >
+                <FileText className="w-4 h-4" /> Form Penawaran
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
