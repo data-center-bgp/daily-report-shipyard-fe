@@ -183,77 +183,19 @@ export default function BastpPrintButton({
     setError(null);
   };
 
-  // Same canvas-snapshot approach as BASTPDetails.tsx's own download — see
-  // that component for the tradeoffs (no repeated header/footer per page).
+  // Cuts between rows and keeps the signature block whole — see
+  // utils/pdfExport.ts.
   const handleDownloadPdf = async () => {
     if (!printRef.current || !bastp) return;
     try {
       setDownloadingPdf(true);
       setError(null);
 
-      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-        import("html2canvas-pro"),
-        import("jspdf"),
-      ]);
-
-      const canvas = await html2canvas(printRef.current, {
-        scale: 2,
-        useCORS: true,
-      });
-
-      const pdf = new jsPDF({
-        unit: "mm",
-        format: "a4",
-        orientation: "portrait",
-      });
-      const pageWidthMm = pdf.internal.pageSize.getWidth();
-      const pageHeightMm = pdf.internal.pageSize.getHeight();
-      const marginMm = 10;
-      const usableWidthMm = pageWidthMm - marginMm * 2;
-      const usableHeightMm = pageHeightMm - marginMm * 2;
-      const pxPerMm = canvas.width / usableWidthMm;
-      const pageHeightPx = usableHeightMm * pxPerMm;
-
-      let renderedPx = 0;
-      let firstPage = true;
-      while (renderedPx < canvas.height) {
-        const sliceHeightPx = Math.min(
-          pageHeightPx,
-          canvas.height - renderedPx,
-        );
-
-        const pageCanvas = document.createElement("canvas");
-        pageCanvas.width = canvas.width;
-        pageCanvas.height = sliceHeightPx;
-        const ctx = pageCanvas.getContext("2d");
-        if (!ctx) throw new Error("Could not create canvas context");
-        ctx.drawImage(
-          canvas,
-          0,
-          renderedPx,
-          canvas.width,
-          sliceHeightPx,
-          0,
-          0,
-          canvas.width,
-          sliceHeightPx,
-        );
-
-        if (!firstPage) pdf.addPage();
-        pdf.addImage(
-          pageCanvas.toDataURL("image/jpeg", 0.98),
-          "JPEG",
-          marginMm,
-          marginMm,
-          usableWidthMm,
-          sliceHeightPx / pxPerMm,
-        );
-
-        renderedPx += sliceHeightPx;
-        firstPage = false;
-      }
-
-      pdf.save(`BASTP-${bastp.number || bastpId}.pdf`);
+      const { downloadElementAsPdf } = await import("../../utils/pdfExport");
+      await downloadElementAsPdf(
+        printRef.current,
+        `BASTP-${bastp.number || bastpId}.pdf`,
+      );
     } catch (err) {
       console.error("Error generating BASTP PDF:", err);
       setError(err instanceof Error ? err.message : "Failed to generate PDF");

@@ -507,7 +507,7 @@ const BASTPPrint = forwardRef<HTMLDivElement, BASTPPrintProps>(
             </tr>
 
             {/* Closing paragraph */}
-            <tr>
+            <tr data-pdf-keep="closing">
               <td>
                 <p className="mt-4 mb-4 text-xs section-block">
                   Demikian Berita Acara Serah Terima Pekerjaan ini dibuat
@@ -526,7 +526,7 @@ const BASTPPrint = forwardRef<HTMLDivElement, BASTPPrintProps>(
             </tr>
 
             {/* Location + Date */}
-            <tr>
+            <tr data-pdf-keep="closing">
               <td>
                 <div className="mt-4 mb-2 text-xs section-block">
                   Samarinda, {formatDate(bastp.date)}
@@ -535,7 +535,7 @@ const BASTPPrint = forwardRef<HTMLDivElement, BASTPPrintProps>(
             </tr>
 
             {/* Signatures */}
-            <tr>
+            <tr data-pdf-keep="closing">
               <td>
                 <table className="w-full mb-4 text-center text-xs section-block">
                   <tbody>
@@ -574,7 +574,7 @@ const BASTPPrint = forwardRef<HTMLDivElement, BASTPPrintProps>(
             </tr>
 
             {/* Disclaimer */}
-            <tr>
+            <tr data-pdf-keep="closing">
               <td>
                 <div className="text-center text-xs text-gray-600 section-block">
                   <p>
