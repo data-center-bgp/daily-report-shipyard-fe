@@ -208,131 +208,18 @@ export default function VesselWorkOrders() {
     `,
   });
 
-  // One-click PDF download via a canvas snapshot, separate from the real
-  // browser print path above. Trade-off accepted: unlike printing, this
-  // doesn't repeat the header/footer per page or avoid breaking rows across
-  // pages — it rasterizes the whole document into one tall canvas, then
-  // slices it into equal-height A4 pages, since neither html2canvas nor
-  // jsPDF understand the print-only "repeat thead/tfoot" CSS trick.
-  //
-  // Uses html2canvas-pro (not plain html2canvas, and not the html2pdf.js
-  // wrapper) because Tailwind v4's default palette uses oklch() colors,
-  // which classic html2canvas can't parse — it throws instead of
-  // rendering. html2canvas-pro is a maintained fork that added modern CSS
-  // color support. html2pdf.js was tried first but had to be dropped: it
-  // ships html2canvas pre-bundled inside its own dist file, so even a
-  // package.json override pointing "html2canvas" at html2canvas-pro
-  // couldn't reach the code actually executing.
+  // One-click PDF download: a canvas snapshot cut into A4 pages between table
+  // rows, never through a .section-block such as the signatures (see
+  // utils/pdfExport.ts, which also explains the html2canvas-pro choice). Unlike
+  // printing it doesn't repeat the header/footer on every page.
   const handleDownloadWorkOrderPdf = async () => {
     if (!printRef.current || !printPreviewWO) return;
     try {
       setDownloadingPdf(true);
       setPrintError(null);
 
-      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-        import("html2canvas-pro"),
-        import("jspdf"),
-      ]);
-
-      const canvas = await html2canvas(printRef.current, {
-        scale: 2,
-        useCORS: true,
-      });
-
-      const pdf = new jsPDF({
-        unit: "mm",
-        format: "a4",
-        orientation: "portrait",
-      });
-      const pageWidthMm = pdf.internal.pageSize.getWidth();
-      const pageHeightMm = pdf.internal.pageSize.getHeight();
-      const marginMm = 10;
-      const usableWidthMm = pageWidthMm - marginMm * 2;
-      const usableHeightMm = pageHeightMm - marginMm * 2;
-      const pxPerMm = canvas.width / usableWidthMm;
-      const pageHeightPx = usableHeightMm * pxPerMm;
-
-      // This canvas-slice approach has no idea about the print CSS's
-      // page-break-inside: avoid rules — it happily cuts a fixed-height
-      // slice straight through the middle of, say, the signature table,
-      // leaving names stranded on the next page with no label above them.
-      // Reuse the same ".section-block" class the print stylesheet already
-      // marks those must-not-split sections with, and nudge each page's
-      // cutoff up to just before one if the naive cutoff would land inside
-      // it — the whole block then renders on the next page instead.
-      const containerRect = printRef.current.getBoundingClientRect();
-      const scaleFactor = canvas.width / containerRect.width;
-      const protectedRanges = Array.from(
-        printRef.current.querySelectorAll<HTMLElement>(".section-block"),
-      )
-        .map((el) => {
-          const rect = el.getBoundingClientRect();
-          return {
-            top: (rect.top - containerRect.top) * scaleFactor,
-            bottom: (rect.bottom - containerRect.top) * scaleFactor,
-          };
-        })
-        // A block taller than a full page can't avoid being split anyway —
-        // leave those to the normal fixed-height slicing.
-        .filter((r) => r.bottom - r.top <= pageHeightPx);
-
-      let renderedPx = 0;
-      let firstPage = true;
-      while (renderedPx < canvas.height) {
-        const naiveEndPx = Math.min(
-          renderedPx + pageHeightPx,
-          canvas.height,
-        );
-        let sliceEndPx = naiveEndPx;
-        for (const range of protectedRanges) {
-          if (
-            range.top > renderedPx &&
-            range.top < naiveEndPx &&
-            range.bottom > naiveEndPx
-          ) {
-            sliceEndPx = Math.min(sliceEndPx, range.top);
-          }
-        }
-        // Safety net: never shrink to an empty/negative slice (e.g. a
-        // protected block starting right at the top of this page) — fall
-        // back to the plain fixed-height cut rather than looping forever.
-        if (sliceEndPx <= renderedPx) {
-          sliceEndPx = naiveEndPx;
-        }
-        const sliceHeightPx = sliceEndPx - renderedPx;
-
-        const pageCanvas = document.createElement("canvas");
-        pageCanvas.width = canvas.width;
-        pageCanvas.height = sliceHeightPx;
-        const ctx = pageCanvas.getContext("2d");
-        if (!ctx) throw new Error("Could not create canvas context");
-        ctx.drawImage(
-          canvas,
-          0,
-          renderedPx,
-          canvas.width,
-          sliceHeightPx,
-          0,
-          0,
-          canvas.width,
-          sliceHeightPx,
-        );
-
-        if (!firstPage) pdf.addPage();
-        pdf.addImage(
-          pageCanvas.toDataURL("image/jpeg", 0.98),
-          "JPEG",
-          marginMm,
-          marginMm,
-          usableWidthMm,
-          sliceHeightPx / pxPerMm,
-        );
-
-        renderedPx += sliceHeightPx;
-        firstPage = false;
-      }
-
-      pdf.save(`${printFileBase()}.pdf`);
+      const { downloadElementAsPdf } = await import("../../utils/pdfExport");
+      await downloadElementAsPdf(printRef.current, `${printFileBase()}.pdf`);
     } catch (err) {
       console.error("Error generating work order PDF:", err);
       setPrintError(

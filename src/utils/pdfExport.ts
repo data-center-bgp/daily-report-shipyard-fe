@@ -4,10 +4,17 @@
  * The element is photographed once and cut into pages. Cutting every fixed
  * height slices table rows and the signature block in half, so the cuts are
  * chosen instead: a page ends at the bottom of the last row that still fits,
- * and blocks marked `data-pdf-keep="<group>"` (the closing note, date and
- * signatures) are never split — the whole group moves to the next page
- * instead. The company header/footer images appear once, as in the on-screen
- * document (no repeated header/footer per page).
+ * and blocks marked `.section-block` (the print layout's own "don't split
+ * this") or `data-pdf-keep="<group>"` (several rows that stay together, like
+ * the BASTP's closing note, date and signatures) are never split — the whole
+ * block moves to the next page instead.
+ *
+ * Uses html2canvas-pro, not plain html2canvas or html2pdf.js: Tailwind v4's
+ * palette uses oklch() colors, which classic html2canvas throws on, and
+ * html2pdf.js bundles its own copy of it that a package override can't reach.
+ *
+ * The company header/footer images appear once, as in the on-screen document
+ * (no repeated header/footer per page).
  */
 
 export interface PageBreakInput {
@@ -32,8 +39,10 @@ export function computePageStarts({
   pageHeight,
 }: PageBreakInput): number[] {
   const sorted = [...new Set(candidates)].sort((a, b) => a - b);
+  // A block taller than a page can't avoid being split, so it is not kept.
+  const keeps = keepRanges.filter(([top, bottom]) => bottom - top <= pageHeight);
   const insideKeep = (y: number) =>
-    keepRanges.some(([top, bottom]) => y > top && y < bottom);
+    keeps.some(([top, bottom]) => y > top && y < bottom);
   // A cut that leaves almost nothing on the page is worse than a mid-row one.
   const minSlice = pageHeight * 0.3;
 
@@ -53,7 +62,7 @@ export function computePageStarts({
     // A keep block that starts on this page but would be cut at the limit
     // moves whole to the next page.
     if (cut === limit) {
-      const spanning = keepRanges
+      const spanning = keeps
         .filter(([top, bottom]) => top > start + minSlice && top < limit && bottom > limit)
         .map(([top]) => top)
         .sort((a, b) => b - a)[0];
@@ -80,6 +89,13 @@ function measureBreaks(root: HTMLElement) {
     candidates.push(y(el));
   });
 
+  // The print stylesheet already marks must-not-split sections (page-break-
+  // inside: avoid) with .section-block; the PDF honours the same marker.
+  const keepRanges: [number, number][] = [];
+  root.querySelectorAll(".section-block").forEach((el) => {
+    keepRanges.push([el.getBoundingClientRect().top - rootTop, y(el)]);
+  });
+
   const groups = new Map<string, [number, number]>();
   root.querySelectorAll<HTMLElement>("[data-pdf-keep]").forEach((el) => {
     const group = el.dataset.pdfKeep ?? "";
@@ -92,7 +108,7 @@ function measureBreaks(root: HTMLElement) {
     );
   });
 
-  return { candidates, keepRanges: [...groups.values()] };
+  return { candidates, keepRanges: [...keepRanges, ...groups.values()] };
 }
 
 export async function downloadElementAsPdf(

@@ -136,6 +136,15 @@ const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
               .content-table thead {
                 display: table-header-group;
               }
+
+              /* The page footer rule above (.print-table tfoot) also matches
+                 the Subtotal rows inside these tables, and a footer group is
+                 repeated at the bottom of every page the table spans — so the
+                 full subtotal would print at the foot of each page. Keep it a
+                 normal last row, shown once. */
+              .content-table tfoot {
+                display: table-row-group;
+              }
               
               .content-table tbody tr {
                 page-break-inside: avoid;
