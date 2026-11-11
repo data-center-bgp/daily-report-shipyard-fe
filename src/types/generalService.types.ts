@@ -1,4 +1,4 @@
-export type GeneralServiceUom = "day" | "ton";
+export type GeneralServiceUom = "day" | "ton" | "kali" | "ls";
 
 export interface GeneralServiceType {
   id: number;
@@ -6,7 +6,9 @@ export interface GeneralServiceType {
   service_code: string;
   display_order: number;
   // "day" services use a start/close date range and total_days; "ton"
-  // services (Fresh Water Supply) use a single supply date and quantity.
+  // services (Fresh Water Supply) use a single supply date and quantity;
+  // "kali" (times) and "ls" (lump sum) services are a fixed quantity with no
+  // dates at all.
   uom: GeneralServiceUom;
   created_at: string;
   updated_at: string;

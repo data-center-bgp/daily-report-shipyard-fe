@@ -6,15 +6,33 @@ interface ServiceLike {
   service_type?: { uom?: string | null } | null;
 }
 
-export const serviceUom = (s: ServiceLike): GeneralServiceUom =>
-  s.service_type?.uom === "ton" ? "ton" : "day";
+export const serviceUom = (s: ServiceLike): GeneralServiceUom => {
+  const uom = s.service_type?.uom;
+  return uom === "ton" || uom === "kali" || uom === "ls" ? uom : "day";
+};
 
 export const isTonService = (s: ServiceLike): boolean =>
   serviceUom(s) === "ton";
 
-// What a service is priced by: tons for ton-based services, days otherwise.
+// Kali (times) and Ls (lump sum): a plain quantity, one row per BASTP, and no
+// dates — unlike day services (a date range) and ton services (supply dates).
+export const isFixedQuantityUom = (uom: string | null | undefined): boolean =>
+  uom === "kali" || uom === "ls";
+
+export const isFixedQuantityService = (s: ServiceLike): boolean =>
+  isFixedQuantityUom(serviceUom(s));
+
+// What a service is priced by: its days for day-based services, its quantity
+// (tons, times, lump sums) for everything else.
 export const billableQuantity = (s: ServiceLike): number =>
-  isTonService(s) ? Number(s.quantity) || 0 : Number(s.total_days) || 0;
+  serviceUom(s) === "day" ? Number(s.total_days) || 0 : Number(s.quantity) || 0;
+
+export const UOM_LABEL: Record<GeneralServiceUom, string> = {
+  day: "Hari",
+  ton: "Ton",
+  kali: "Kali",
+  ls: "Ls",
+};
 
 export const FRESH_WATER_SERVICE_CODE = "FRESH_WATER_SUPPLY";
 
@@ -31,9 +49,12 @@ export const isFreshWaterOnly = (
 export const formatTons =(value: number | string | null | undefined): string =>
   (Math.round((Number(value) || 0) * 100) / 100).toLocaleString("id-ID");
 
-// e.g. "12,5 ton" or "3 days"
+// e.g. "12,5 ton", "1 kali", "1 Ls" or "3 days"
 export const formatServiceQuantity = (s: ServiceLike): string => {
-  if (isTonService(s)) return `${formatTons(s.quantity)} ton`;
+  const uom = serviceUom(s);
+  if (uom === "ton") return `${formatTons(s.quantity)} ton`;
+  if (uom === "kali") return `${formatTons(s.quantity)} kali`;
+  if (uom === "ls") return `${formatTons(s.quantity)} Ls`;
   const days = Number(s.total_days) || 0;
   return `${days} day${days !== 1 ? "s" : ""}`;
 };

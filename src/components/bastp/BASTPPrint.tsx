@@ -5,8 +5,10 @@ import {
   formatMaterialTotal,
 } from "../../utils/materialCalculations";
 import {
+  UOM_LABEL,
   formatTons,
   isTonService,
+  serviceUom,
   sortServices,
 } from "../../utils/generalServices";
 import {
@@ -406,9 +408,9 @@ const BASTPPrint = forwardRef<HTMLDivElement, BASTPPrintProps>(
                               )}
                             </td>
                             <td className="border border-gray-400 px-2 py-1 text-center">
-                              {isTonService(service)
-                                ? `${formatTons(service.quantity)} Ton`
-                                : `${service.total_days ?? 0} Hari`}
+                              {serviceUom(service) === "day"
+                                ? `${service.total_days ?? 0} Hari`
+                                : `${formatTons(service.quantity)} ${UOM_LABEL[serviceUom(service)]}`}
                             </td>
                             <td className="border border-gray-400 px-2 py-1">
                               {service.remarks || ""}

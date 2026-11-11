@@ -9,6 +9,7 @@ import { useAuth } from "../../hooks/useAuth";
 import BASTPPrint from "./BASTPPrint";
 import {
   formatServiceQuantity,
+  isFixedQuantityService,
   isTonService,
   sortServices,
 } from "../../utils/generalServices";
@@ -1227,7 +1228,9 @@ export default function BASTPDetails() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
-                              {service.start_date ? (
+                              {isFixedQuantityService(service) ? (
+                                <span className="text-gray-400">—</span>
+                              ) : service.start_date ? (
                                 formatDate(service.start_date)
                               ) : (
                                 <span className="text-gray-400 text-xs">
@@ -1238,8 +1241,10 @@ export default function BASTPDetails() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
-                              {isTonService(service) ? (
-                                // Single supply date, already shown as Start Date
+                              {isTonService(service) ||
+                              isFixedQuantityService(service) ? (
+                                // Ton: single supply date, already shown as
+                                // Start Date. Kali / Ls: no dates at all.
                                 <span className="text-gray-400">—</span>
                               ) : service.close_date ? (
                                 formatDate(service.close_date)

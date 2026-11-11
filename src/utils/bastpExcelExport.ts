@@ -5,7 +5,7 @@ import {
   formatBastpDate as formatDate,
   getBastpDocument,
 } from "./bastpDocument";
-import { isTonService, sortServices } from "./generalServices";
+import { UOM_LABEL, serviceUom, sortServices } from "./generalServices";
 import { formatMaterialDimensionDisplay } from "./materialCalculations";
 
 // Same content and order as the printed BASTP (BASTPPrint), laid out as one
@@ -210,21 +210,27 @@ export async function buildBastpWorkbook(
   if (services.length > 0) {
     tableHeader(["No", "General Services", "Jumlah", "Satuan", "Remarks"]);
     services.forEach((service, index) => {
-      const ton = isTonService(service);
-      const date = ton
-        ? formatDate(service.start_date)
-        : service.start_date && service.close_date
-          ? `${formatDate(service.start_date)} — ${formatDate(service.close_date)}`
-          : "";
+      const uom = serviceUom(service);
+      // Day services show their date range, ton services their supply date;
+      // Kali / Ls lines have no dates at all.
+      const date =
+        uom === "ton"
+          ? formatDate(service.start_date)
+          : uom === "day" && service.start_date && service.close_date
+            ? `${formatDate(service.start_date)} — ${formatDate(service.close_date)}`
+            : "";
       const row = ws.addRow([
         index + 1,
-        `${service.service_type?.service_name || "-"}${date ? `\n${date}` : ""}`,
-        ton ? Number(service.quantity) || 0 : Number(service.total_days) || 0,
-        ton ? "Ton" : "Hari",
+        `${service.service_type?.service_name || "-"}${date ? `
+${date}` : ""}`,
+        uom === "day"
+          ? Number(service.total_days) || 0
+          : Number(service.quantity) || 0,
+        UOM_LABEL[uom],
         service.remarks || "",
       ]);
       bordered(row);
-      if (ton) row.getCell(3).numFmt = "#,##0.##";
+      if (uom !== "day") row.getCell(3).numFmt = "#,##0.##";
     });
     blank();
   }
