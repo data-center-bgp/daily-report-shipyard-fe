@@ -19,6 +19,8 @@ import {
   Lock,
   ExternalLink,
   Download,
+  FileSpreadsheet,
+  Loader,
 } from "lucide-react";
 import { PageSkeleton } from "../common/Skeleton";
 
@@ -35,6 +37,7 @@ export default function InvoiceList() {
   const [readyBASTPs, setReadyBASTPs] = useState<BASTPWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState(restoredView?.searchTerm ?? "");
@@ -166,6 +169,26 @@ export default function InvoiceList() {
       console.error("Error fetching ready BASTPs:", err);
     }
   }, []);
+
+  // Exports every invoice (paid and unpaid, whatever tab or search is showing)
+  // plus the BASTPs still waiting to be invoiced, for Finance to filter in Excel. The Excel library is large,
+  // so the builder is loaded only on click.
+  const handleExportExcel = async () => {
+    try {
+      setExportingExcel(true);
+      setError(null);
+      const { buildInvoiceListWorkbook, downloadInvoiceListWorkbook } =
+        await import("../../utils/invoiceListExcelExport");
+      downloadInvoiceListWorkbook(
+        await buildInvoiceListWorkbook(invoices, readyBASTPs),
+      );
+    } catch (err) {
+      console.error("Error exporting invoices to Excel:", err);
+      setError(err instanceof Error ? err.message : "Failed to export to Excel");
+    } finally {
+      setExportingExcel(false);
+    }
+  };
 
   useEffect(() => {
     fetchInvoices();
@@ -332,6 +355,19 @@ export default function InvoiceList() {
               : "Manage invoices from verified BASTP"}
           </p>
         </div>
+        <button
+          onClick={handleExportExcel}
+          disabled={exportingExcel || invoices.length === 0}
+          title="Download every invoice (paid and unpaid) as an Excel sheet"
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {exportingExcel ? (
+            <Loader className="w-4 h-4 animate-spin" />
+          ) : (
+            <FileSpreadsheet className="w-4 h-4" />
+          )}{" "}
+          {exportingExcel ? "Exporting..." : "Export Excel"}
+        </button>
       </div>
 
       {error && (
