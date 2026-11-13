@@ -7,6 +7,7 @@ import {
 } from "./bastpDocument";
 import { UOM_LABEL, serviceUom, sortServices } from "./generalServices";
 import { formatMaterialDimensionDisplay } from "./materialCalculations";
+import { loadImage } from "./excelShared";
 
 // Same content and order as the printed BASTP (BASTPPrint), laid out as one
 // editable sheet. Quantities sit in their own numeric cells so they can be
@@ -32,36 +33,6 @@ const LAST_COL = 5; // A..E: No | Description | Qty | Unit | Remarks
 // Rendered width of columns A..E in pixels — the header/footer images are
 // scaled to span it.
 const SHEET_WIDTH_PX = 820;
-
-// Same company header/footer images the printed BASTP uses (public/images).
-// Returns null if one can't be loaded, so the export still works without it.
-async function loadImage(
-  path: string,
-): Promise<{ base64: string; width: number; height: number } | null> {
-  try {
-    const res = await fetch(path);
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    const base64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-    const size = await new Promise<{ width: number; height: number }>(
-      (resolve, reject) => {
-        const img = new Image();
-        img.onload = () =>
-          resolve({ width: img.naturalWidth, height: img.naturalHeight });
-        img.onerror = reject;
-        img.src = base64;
-      },
-    );
-    return { base64, ...size };
-  } catch {
-    return null;
-  }
-}
 
 export async function buildBastpWorkbook(
   bastp: BASTPWithDetails,

@@ -30,6 +30,7 @@ import {
   Lock,
   ExternalLink,
   Download,
+  FileSpreadsheet,
   Loader,
   User,
   MapPin,
@@ -82,6 +83,7 @@ export default function InvoiceDetails() {
   // Document viewer states
   const [viewingDocument, setViewingDocument] = useState(false);
   const [documentError, setDocumentError] = useState<string | null>(null);
+  const [exportingExcel, setExportingExcel] = useState(false);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [currentStoragePath, setCurrentStoragePath] = useState<string | null>(
@@ -376,6 +378,27 @@ export default function InvoiceDetails() {
     );
   };
 
+  // The Excel library is large, so the builder is loaded only on click.
+  const handleExportExcel = async () => {
+    if (!invoice) return;
+    try {
+      setExportingExcel(true);
+      setDocumentError(null);
+      const { buildInvoiceWorkbook, downloadInvoiceWorkbook } = await import(
+        "../../utils/invoiceExcelExport"
+      );
+      const buffer = await buildInvoiceWorkbook(invoice);
+      downloadInvoiceWorkbook(buffer, invoice.invoice_number || String(invoice.id));
+    } catch (err) {
+      console.error("Error exporting invoice to Excel:", err);
+      setDocumentError(
+        err instanceof Error ? err.message : "Failed to export to Excel",
+      );
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
   // Print handler
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -486,12 +509,24 @@ export default function InvoiceDetails() {
             invoice itself, then the BASTP documents behind it. Two buttons
             per row on a phone, a wrapping row from sm up. */}
         <div className="flex flex-col gap-2 lg:items-end">
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:justify-end">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:justify-end [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">
             <button
               onClick={() => setShowPrintPreview(true)}
               className={`${actionButton} ${actionAccent}`}
             >
               <Printer className="w-4 h-4" /> Print Invoice
+            </button>
+            <button
+              onClick={handleExportExcel}
+              disabled={exportingExcel}
+              className={`${actionButton} ${actionAccent}`}
+            >
+              {exportingExcel ? (
+                <Loader className="w-4 h-4 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="w-4 h-4" />
+              )}{" "}
+              {exportingExcel ? "Exporting..." : "Export Excel"}
             </button>
             {!isReadOnly && (
               <button
