@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { supabase } from "../lib/supabase";
 
 export interface ExportOptions {
@@ -6,7 +5,10 @@ export interface ExportOptions {
   filters?: {
     vesselIds?: number[];
   };
+  /** Invoice prices, PPN, PPh 23 and totals (MASTER, FINANCE, MANAGER). */
   includeFinancialData?: boolean;
+  /** The PPIC price of each work detail (MASTER and PPIC only). */
+  includePpicPrice?: boolean;
 }
 
 export interface ExportData {
@@ -15,187 +17,163 @@ export interface ExportData {
   totalRecords: number;
 }
 
-// Define proper types for the flattened data structure
-interface ExportRow {
-  vessel_id: number;
-  vessel_name: string;
-  vessel_type: string;
-  vessel_company: string;
-  work_order_id: number | null;
-  wo_created_at: string | null;
-  wo_updated_at: string | null;
-  customer_wo_number: string | null;
-  customer_wo_date: string | null;
-  shipyard_wo_number: string | null;
-  shipyard_wo_date: string | null;
-  wo_document_delivery_date: string | null;
-  wo_user_id: number | null;
-  wo_vessel_id: number | null;
-  invoice_id: number | null;
-  invoice_created_at: string | null;
-  invoice_updated_at: string | null;
-  wo_document_collection_date: string | null;
+type Cell = string | number | boolean | null;
+export type ExportRow = Record<string, Cell>;
+
+// ── What comes back from the query ─────────────────────────────────────
+// Every nested table is read with its deleted_at, and soft-deleted rows are
+// dropped below: a nested filter on the query would only blank the embed.
+
+interface SupabaseInvoice {
+  id: number;
+  deleted_at: string | null;
   invoice_number: string | null;
+  invoice_date: string | null;
+  created_at: string;
   faktur_number: string | null;
-  invoice_due_date: string | null;
+  due_date: string | null;
   delivery_date: string | null;
   collection_date: string | null;
   receiver_name: string | null;
-  payment_price?: number | null; // Optional based on includeFinancialData
   payment_status: boolean | null;
   payment_date: string | null;
-  invoice_remarks: string | null;
-  invoice_work_order_id: number | null;
-  invoice_user_id: number | null;
-  work_detail_id: number | null;
-  wd_created_at: string | null;
-  wd_updated_at: string | null;
-  work_description: string | null;
-  work_location: string | null;
-  work_pic: string | null;
-  wd_planned_start_date: string | null;
-  wd_target_close_date: string | null;
-  period_close_target: string | null;
-  wd_actual_start_date: string | null;
-  wd_actual_close_date: string | null;
-  work_permit_url: string | null;
-  wd_storage_path: string | null;
-  wd_user_id: number | null;
-  wd_work_order_id: number | null;
-  verification_id: number | null;
-  verification_date: string | null;
-  work_verification: boolean | null;
-  verification_user_id: number | null;
-  verification_work_details_id: number | null;
-  progress_id: number | null;
-  progress_percentage: number | null;
-  report_date: string | null;
-  progress_storage_path: string | null;
-  evidence_url: string | null;
-  progress_work_details_id: number | null;
-  progress_user_id: number | null;
-  progress_created_at: string | null;
+  remarks: string | null;
+  total_price_before?: number | null;
+  ppn?: number | null;
+  pph_23?: number | null;
+  total_price_after?: number | null;
 }
 
-// Define types for the Supabase response structure
-interface SupabaseVessel {
+interface SupabaseBastp {
   id: number;
-  name: string;
-  type: string;
-  company: string;
-  work_order: SupabaseWorkOrder[] | null;
-}
-
-interface SupabaseWorkOrder {
-  id: number;
-  created_at: string;
-  updated_at: string;
-  customer_wo_number: string;
-  customer_wo_date: string;
-  shipyard_wo_number: string;
-  shipyard_wo_date: string;
-  wo_document_delivery_date: string;
-  user_id: number;
-  vessel_id: number;
-  work_details: SupabaseWorkDetail[] | null;
+  deleted_at: string | null;
+  number: string;
+  date: string;
+  status: string;
   invoice_details: SupabaseInvoice[] | null;
+}
+
+interface SupabaseBastpLink {
+  id: number;
+  deleted_at: string | null;
+  materials_status: string | null;
+  bastp: SupabaseBastp | null;
+}
+
+interface SupabaseInvoiceLine {
+  deleted_at: string | null;
+  invoice_details_id: number;
+  unit_price?: number | null;
+  payment_price?: number | null;
+}
+
+interface SupabaseProgress {
+  id: number;
+  deleted_at: string | null;
+  progress_percentage: number;
+  report_date: string | null;
+  notes: string | null;
+  is_imported: boolean | null;
+  evidence_url: string | null;
+}
+
+interface SupabaseVerification {
+  id: number;
+  deleted_at: string | null;
+  created_at: string;
+  status: string | null;
+  verification_date: string | null;
+  verification_notes: string | null;
+  is_auto_verified: boolean | null;
 }
 
 interface SupabaseWorkDetail {
   id: number;
-  created_at: string;
-  updated_at: string;
+  deleted_at: string | null;
   description: string;
-  location: string;
-  pic: string;
-  planned_start_date: string;
-  target_close_date: string;
-  period_close_target: string;
-  actual_start_date: string;
-  actual_close_date: string;
-  work_permit_url: string;
-  storage_path: string;
-  user_id: number;
-  work_order_id: number;
-  work_progress: SupabaseWorkProgress[] | null;
-  work_verification: SupabaseWorkVerification[] | null;
+  quantity: number | null;
+  uom: string | null;
+  is_additional_wo_details: boolean | null;
+  spk_number: string | null;
+  spkk_number: string | null;
+  ptw_number: string | null;
+  pic: string | null;
+  planned_start_date: string | null;
+  target_close_date: string | null;
+  period_close_target: string | null;
+  actual_start_date: string | null;
+  actual_close_date: string | null;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
+  notes: string | null;
+  ppic_price?: number | null;
+  location: { location: string } | null;
+  work_scope: { work_scope: string } | null;
+  work_progress: SupabaseProgress[] | null;
+  work_verification: SupabaseVerification[] | null;
+  bastp_work_details: SupabaseBastpLink[] | null;
+  invoice_work_details: SupabaseInvoiceLine[] | null;
 }
 
-interface SupabaseInvoice {
+interface SupabaseWorkOrder {
   id: number;
-  created_at: string;
-  updated_at: string;
-  wo_document_collection_date: string;
-  invoice_number: string;
-  faktur_number: string;
-  due_date: string;
-  delivery_date: string;
-  collection_date: string;
-  receiver_name: string;
-  payment_price: number;
-  payment_status: boolean;
-  payment_date: string;
-  remarks: string;
-  work_order_id: number;
-  user_id: number;
+  deleted_at: string | null;
+  shipyard_wo_number: string | null;
+  customer_wo_number: string | null;
+  shipyard_wo_date: string | null;
+  customer_wo_date: string | null;
+  is_additional_wo: boolean | null;
+  work_type: string | null;
+  work_location: string | null;
+  wo_print_number: number | null;
+  project: { project_name: string; docking_type: string | null } | null;
+  kapro: { kapro_name: string } | null;
+  work_details: SupabaseWorkDetail[] | null;
 }
 
-interface SupabaseWorkProgress {
+interface SupabaseVessel {
   id: number;
-  progress_percentage: number;
-  report_date: string;
-  storage_path: string;
-  evidence_url: string;
-  work_details_id: number;
-  user_id: number;
-  created_at: string;
+  name: string;
+  type: string | null;
+  company: string | null;
+  fleet_number: number | null;
+  work_order: SupabaseWorkOrder[] | null;
 }
 
-interface SupabaseWorkVerification {
-  id: number;
-  verification_date: string;
-  work_verification: boolean;
-  user_id: number;
-  work_details_id: number;
-}
-
-// CSV generation utility with proper typing
+// CSV generation utility. Every row is built with the same keys in the same
+// order, so the header row (taken from the first row) fits all of them.
 export const generateCSV = (data: ExportRow[]): string => {
   if (!data.length) return "";
 
   const headers = Object.keys(data[0]);
-  const csvContent = [
+  return [
     headers.join(","),
     ...data.map((row) =>
       headers
         .map((header) => {
-          const value = row[header as keyof ExportRow];
-          // Handle null/undefined values and escape commas and quotes
+          const value = row[header];
           if (value === null || value === undefined) return "";
-          const stringValue = String(value);
-          if (
-            stringValue.includes(",") ||
-            stringValue.includes('"') ||
-            stringValue.includes("\n")
-          ) {
-            return `"${stringValue.replace(/"/g, '""')}"`;
-          }
-          return stringValue;
+          const text = String(value);
+          return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
         })
-        .join(",")
+        .join(","),
     ),
   ].join("\n");
-
-  return csvContent;
 };
 
-// Download file utility
+// Download file utility. `bom` adds a UTF-8 byte-order mark, which makes Excel
+// read a CSV as UTF-8 (accented or non-Latin characters show correctly); it is
+// opt-in because the import templates, which share this helper, are read back
+// by our own CSV parser.
 export const downloadFile = (
   content: string,
   filename: string,
-  mimeType: string
+  mimeType: string,
+  options?: { bom?: boolean },
 ) => {
-  const blob = new Blob([content], { type: mimeType });
+  const blob = new Blob([options?.bom ? `\uFEFF${content}` : content], {
+    type: options?.bom ? `${mimeType};charset=utf-8` : mimeType,
+  });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -206,400 +184,316 @@ export const downloadFile = (
   URL.revokeObjectURL(url);
 };
 
-// Function to remove financial data from invoice info
-const sanitizeInvoiceData = (
-  invoiceInfo: Partial<ExportRow>,
-  includeFinancialData: boolean
-): Partial<ExportRow> => {
-  if (!includeFinancialData) {
-    // Remove sensitive financial fields
-    const { payment_price, ...sanitizedInvoice } = invoiceInfo;
-    return sanitizedInvoice;
-  }
-  return invoiceInfo;
-};
+const live = <T extends { deleted_at: string | null }>(rows: T[] | null) =>
+  (rows || []).filter((row) => !row.deleted_at);
 
-// Helper function to create base invoice info
-const createInvoiceInfo = (
-  invoice: SupabaseInvoice,
-  includeFinancialData: boolean
-): Partial<ExportRow> => {
-  const rawInvoiceInfo = {
-    invoice_id: invoice.id,
-    invoice_created_at: invoice.created_at,
-    invoice_updated_at: invoice.updated_at,
-    wo_document_collection_date: invoice.wo_document_collection_date,
-    invoice_number: invoice.invoice_number,
-    faktur_number: invoice.faktur_number,
-    invoice_due_date: invoice.due_date,
-    delivery_date: invoice.delivery_date,
-    collection_date: invoice.collection_date,
-    receiver_name: invoice.receiver_name,
-    payment_price: invoice.payment_price,
-    payment_status: invoice.payment_status,
-    payment_date: invoice.payment_date,
-    invoice_remarks: invoice.remarks,
-    invoice_work_order_id: invoice.work_order_id,
-    invoice_user_id: invoice.user_id,
-  };
-
-  return sanitizeInvoiceData(rawInvoiceInfo, includeFinancialData);
-};
-
-// Helper function to create null invoice info
-const createNullInvoiceInfo = (
-  includeFinancialData: boolean
-): Partial<ExportRow> => {
-  const nullInvoiceInfo = {
-    invoice_id: null,
-    invoice_created_at: null,
-    invoice_updated_at: null,
-    wo_document_collection_date: null,
-    invoice_number: null,
-    faktur_number: null,
-    invoice_due_date: null,
-    delivery_date: null,
-    collection_date: null,
-    receiver_name: null,
-    payment_price: null,
-    payment_status: null,
-    payment_date: null,
-    invoice_remarks: null,
-    invoice_work_order_id: null,
-    invoice_user_id: null,
-  };
-
-  return sanitizeInvoiceData(nullInvoiceInfo, includeFinancialData);
-};
-
-// Export comprehensive vessel data with all related tables joined
-export const exportVesselData = async (
-  options: ExportOptions
-): Promise<ExportData> => {
-  const vesselFilter = options.filters?.vesselIds || [];
-  const includeFinancialData = options.includeFinancialData ?? false;
-
-  let vesselName = "all_vessels";
-
-  // Generate filename based on vessel selection and access level
-  if (vesselFilter.length > 0) {
-    if (vesselFilter.length === 1) {
-      const { data: vesselData } = await supabase
-        .from("vessel")
-        .select("name")
-        .eq("id", vesselFilter[0])
-        .single();
-
-      vesselName =
-        vesselData?.name?.replace(/[^a-zA-Z0-9]/g, "_") ||
-        `vessel_${vesselFilter[0]}`;
-    } else {
-      vesselName = `${vesselFilter.length}_vessels`;
-    }
-  }
-
-  // Build the comprehensive query with correct vessel columns
-  let query = supabase
-    .from("vessel")
-    .select(
-      `
+const SELECT_VESSEL = (includePpicPrice: boolean, includeFinancial: boolean) => `
+  id,
+  name,
+  type,
+  company,
+  fleet_number,
+  work_order (
+    id,
+    deleted_at,
+    shipyard_wo_number,
+    customer_wo_number,
+    shipyard_wo_date,
+    customer_wo_date,
+    is_additional_wo,
+    work_type,
+    work_location,
+    wo_print_number,
+    project:project_id ( project_name, docking_type ),
+    kapro:kapro_id ( kapro_name ),
+    work_details (
       id,
-      name,
-      type,
-      company,
-      work_order (
+      deleted_at,
+      description,
+      quantity,
+      uom,
+      is_additional_wo_details,
+      spk_number,
+      spkk_number,
+      ptw_number,
+      pic,
+      planned_start_date,
+      target_close_date,
+      period_close_target,
+      actual_start_date,
+      actual_close_date,
+      cancelled_at,
+      cancellation_reason,
+      notes,
+      ${includePpicPrice ? "ppic_price," : ""}
+      location:location_id ( location ),
+      work_scope:work_scope_id ( work_scope ),
+      work_progress (
         id,
+        deleted_at,
+        progress_percentage,
+        report_date,
+        notes,
+        is_imported,
+        evidence_url
+      ),
+      work_verification (
+        id,
+        deleted_at,
         created_at,
-        updated_at,
-        customer_wo_number,
-        customer_wo_date,
-        shipyard_wo_number,
-        shipyard_wo_date,
-        wo_document_delivery_date,
-        user_id,
-        vessel_id,
-        work_details (
+        status,
+        verification_date,
+        verification_notes,
+        is_auto_verified
+      ),
+      bastp_work_details (
+        id,
+        deleted_at,
+        materials_status,
+        bastp:bastp_id (
           id,
-          created_at,
-          updated_at,
-          description,
-          location,
-          pic,
-          planned_start_date,
-          target_close_date,
-          period_close_target,
-          actual_start_date,
-          actual_close_date,
-          work_permit_url,
-          storage_path,
-          user_id,
-          work_order_id,
-          work_progress (
+          deleted_at,
+          number,
+          date,
+          status,
+          invoice_details (
             id,
-            progress_percentage,
-            report_date,
-            storage_path,
-            evidence_url,
-            work_details_id,
-            user_id,
-            created_at
-          ),
-          work_verification (
-            id,
-            verification_date,
-            work_verification,
-            user_id,
-            work_details_id
+            deleted_at,
+            invoice_number,
+            invoice_date,
+            created_at,
+            faktur_number,
+            due_date,
+            delivery_date,
+            collection_date,
+            receiver_name,
+            payment_status,
+            payment_date,
+            remarks
+            ${includeFinancial ? ", total_price_before, ppn, pph_23, total_price_after" : ""}
           )
-        ),
-        invoice_details (
-          id,
-          created_at,
-          updated_at,
-          wo_document_collection_date,
-          invoice_number,
-          faktur_number,
-          due_date,
-          delivery_date,
-          collection_date,
-          receiver_name,
-          payment_price,
-          payment_status,
-          payment_date,
-          remarks,
-          work_order_id,
-          user_id
         )
+      ),
+      invoice_work_details (
+        deleted_at,
+        invoice_details_id
+        ${includeFinancial ? ", unit_price, payment_price" : ""}
       )
-    `
     )
-    .is("deleted_at", null)
-    .is("work_order.work_details.deleted_at", null);
+  )
+`;
 
-  // Apply vessel filter if specified
-  if (vesselFilter.length > 0) {
-    query = query.in("id", vesselFilter);
-  }
+// The vessels are read a few at a time: all of them in one request carries
+// every work detail, progress report and invoice at once, which can run past
+// the database's time limit.
+const BATCH_SIZE = 6;
 
-  const { data: vessels, error } = await query;
+const errorMessage = (error: unknown) =>
+  error instanceof Error
+    ? error.message
+    : (error as { message?: string })?.message || "Unknown error occurred";
 
-  if (error) {
-    console.error("Supabase query error:", error);
-    throw error;
-  }
+// One row per progress report of every work detail, with the work order,
+// project, latest verification, BASTP and invoice that work detail belongs
+// to repeated on each. Work details without progress, work orders without
+// work details and vessels without work orders still get a row, so nothing
+// drops out of the file.
+function buildRows(
+  vessel: SupabaseVessel,
+  includeFinancial: boolean,
+  includePpicPrice: boolean,
+): ExportRow[] {
+  const rows: ExportRow[] = [];
 
-  if (!vessels || vessels.length === 0) {
-    const accessSuffix = includeFinancialData ? "_full" : "_operational";
-    return {
-      data: [],
-      filename: `vessel_data_${vesselName}${accessSuffix}_${
-        new Date().toISOString().split("T")[0]
-      }.csv`,
-      totalRecords: 0,
-    };
-  }
+  const row = (
+    workOrder: SupabaseWorkOrder | null,
+    detail: SupabaseWorkDetail | null,
+    progress: SupabaseProgress | null,
+  ): ExportRow => {
+    const verification = detail
+      ? live(detail.work_verification).sort(
+          (a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id,
+        )[0]
+      : undefined;
+    const link = detail
+      ? live(detail.bastp_work_details).find((l) => l.bastp && !l.bastp.deleted_at)
+      : undefined;
+    const bastp = link?.bastp ?? null;
+    const invoice = bastp ? live(bastp.invoice_details)[0] : undefined;
+    const invoiceLine =
+      detail && invoice
+        ? live(detail.invoice_work_details).find(
+            (l) => l.invoice_details_id === invoice.id,
+          )
+        : undefined;
 
-  // Flatten the nested data structure into a single table format
-  const flattenedData: ExportRow[] = [];
-
-  (vessels as SupabaseVessel[]).forEach((vessel) => {
-    const baseVesselInfo = {
+    const out: ExportRow = {
       vessel_id: vessel.id,
       vessel_name: vessel.name,
       vessel_type: vessel.type,
       vessel_company: vessel.company,
+      fleet_number: vessel.fleet_number,
+
+      project_name: workOrder?.project?.project_name ?? null,
+      docking_type: workOrder?.project?.docking_type ?? null,
+
+      work_order_id: workOrder?.id ?? null,
+      shipyard_wo_number: workOrder?.shipyard_wo_number ?? null,
+      customer_wo_number: workOrder?.customer_wo_number ?? null,
+      shipyard_wo_date: workOrder?.shipyard_wo_date ?? null,
+      customer_wo_date: workOrder?.customer_wo_date ?? null,
+      is_additional_wo: workOrder?.is_additional_wo ?? null,
+      work_type: workOrder?.work_type ?? null,
+      work_location: workOrder?.work_location ?? null,
+      project_leader: workOrder?.kapro?.kapro_name ?? null,
+      wo_print_number: workOrder?.wo_print_number ?? null,
+
+      work_detail_id: detail?.id ?? null,
+      work_description: detail?.description ?? null,
+      work_scope: detail?.work_scope?.work_scope ?? null,
+      work_detail_location: detail?.location?.location ?? null,
+      quantity: detail?.quantity ?? null,
+      uom: detail?.uom ?? null,
+      is_additional_work_detail: detail?.is_additional_wo_details ?? null,
+      spk_number: detail?.spk_number ?? null,
+      spkk_number: detail?.spkk_number ?? null,
+      ptw_number: detail?.ptw_number ?? null,
+      work_pic: detail?.pic ?? null,
+      planned_start_date: detail?.planned_start_date ?? null,
+      target_close_date: detail?.target_close_date ?? null,
+      period_close_target: detail?.period_close_target ?? null,
+      actual_start_date: detail?.actual_start_date ?? null,
+      actual_close_date: detail?.actual_close_date ?? null,
+      cancelled_at: detail?.cancelled_at ?? null,
+      cancellation_reason: detail?.cancellation_reason ?? null,
+      work_detail_notes: detail?.notes ?? null,
+
+      verification_status: verification?.status ?? null,
+      verification_date: verification?.verification_date ?? null,
+      verification_notes: verification?.verification_notes ?? null,
+      verification_auto: verification?.is_auto_verified ?? null,
+
+      progress_id: progress?.id ?? null,
+      progress_percentage: progress?.progress_percentage ?? 0,
+      report_date: progress?.report_date ?? null,
+      progress_notes: progress?.notes ?? null,
+      progress_imported: progress?.is_imported ?? null,
+      evidence_url: progress?.evidence_url ?? null,
+
+      bastp_number: bastp?.number ?? null,
+      bastp_date: bastp?.date ?? null,
+      bastp_status: bastp?.status ?? null,
+      materials_status: link?.materials_status ?? null,
+
+      invoice_number: invoice?.invoice_number ?? null,
+      invoice_date: invoice ? (invoice.invoice_date || invoice.created_at.slice(0, 10)) : null,
+      faktur_number: invoice?.faktur_number ?? null,
+      invoice_due_date: invoice?.due_date ?? null,
+      delivery_date: invoice?.delivery_date ?? null,
+      collection_date: invoice?.collection_date ?? null,
+      receiver_name: invoice?.receiver_name ?? null,
+      payment_status: invoice ? (invoice.payment_status ? "Paid" : "Unpaid") : null,
+      payment_date: invoice?.payment_date ?? null,
+      invoice_remarks: invoice?.remarks ?? null,
     };
 
-    // If vessel has work orders
-    if (vessel.work_order && vessel.work_order.length > 0) {
-      vessel.work_order.forEach((workOrder) => {
-        const baseWorkOrderInfo = {
-          ...baseVesselInfo,
-          work_order_id: workOrder.id,
-          wo_created_at: workOrder.created_at,
-          wo_updated_at: workOrder.updated_at,
-          customer_wo_number: workOrder.customer_wo_number,
-          customer_wo_date: workOrder.customer_wo_date,
-          shipyard_wo_number: workOrder.shipyard_wo_number,
-          shipyard_wo_date: workOrder.shipyard_wo_date,
-          wo_document_delivery_date: workOrder.wo_document_delivery_date,
-          wo_user_id: workOrder.user_id,
-          wo_vessel_id: workOrder.vessel_id,
-        };
-
-        // Add invoice information if exists (with role-based filtering)
-        let invoiceInfo: Partial<ExportRow> = {};
-        if (workOrder.invoice_details && workOrder.invoice_details.length > 0) {
-          const invoice = workOrder.invoice_details[0]; // Take first invoice
-          invoiceInfo = createInvoiceInfo(invoice, includeFinancialData);
-        }
-
-        // If work order has work details
-        if (workOrder.work_details && workOrder.work_details.length > 0) {
-          workOrder.work_details.forEach((workDetail) => {
-            const baseWorkDetailInfo = {
-              ...baseWorkOrderInfo,
-              ...invoiceInfo,
-              work_detail_id: workDetail.id,
-              wd_created_at: workDetail.created_at,
-              wd_updated_at: workDetail.updated_at,
-              work_description: workDetail.description,
-              work_location: workDetail.location,
-              work_pic: workDetail.pic,
-              wd_planned_start_date: workDetail.planned_start_date,
-              wd_target_close_date: workDetail.target_close_date,
-              period_close_target: workDetail.period_close_target,
-              wd_actual_start_date: workDetail.actual_start_date,
-              wd_actual_close_date: workDetail.actual_close_date,
-              work_permit_url: workDetail.work_permit_url,
-              wd_storage_path: workDetail.storage_path,
-              wd_user_id: workDetail.user_id,
-              wd_work_order_id: workDetail.work_order_id,
-            };
-
-            // Add verification info if exists
-            let verificationInfo: Partial<ExportRow> = {};
-            if (
-              workDetail.work_verification &&
-              workDetail.work_verification.length > 0
-            ) {
-              const verification = workDetail.work_verification[0];
-              verificationInfo = {
-                verification_id: verification.id,
-                verification_date: verification.verification_date,
-                work_verification: verification.work_verification,
-                verification_user_id: verification.user_id,
-                verification_work_details_id: verification.work_details_id,
-              };
-            }
-
-            // If work detail has progress records
-            if (
-              workDetail.work_progress &&
-              workDetail.work_progress.length > 0
-            ) {
-              workDetail.work_progress.forEach((progress) => {
-                flattenedData.push({
-                  ...baseWorkDetailInfo,
-                  ...verificationInfo,
-                  progress_id: progress.id,
-                  progress_percentage: progress.progress_percentage,
-                  report_date: progress.report_date,
-                  progress_storage_path: progress.storage_path,
-                  evidence_url: progress.evidence_url,
-                  progress_work_details_id: progress.work_details_id,
-                  progress_user_id: progress.user_id,
-                  progress_created_at: progress.created_at,
-                } as ExportRow);
-              });
-            } else {
-              // Work detail without progress
-              flattenedData.push({
-                ...baseWorkDetailInfo,
-                ...verificationInfo,
-                progress_id: null,
-                progress_percentage: 0,
-                report_date: null,
-                progress_storage_path: null,
-                evidence_url: null,
-                progress_work_details_id: null,
-                progress_user_id: null,
-                progress_created_at: null,
-              } as ExportRow);
-            }
-          });
-        } else {
-          // Work order without work details
-          flattenedData.push({
-            ...baseWorkOrderInfo,
-            ...invoiceInfo,
-            work_detail_id: null,
-            wd_created_at: null,
-            wd_updated_at: null,
-            work_description: null,
-            work_location: null,
-            work_pic: null,
-            wd_planned_start_date: null,
-            wd_target_close_date: null,
-            period_close_target: null,
-            wd_actual_start_date: null,
-            wd_actual_close_date: null,
-            work_permit_url: null,
-            wd_storage_path: null,
-            wd_user_id: null,
-            wd_work_order_id: null,
-            verification_id: null,
-            verification_date: null,
-            work_verification: null,
-            verification_user_id: null,
-            verification_work_details_id: null,
-            progress_id: null,
-            progress_percentage: 0,
-            report_date: null,
-            progress_storage_path: null,
-            evidence_url: null,
-            progress_work_details_id: null,
-            progress_user_id: null,
-            progress_created_at: null,
-          } as ExportRow);
-        }
-      });
-    } else {
-      // Vessel without work orders
-      const nullInvoiceInfo = createNullInvoiceInfo(includeFinancialData);
-
-      flattenedData.push({
-        ...baseVesselInfo,
-        work_order_id: null,
-        wo_created_at: null,
-        wo_updated_at: null,
-        customer_wo_number: null,
-        customer_wo_date: null,
-        shipyard_wo_number: null,
-        shipyard_wo_date: null,
-        wo_document_delivery_date: null,
-        wo_user_id: null,
-        wo_vessel_id: null,
-        ...nullInvoiceInfo,
-        work_detail_id: null,
-        wd_created_at: null,
-        wd_updated_at: null,
-        work_description: null,
-        work_location: null,
-        work_pic: null,
-        wd_planned_start_date: null,
-        wd_target_close_date: null,
-        period_close_target: null,
-        wd_actual_start_date: null,
-        wd_actual_close_date: null,
-        work_permit_url: null,
-        wd_storage_path: null,
-        wd_user_id: null,
-        wd_work_order_id: null,
-        verification_id: null,
-        verification_date: null,
-        work_verification: null,
-        verification_user_id: null,
-        verification_work_details_id: null,
-        progress_id: null,
-        progress_percentage: 0,
-        report_date: null,
-        progress_storage_path: null,
-        evidence_url: null,
-        progress_work_details_id: null,
-        progress_user_id: null,
-        progress_created_at: null,
-      } as ExportRow);
+    if (includePpicPrice) out.ppic_price = detail?.ppic_price ?? null;
+    if (includeFinancial) {
+      out.invoice_unit_price = invoiceLine?.unit_price ?? null;
+      out.invoice_amount = invoiceLine?.payment_price ?? null;
+      out.invoice_subtotal_before_tax = invoice?.total_price_before ?? null;
+      out.invoice_ppn = invoice?.ppn ?? null;
+      out.invoice_pph_23 = invoice?.pph_23 ?? null;
+      out.invoice_total_after_tax = invoice?.total_price_after ?? null;
     }
+    return out;
+  };
+
+  const workOrders = live(vessel.work_order);
+  if (workOrders.length === 0) {
+    rows.push(row(null, null, null));
+    return rows;
+  }
+  workOrders.forEach((workOrder) => {
+    const details = live(workOrder.work_details);
+    if (details.length === 0) {
+      rows.push(row(workOrder, null, null));
+      return;
+    }
+    details.forEach((detail) => {
+      const progress = live(detail.work_progress).sort(
+        (a, b) =>
+          (a.report_date || "").localeCompare(b.report_date || "") || a.id - b.id,
+      );
+      if (progress.length === 0) rows.push(row(workOrder, detail, null));
+      else progress.forEach((p) => rows.push(row(workOrder, detail, p)));
+    });
   });
+  return rows;
+}
 
-  const timestamp = new Date().toISOString().split("T")[0];
-  const accessSuffix = includeFinancialData ? "_full" : "_operational";
-  const filename = `vessel_data_${vesselName}${accessSuffix}_${timestamp}.csv`;
+// Export comprehensive vessel data with all related tables joined
+export const exportVesselData = async (
+  options: ExportOptions,
+): Promise<ExportData> => {
+  const vesselFilter = options.filters?.vesselIds || [];
+  const includeFinancial = options.includeFinancialData ?? false;
+  const includePpicPrice = options.includePpicPrice ?? false;
 
+  // Which vessels: the selection, or every active vessel.
+  let vesselIds = vesselFilter;
+  let vesselName = "all_vessels";
+  if (vesselIds.length === 0) {
+    const { data, error } = await supabase
+      .from("vessel")
+      .select("id")
+      .is("deleted_at", null)
+      .order("name");
+    if (error) throw new Error(errorMessage(error));
+    vesselIds = (data || []).map((v) => v.id as number);
+  } else if (vesselIds.length === 1) {
+    const { data } = await supabase
+      .from("vessel")
+      .select("name")
+      .eq("id", vesselIds[0])
+      .single();
+    vesselName =
+      data?.name?.replace(/[^a-zA-Z0-9]/g, "_") || `vessel_${vesselIds[0]}`;
+  } else {
+    vesselName = `${vesselIds.length}_vessels`;
+  }
+
+  const batches: number[][] = [];
+  for (let i = 0; i < vesselIds.length; i += BATCH_SIZE) {
+    batches.push(vesselIds.slice(i, i + BATCH_SIZE));
+  }
+
+  const select = SELECT_VESSEL(includePpicPrice, includeFinancial);
+  const rows: ExportRow[] = [];
+  for (const ids of batches) {
+    const { data, error } = await supabase
+      .from("vessel")
+      .select(select)
+      .in("id", ids)
+      .is("deleted_at", null)
+      .order("name");
+    if (error) {
+      console.error("Supabase query error:", error);
+      throw new Error(errorMessage(error));
+    }
+    (data as unknown as SupabaseVessel[]).forEach((vessel) =>
+      rows.push(...buildRows(vessel, includeFinancial, includePpicPrice)),
+    );
+  }
+
+  const now = new Date();
+  const stamp = `${now.toLocaleDateString("en-CA")}_${now
+    .toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+    .replace(":", "")}`;
+  const accessSuffix = includeFinancial ? "_full" : "_operational";
   return {
-    data: flattenedData,
-    filename,
-    totalRecords: flattenedData.length,
+    data: rows,
+    filename: `vessel_data_${vesselName}${accessSuffix}_${stamp}.csv`,
+    totalRecords: rows.length,
   };
 };

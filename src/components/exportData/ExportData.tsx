@@ -1,4 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  Info,
+  Lock,
+  Search,
+  Ship,
+  Unlock,
+  XCircle,
+} from "lucide-react";
 import {
   exportVesselData,
   generateCSV,
@@ -11,7 +22,8 @@ import LoadingState from "../common/LoadingState";
 interface Vessel {
   id: number;
   name: string;
-  company: string;
+  // Some vessels have no company recorded.
+  company: string | null;
 }
 
 interface UserProfile {
@@ -28,6 +40,23 @@ export default function ExportData() {
   const [searchTerm, setSearchTerm] = useState("");
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  // The pop-up shown after an export: success or the reason it failed.
+  const [notice, setNotice] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showNotice = (type: "success" | "error", message: string) => {
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    setNotice({ type, message });
+    noticeTimer.current = setTimeout(() => setNotice(null), 4000);
+  };
+  useEffect(
+    () => () => {
+      if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    },
+    [],
+  );
 
   // Check user profile and role
   const loadUserProfile = async () => {
@@ -97,12 +126,20 @@ export default function ExportData() {
             ? { vesselIds: selectedVessels }
             : undefined,
         includeFinancialData: hasFinancialAccess,
+        // The PPIC price is limited to MASTER and PPIC, whatever else a role
+        // may see.
+        includePpicPrice: ["MASTER", "PPIC"].includes(
+          userProfile.role.toUpperCase(),
+        ),
       };
 
       const exportResult = await exportVesselData(exportOptions);
+      if (exportResult.totalRecords === 0) {
+        throw new Error("There is no data to export for this selection");
+      }
       const content = generateCSV(exportResult.data);
 
-      downloadFile(content, exportResult.filename, "text/csv");
+      downloadFile(content, exportResult.filename, "text/csv", { bom: true });
 
       const vesselText =
         selectedVessels.length > 0
@@ -113,43 +150,18 @@ export default function ExportData() {
         ? "with financial data"
         : "with operational data only";
 
-      // Better success notification
-      const notification = document.createElement("div");
-      notification.className =
-        "fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 transform transition-all duration-500";
-      notification.innerHTML = `
-        <div class="flex items-center space-x-2">
-          <span class="text-lg">✅</span>
-          <span>Successfully exported ${exportResult.totalRecords} records for ${vesselText} (${accessLevel})</span>
-        </div>
-      `;
-      document.body.appendChild(notification);
-
-      setTimeout(() => {
-        notification.classList.add("-translate-y-2", "opacity-0");
-        setTimeout(() => document.body.removeChild(notification), 500);
-      }, 4000);
+      showNotice(
+        "success",
+        `Successfully exported ${exportResult.totalRecords} records for ${vesselText} (${accessLevel})`,
+      );
     } catch (error) {
       console.error("Export error:", error);
-      // Better error notification with proper typing
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-
-      const notification = document.createElement("div");
-      notification.className =
-        "fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50";
-      notification.innerHTML = `
-        <div class="flex items-center space-x-2">
-          <span class="text-lg">❌</span>
-          <span>Export failed: ${errorMessage}</span>
-        </div>
-      `;
-      document.body.appendChild(notification);
-
-      setTimeout(() => {
-        notification.classList.add("-translate-y-2", "opacity-0");
-        setTimeout(() => document.body.removeChild(notification), 500);
-      }, 4000);
+      showNotice(
+        "error",
+        `Export failed: ${
+          error instanceof Error ? error.message : "Unknown error occurred"
+        }`,
+      );
     } finally {
       setLoading(false);
     }
@@ -169,7 +181,7 @@ export default function ExportData() {
     const filteredVessels = vessels.filter(
       (vessel) =>
         vessel.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        vessel.company.toLowerCase().includes(searchTerm.toLowerCase())
+        (vessel.company ?? "").toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     if (selectedVessels.length === filteredVessels.length) {
@@ -183,7 +195,7 @@ export default function ExportData() {
   const filteredVessels = vessels.filter(
     (vessel) =>
       vessel.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vessel.company.toLowerCase().includes(searchTerm.toLowerCase())
+      (vessel.company ?? "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const selectedCount = selectedVessels.length;
@@ -204,7 +216,7 @@ export default function ExportData() {
       <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6">
           <div className="flex items-center">
-            <span className="text-red-600 mr-2">⚠️</span>
+            <AlertTriangle className="w-5 h-5 text-red-600 mr-2 shrink-0" />
             <div>
               <h3 className="text-red-800 font-medium">Access Error</h3>
               <p className="text-red-700">
@@ -220,12 +232,27 @@ export default function ExportData() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
+      {notice && (
+        <div
+          role="status"
+          className={`fixed top-4 right-4 z-50 flex max-w-sm items-start gap-2 rounded-lg px-5 py-3 text-white shadow-lg ${
+            notice.type === "success" ? "bg-green-500" : "bg-red-500"
+          }`}
+        >
+          {notice.type === "success" ? (
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+          ) : (
+            <XCircle className="mt-0.5 h-5 w-5 shrink-0" />
+          )}
+          <span>{notice.message}</span>
+        </div>
+      )}
       {/* Header - Same pattern as other pages */}
       <div className="mb-6">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Export Data</h1>
         <p className="text-gray-600">
-          Export comprehensive vessel data including work orders, progress, and
-          invoices
+          Export vessel data with its projects, work orders, work details,
+          progress, verification, BASTP and invoices
         </p>
 
         {/* User Role Info */}
@@ -252,7 +279,11 @@ export default function ExportData() {
               hasFinancialAccess ? "text-green-600" : "text-orange-600"
             }`}
           >
-            <span>{hasFinancialAccess ? "🔓" : "🔒"}</span>
+            {hasFinancialAccess ? (
+              <Unlock className="w-3.5 h-3.5" />
+            ) : (
+              <Lock className="w-3.5 h-3.5" />
+            )}
             <span>
               {hasFinancialAccess
                 ? "Full access (including financial data)"
@@ -266,14 +297,14 @@ export default function ExportData() {
       {!hasFinancialAccess && (
         <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
           <div className="flex items-start">
-            <span className="text-amber-500 mr-2 mt-0.5">ℹ️</span>
+            <Info className="w-5 h-5 text-amber-500 mr-2 mt-0.5 shrink-0" />
             <div>
               <h4 className="text-amber-800 font-medium">
                 Limited Export Access
               </h4>
               <p className="text-amber-700 text-sm mt-1">
                 Your role ({userProfile.role}) has operational access only.
-                Financial data such as payment amounts will be excluded from
+                Invoice prices, PPN, PPh 23 and totals will be excluded from
                 exports. Contact your administrator if you need access to
                 financial information.
               </p>
@@ -313,9 +344,7 @@ export default function ExportData() {
                 Search Vessels
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                  🔍
-                </span>
+                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search by vessel name or company..."
@@ -368,7 +397,7 @@ export default function ExportData() {
             <div className="max-h-80 overflow-y-auto">
               {filteredVessels.length === 0 ? (
                 <div className="p-8 text-center text-gray-500">
-                  <span className="text-4xl mb-4 block">🔍</span>
+                  <Search className="w-10 h-10 mb-4 mx-auto text-gray-300" />
                   <p>No vessels found matching your search criteria</p>
                 </div>
               ) : (
@@ -397,7 +426,7 @@ export default function ExportData() {
                             </div>
                           </div>
                           <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                            <span className="text-blue-600 text-sm">🚢</span>
+                            <Ship className="w-4 h-4 text-blue-600" />
                           </div>
                         </div>
                       </div>
@@ -415,12 +444,14 @@ export default function ExportData() {
             {/* Export Info */}
             <div className="text-sm text-gray-600">
               <p>
-                Export will include: vessel information, work orders, work
-                details, progress records, verification status
+                One row per progress report, with its vessel, project, work
+                order, work detail, latest verification, BASTP and invoice
+                (number, dates, payment status)
                 {hasFinancialAccess
-                  ? ", and invoice data including payment amounts"
-                  : ", and invoice data (excluding payment amounts)"}
-                .
+                  ? ", plus each invoice's prices, PPN, PPh 23 and totals"
+                  : " (without prices, PPN, PPh 23 and totals)"}
+                . Work details without progress and work orders without work
+                details are included too.
               </p>
             </div>
 
@@ -441,7 +472,7 @@ export default function ExportData() {
                 </>
               ) : (
                 <>
-                  <span className="mr-2">📊</span>
+                  <Download className="w-5 h-5 mr-2" />
                   Export {hasFinancialAccess ? "Full" : "Operational"} Data
                 </>
               )}
