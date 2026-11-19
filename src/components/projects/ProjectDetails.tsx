@@ -112,6 +112,19 @@ export default function ProjectDetails() {
   const [removingWOId, setRemovingWOId] = useState<number | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
 
+  // The work order opens on its vessel's Work Orders page, expanded and
+  // scrolled into view; Back there returns to this project.
+  const openWorkOrder = (workOrderId: number) => {
+    const vesselId = project?.vessel?.id;
+    if (!vesselId) return;
+    navigate(`/vessel/${vesselId}/work-orders`, {
+      state: {
+        highlightWorkOrderId: workOrderId,
+        from: { path: `/projects/${projectId}` },
+      },
+    });
+  };
+
   const fetchProject = useCallback(async () => {
     if (!projectId) return;
     try {
@@ -499,8 +512,17 @@ export default function ProjectDetails() {
 
                   return (
                     <tr key={wo.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                        {wo.shipyard_wo_number}
+                      <td className="px-6 py-4 text-sm font-medium">
+                        {/* Opens this work order, with its work details, on
+                            the vessel's Work Orders page. */}
+                        <button
+                          type="button"
+                          onClick={() => openWorkOrder(wo.id)}
+                          title="Open this work order and its work details"
+                          className="text-left text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {wo.shipyard_wo_number}
+                        </button>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
                         {new Date(wo.shipyard_wo_date).toLocaleDateString()}

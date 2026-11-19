@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { returnTargetFrom } from "../../types/navigation";
 import { useReactToPrint } from "react-to-print";
 import {
   supabase,
@@ -102,6 +103,13 @@ export default function VesselWorkOrders() {
   const { vesselId } = useParams<{ vesselId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  // Opened from a project's work order list: Back returns to that project.
+  const from = returnTargetFrom(location.state);
+  const backLabel = from?.path.startsWith("/projects")
+    ? "Back to Project"
+    : "Back to Dashboard";
+  const goBack = () =>
+    from ? navigate(from.path, { state: from.state }) : navigate("/work-orders");
   const { isOperationsReadOnly, isShippingCreateOnly, profile, isReadOnly } =
     useAuth();
   // ADMIN_SHIPPING can create work orders/details here but never edit/delete
@@ -542,7 +550,11 @@ export default function VesselWorkOrders() {
 
       navigate(location.pathname, {
         replace: true,
-        state: { vesselName: (location.state as { vesselName?: string })?.vesselName },
+        // `from` must survive this reset, or Back would lose the project.
+        state: {
+          vesselName: (location.state as { vesselName?: string })?.vesselName,
+          from,
+        },
       });
     }, 100);
 
@@ -826,10 +838,10 @@ export default function VesselWorkOrders() {
           <p className="text-red-600 mt-1">{error || "Vessel not found"}</p>
           <div className="mt-4 flex gap-2">
             <button
-              onClick={() => navigate("/work-orders")}
+              onClick={goBack}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
             >
-              ← Back to Dashboard
+              ← {backLabel}
             </button>
             <button
               onClick={fetchVesselWorkOrders}
@@ -1178,10 +1190,10 @@ export default function VesselWorkOrders() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => navigate("/work-orders")}
+              onClick={goBack}
               className="text-blue-600 hover:text-blue-800 flex items-center gap-2 transition-colors font-medium"
             >
-              <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+              <ArrowLeft className="w-4 h-4" /> {backLabel}
             </button>
           </div>
 
