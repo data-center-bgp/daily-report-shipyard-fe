@@ -8,16 +8,23 @@ import {
 } from "react";
 import { supabase } from "../lib/supabase";
 import { getLatestProgressRecord } from "../utils/progressPercentage";
+import { workTypeGroup } from "../constants/workTypes";
 
 export type BastpStatus = "DRAFT" | "VERIFIED" | "READY_FOR_INVOICE" | "INVOICED";
-export type WorkTypeCategory = "DOCKING" | "REPAIR";
+export type WorkTypeCategory = "DOCKING" | "REPAIR" | "NEW_BUILDING";
 export type WorkOrderStatus = "completed" | "inProgress" | "notStarted";
 
-// Anything not starting with "Docking" (including blank/legacy work orders)
-// is bucketed as Repair — matches the two categories the shipyard actually
-// distinguishes between (see src/constants/workTypes.ts).
-const categoryOf = (workType: string | null | undefined): WorkTypeCategory =>
-  workType && workType.startsWith("Docking") ? "DOCKING" : "REPAIR";
+// "Docking - ..." types are Docking, "New Building" is its own category, and
+// anything else (including blank/legacy work orders) is bucketed as Repair
+// (see src/constants/workTypes.ts).
+const categoryOf = (workType: string | null | undefined): WorkTypeCategory => {
+  const group = workTypeGroup(workType ?? "");
+  return group === "Docking"
+    ? "DOCKING"
+    : group === "New Building"
+      ? "NEW_BUILDING"
+      : "REPAIR";
+};
 
 interface RawWorkProgress {
   progress_percentage: number;
@@ -78,10 +85,12 @@ export interface DashboardStats {
   projectsInProgressTotal: number;
   projectsInProgressDocking: number;
   projectsInProgressRepair: number;
+  projectsInProgressNewBuilding: number;
   // Projects whose work orders (in that category) are all completed
   projectsCompletedTotal: number;
   projectsCompletedDocking: number;
   projectsCompletedRepair: number;
+  projectsCompletedNewBuilding: number;
   totalProjects: number;
   totalVessels: number;
 
@@ -89,9 +98,11 @@ export interface DashboardStats {
   workOrdersInProgressTotal: number;
   workOrdersInProgressDocking: number;
   workOrdersInProgressRepair: number;
+  workOrdersInProgressNewBuilding: number;
   workOrdersCompletedTotal: number;
   workOrdersCompletedDocking: number;
   workOrdersCompletedRepair: number;
+  workOrdersCompletedNewBuilding: number;
 
   // 3. Work details already completed
   workDetailsCompleted: number;
@@ -168,6 +179,7 @@ export interface VesselSummary {
   // null when the vessel has no work order of that category at all.
   dockingProgress: number | null;
   repairProgress: number | null;
+  newBuildingProgress: number | null;
   hasOverdue: boolean;
   readyForInvoiceCount: number;
   lastActivity?: string;
@@ -191,17 +203,21 @@ const emptyStats: DashboardStats = {
   projectsInProgressTotal: 0,
   projectsInProgressDocking: 0,
   projectsInProgressRepair: 0,
+  projectsInProgressNewBuilding: 0,
   projectsCompletedTotal: 0,
   projectsCompletedDocking: 0,
   projectsCompletedRepair: 0,
+  projectsCompletedNewBuilding: 0,
   totalProjects: 0,
   totalVessels: 0,
   workOrdersInProgressTotal: 0,
   workOrdersInProgressDocking: 0,
   workOrdersInProgressRepair: 0,
+  workOrdersInProgressNewBuilding: 0,
   workOrdersCompletedTotal: 0,
   workOrdersCompletedDocking: 0,
   workOrdersCompletedRepair: 0,
+  workOrdersCompletedNewBuilding: 0,
   workDetailsCompleted: 0,
   workDetailsNoProgress: 0,
   workDetailsInProgress: 0,
@@ -467,10 +483,14 @@ function useDashboardDataQuery() {
         if (status === "completed") {
           newStats.workOrdersCompletedTotal++;
           if (category === "DOCKING") newStats.workOrdersCompletedDocking++;
+          else if (category === "NEW_BUILDING")
+            newStats.workOrdersCompletedNewBuilding++;
           else newStats.workOrdersCompletedRepair++;
         } else {
           newStats.workOrdersInProgressTotal++;
           if (category === "DOCKING") newStats.workOrdersInProgressDocking++;
+          else if (category === "NEW_BUILDING")
+            newStats.workOrdersInProgressNewBuilding++;
           else newStats.workOrdersInProgressRepair++;
         }
 
@@ -536,12 +556,17 @@ function useDashboardDataQuery() {
       let projectsInProgressTotal = 0;
       let projectsInProgressDocking = 0;
       let projectsInProgressRepair = 0;
+      let projectsInProgressNewBuilding = 0;
       let projectsCompletedTotal = 0;
       let projectsCompletedDocking = 0;
       let projectsCompletedRepair = 0;
+      let projectsCompletedNewBuilding = 0;
       projectAccumulators.forEach((workOrders) => {
         const dockingWOs = workOrders.filter((w) => w.category === "DOCKING");
         const repairWOs = workOrders.filter((w) => w.category === "REPAIR");
+        const newBuildingWOs = workOrders.filter(
+          (w) => w.category === "NEW_BUILDING",
+        );
 
         if (isIncomplete(workOrders)) projectsInProgressTotal++;
         else projectsCompletedTotal++;
@@ -551,6 +576,9 @@ function useDashboardDataQuery() {
 
         if (isIncomplete(repairWOs)) projectsInProgressRepair++;
         else if (repairWOs.length > 0) projectsCompletedRepair++;
+
+        if (isIncomplete(newBuildingWOs)) projectsInProgressNewBuilding++;
+        else if (newBuildingWOs.length > 0) projectsCompletedNewBuilding++;
       });
       newStats.projectsInProgressTotal = projectsInProgressTotal;
       newStats.projectsInProgressDocking = projectsInProgressDocking;
@@ -558,6 +586,8 @@ function useDashboardDataQuery() {
       newStats.projectsCompletedTotal = projectsCompletedTotal;
       newStats.projectsCompletedDocking = projectsCompletedDocking;
       newStats.projectsCompletedRepair = projectsCompletedRepair;
+      newStats.projectsInProgressNewBuilding = projectsInProgressNewBuilding;
+      newStats.projectsCompletedNewBuilding = projectsCompletedNewBuilding;
 
       const newVesselSummaries: VesselSummary[] = Array.from(
         vesselAccumulators.entries(),
@@ -570,6 +600,9 @@ function useDashboardDataQuery() {
 
         const dockingWOs = workOrders.filter((w) => w.category === "DOCKING");
         const repairWOs = workOrders.filter((w) => w.category === "REPAIR");
+        const newBuildingWOs = workOrders.filter(
+          (w) => w.category === "NEW_BUILDING",
+        );
 
         const lastActivity = workOrders
           .map((w) => w.lastActivity)
@@ -590,6 +623,9 @@ function useDashboardDataQuery() {
           overallProgress: avg(workOrders.map((w) => w.overallProgress)) ?? 0,
           dockingProgress: avg(dockingWOs.map((w) => w.overallProgress)),
           repairProgress: avg(repairWOs.map((w) => w.overallProgress)),
+          newBuildingProgress: avg(
+            newBuildingWOs.map((w) => w.overallProgress),
+          ),
           hasOverdue: workOrders.some((w) => w.hasOverdue),
           readyForInvoiceCount: workOrders.reduce(
             (sum, w) => sum + w.readyForInvoiceCount,

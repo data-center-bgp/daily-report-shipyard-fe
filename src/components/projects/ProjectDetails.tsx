@@ -25,6 +25,10 @@ import {
 } from "lucide-react";
 import LoadingState from "../common/LoadingState";
 import RenameProjectModal from "./RenameProjectModal";
+import {
+  WORK_TYPE_GROUP_STYLE,
+  workTypeGroup,
+} from "../../constants/workTypes";
 
 interface ProjectDetail {
   id: number;
@@ -654,12 +658,10 @@ export default function ProjectDetails() {
                         <span
                           title={wo.work_type}
                           className={`inline-flex px-2 py-1 rounded text-xs font-medium cursor-help ${
-                            wo.work_type.startsWith("Docking")
-                              ? "bg-indigo-100 text-indigo-700"
-                              : "bg-teal-100 text-teal-700"
+                            WORK_TYPE_GROUP_STYLE[workTypeGroup(wo.work_type)]
                           }`}
                         >
-                          {wo.work_type.startsWith("Docking") ? "Docking" : "Repair"}
+                          {workTypeGroup(wo.work_type)}
                         </span>
                       ) : (
                         <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-500">

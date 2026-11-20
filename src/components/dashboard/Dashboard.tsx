@@ -201,7 +201,7 @@ export default function Dashboard() {
     );
     const countCategory = (
       list: typeof filteredWorkOrderRecords,
-      category: "DOCKING" | "REPAIR",
+      category: "DOCKING" | "REPAIR" | "NEW_BUILDING",
     ) => list.filter((wo) => wo.category === category).length;
 
     return {
@@ -209,9 +209,11 @@ export default function Dashboard() {
       workOrdersInProgressTotal: inProgress.length,
       workOrdersInProgressDocking: countCategory(inProgress, "DOCKING"),
       workOrdersInProgressRepair: countCategory(inProgress, "REPAIR"),
+      workOrdersInProgressNewBuilding: countCategory(inProgress, "NEW_BUILDING"),
       workOrdersCompletedTotal: completed.length,
       workOrdersCompletedDocking: countCategory(completed, "DOCKING"),
       workOrdersCompletedRepair: countCategory(completed, "REPAIR"),
+      workOrdersCompletedNewBuilding: countCategory(completed, "NEW_BUILDING"),
       workOrdersOriginal: filteredWorkOrderRecords.filter(
         (wo) => !wo.isAdditional,
       ).length,
@@ -774,7 +776,7 @@ export default function Dashboard() {
           total)
         </h2>
         <p className="text-sm font-medium text-gray-500 mb-2">In Progress</p>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1 mb-4 sm:mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1 mb-4 sm:mb-6">
           <StatCard
             label="All Work Types"
             value={filteredWorkOrderStats.workOrdersInProgressTotal}
@@ -793,9 +795,15 @@ export default function Dashboard() {
             color="text-teal-600"
             borderColor="border-teal-500"
           />
+          <StatCard
+            label="New Building"
+            value={filteredWorkOrderStats.workOrdersInProgressNewBuilding}
+            color="text-amber-600"
+            borderColor="border-amber-500"
+          />
         </div>
         <p className="text-sm font-medium text-gray-500 mb-2">Completed</p>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1">
           <StatCard
             label="All Work Types"
             value={filteredWorkOrderStats.workOrdersCompletedTotal}
@@ -811,6 +819,12 @@ export default function Dashboard() {
           <StatCard
             label="Repair Work"
             value={filteredWorkOrderStats.workOrdersCompletedRepair}
+            color="text-green-600"
+            borderColor="border-green-500"
+          />
+          <StatCard
+            label="New Building"
+            value={filteredWorkOrderStats.workOrdersCompletedNewBuilding}
             color="text-green-600"
             borderColor="border-green-500"
           />
@@ -1142,7 +1156,7 @@ export default function Dashboard() {
               </div>
               <p className="mt-1 text-sm text-slate-500">
                 Work progress across all vessels — combined, and split between
-                Docking and Repair
+                Docking, Repair and New Building
               </p>
             </div>
 
@@ -1330,7 +1344,8 @@ export default function Dashboard() {
                   </div>
 
                   {(vessel.dockingProgress !== null ||
-                    vessel.repairProgress !== null) && (
+                    vessel.repairProgress !== null ||
+                    vessel.newBuildingProgress !== null) && (
                     <div className="mt-3 space-y-1.5">
                       {vessel.dockingProgress !== null && (
                         <div className="flex items-center gap-2">
@@ -1359,6 +1374,21 @@ export default function Dashboard() {
                           />
                           <span className="w-9 flex-shrink-0 text-right text-[11px] text-slate-500 tabular-nums">
                             {vessel.repairProgress}%
+                          </span>
+                        </div>
+                      )}
+                      {vessel.newBuildingProgress !== null && (
+                        <div className="flex items-center gap-2">
+                          <span className="w-14 flex-shrink-0 text-[11px] text-slate-500">
+                            New Bldg
+                          </span>
+                          <ProgressTrack
+                            value={vessel.newBuildingProgress}
+                            color="bg-amber-500"
+                            height="h-1.5"
+                          />
+                          <span className="w-9 flex-shrink-0 text-right text-[11px] text-slate-500 tabular-nums">
+                            {vessel.newBuildingProgress}%
                           </span>
                         </div>
                       )}
@@ -1464,6 +1494,8 @@ export default function Dashboard() {
                               {vessel.repairProgress !== null
                                 ? `${vessel.repairProgress}%`
                                 : "—"}
+                              {vessel.newBuildingProgress !== null &&
+                                ` · New Building ${vessel.newBuildingProgress}%`}
                             </span>
                           </div>
                         </td>
