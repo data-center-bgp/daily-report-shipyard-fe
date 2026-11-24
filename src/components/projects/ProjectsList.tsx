@@ -14,6 +14,7 @@ import {
 import { PageSkeleton } from "../common/Skeleton";
 import Pagination from "../common/Pagination";
 import { READINESS_STATUS } from "./readinessStatus";
+import { ApprovalTags, type PlanApproval } from "./ApprovalTags";
 
 const PAGE_SIZE = 20;
 
@@ -44,6 +45,7 @@ const secondaryButton =
 
 export default function ProjectsList() {
   const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [planByProject, setPlanByProject] = useState<Map<number, PlanApproval>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -83,6 +85,21 @@ export default function ProjectsList() {
 
       if (fetchError) throw fetchError;
       setProjects((data as unknown as ProjectRow[]) || []);
+
+      // Which projects came from an approved docking plan. If this fails the
+      // PPIC tag just reads "Not required", so it never blocks the list.
+      const { data: plans } = await supabase
+        .from("docking_plans")
+        .select("id, approved_at, converted_project_id")
+        .not("converted_project_id", "is", null)
+        .is("deleted_at", null);
+      setPlanByProject(
+        new Map(
+          ((plans as (PlanApproval & { converted_project_id: number })[]) || []).map(
+            (p) => [p.converted_project_id, p],
+          ),
+        ),
+      );
     } catch (err) {
       console.error("Error fetching projects:", err);
       setError(err instanceof Error ? err.message : "Failed to load projects");
@@ -354,7 +371,7 @@ export default function ProjectsList() {
                     "Vessel",
                     "Planned dates",
                     "Work orders",
-                    "Readiness",
+                    "Checked by",
                   ].map((heading) => (
                     <th
                       key={heading}
@@ -368,8 +385,6 @@ export default function ProjectsList() {
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
                 {pageProjects.map((project) => {
-                  const statusKey = project.readiness_form?.status || "NONE";
-                  const badge = STATUS_BADGE[statusKey] || STATUS_BADGE.NONE;
                   const woCount = project.work_order?.length || 0;
                   const originalWorkDetails = (project.work_order || [])
                     .filter((wo) => !wo.is_additional_wo)
@@ -408,12 +423,10 @@ export default function ProjectsList() {
                         {woCount} work order{woCount === 1 ? "" : "s"}
                       </td>
                       <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${badge.className}`}
-                        >
-                          <badge.Icon className="h-3.5 w-3.5" aria-hidden="true" />
-                          {badge.label}
-                        </span>
+                        <ApprovalTags
+                          plan={planByProject.get(project.id) ?? null}
+                          readinessStatus={project.readiness_form?.status}
+                        />
                       </td>
                     </tr>
                   );

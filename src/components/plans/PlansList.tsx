@@ -4,6 +4,7 @@ import { CheckCircle2, ClipboardList, Plus, RefreshCw, Search, X } from "lucide-
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import { PageSkeleton } from "../common/Skeleton";
+import { ApprovalTags } from "../projects/ApprovalTags";
 import Pagination from "../common/Pagination";
 import { describeLead, formatPlanDate } from "../../utils/dockingPlans";
 import type { PlanStatus, PlanVessel } from "../../types/dockingPlan.types";
@@ -23,6 +24,8 @@ interface PlanListRow {
   target_docking_date: string;
   status: PlanStatus;
   revision_no: number;
+  approved_at: string | null;
+  converted_project: { readiness_form: { status: string } | null } | null;
   vessel: PlanVessel | null;
   author: { name: string | null } | null;
   docking_plan_work_orders:
@@ -67,7 +70,8 @@ export default function PlansList() {
         .from("docking_plans")
         .select(
           `
-          id, plan_name, docking_type, target_docking_date, status, revision_no,
+          id, plan_name, docking_type, target_docking_date, status, revision_no, approved_at,
+          converted_project:converted_project_id ( readiness_form:readiness_form_id ( status ) ),
           vessel:vessel_id ( id, name, type, company ),
           author:user_id ( name ),
           docking_plan_work_orders ( id, docking_plan_work_details ( id ) ),
@@ -412,6 +416,13 @@ export default function PlansList() {
                         </span>
                         {signOff && (
                           <div className="mt-1 text-sm text-slate-600">{signOff}</div>
+                        )}
+                        {plan.status === "CONVERTED" && (
+                          <ApprovalTags
+                            className="mt-2"
+                            plan={{ id: plan.id, approved_at: plan.approved_at }}
+                            readinessStatus={plan.converted_project?.readiness_form?.status}
+                          />
                         )}
                       </td>
                     </tr>

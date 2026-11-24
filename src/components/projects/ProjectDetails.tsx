@@ -23,6 +23,7 @@ import LoadingState from "../common/LoadingState";
 import RenameProjectModal from "./RenameProjectModal";
 import { ProgressTrack, Section } from "../dashboard/widgets";
 import { READINESS_STATUS } from "./readinessStatus";
+import { ApprovalTags, type PlanApproval } from "./ApprovalTags";
 import {
   WORK_TYPE_GROUP_STYLE,
   workTypeGroup,
@@ -271,6 +272,7 @@ export default function ProjectDetails() {
 
   const [removingWOId, setRemovingWOId] = useState<number | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [sourcePlan, setSourcePlan] = useState<PlanApproval | null>(null);
 
   const fetchProject = useCallback(async () => {
     if (!projectId) return;
@@ -296,6 +298,16 @@ export default function ProjectDetails() {
 
       if (fetchError) throw fetchError;
       setProject(data as unknown as ProjectDetail);
+
+      // The docking plan this project was converted from, if any. Failing to
+      // read it only hides the PPIC tag's detail, so it never blocks the page.
+      const { data: planData } = await supabase
+        .from("docking_plans")
+        .select("id, approved_at")
+        .eq("converted_project_id", projectId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      setSourcePlan(planData as PlanApproval | null);
 
       const { data: woData, error: woError } = await supabase
         .from("work_order")
@@ -527,6 +539,11 @@ export default function ProjectDetails() {
                 Jenis Docking: {project.docking_type}
               </p>
             )}
+            <ApprovalTags
+              className="mt-2"
+              plan={sourcePlan}
+              readinessStatus={project.readiness_form?.status}
+            />
           </div>
 
           {!isOperationsReadOnly && (
