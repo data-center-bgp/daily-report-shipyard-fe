@@ -28,6 +28,7 @@ import {
   CalendarClock,
   Database,
   Braces,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 
@@ -380,6 +381,19 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           icon: Database,
           current: location.pathname === "/master-data",
           show: canAccess("masterData"),
+        },
+      ],
+    },
+    {
+      title: "Bantuan",
+      items: [
+        {
+          name: "Panduan Pengguna",
+          href: "/guide",
+          icon: BookOpen,
+          current: location.pathname.startsWith("/guide"),
+          // Every role, Shipping included.
+          show: true,
         },
       ],
     },

@@ -20,6 +20,8 @@ import LoadingState from "./components/common/LoadingState";
 const Login = lazy(() => import("./components/auth/Login"));
 
 const Dashboard = lazy(() => import("./components/dashboard/Dashboard"));
+const GuideHome = lazy(() => import("./components/guide/GuideHome"));
+const GuideTopicPage = lazy(() => import("./components/guide/GuideTopicPage"));
 const Alerts = lazy(() => import("./components/dashboard/Alerts"));
 
 const ProjectsList = lazy(() => import("./components/projects/ProjectsList"));
@@ -203,6 +205,8 @@ function AppRoutes() {
             <Routes>
               <Route path="/login" element={<AfterLoginRedirect />} />
               <Route path="/plans/*" element={<PlanPages />} />
+              <Route path="/guide" element={<GuideHome />} />
+              <Route path="/guide/:topicId" element={<GuideTopicPage />} />
               {/* The readiness form of a project made from one of its plans */}
               <Route
                 path="/projects/:projectId/readiness"
@@ -408,6 +412,10 @@ function AppRoutes() {
 
           {/* Shipping's docking plans */}
           <Route path="/plans/*" element={<PlanPages />} />
+
+          {/* The user guide: open to every role */}
+          <Route path="/guide" element={<GuideHome />} />
+          <Route path="/guide/:topicId" element={<GuideTopicPage />} />
 
           {/* Fallback: say so, instead of quietly opening the Dashboard */}
           <Route path="*" element={<NotFound />} />
