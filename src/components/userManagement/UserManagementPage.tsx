@@ -21,6 +21,7 @@ const ROLE_OPTIONS: UserProfile["role"][] = [
   "MANAGER",
   "HSSE",
   "ADMIN_SHIPPING",
+  "SHIPPING",
 ];
 
 interface AdminProfileRow {

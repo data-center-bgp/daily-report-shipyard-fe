@@ -11,6 +11,7 @@ export const TRACKED_ROLES = [
   "FINANCE",
   "HSSE",
   "ADMIN_SHIPPING",
+  "SHIPPING",
 ];
 
 export const TABLE_LABELS: Record<string, string> = {
@@ -27,6 +28,9 @@ export const TABLE_LABELS: Record<string, string> = {
   projects: "Project",
   additional_wo_requests: "Additional WO Request",
   vessel_readiness_forms: "Readiness Form",
+  docking_plans: "Docking Plan",
+  docking_plan_work_orders: "Plan Work Order",
+  docking_plan_work_details: "Plan Work Detail",
 };
 
 export const TABLE_SHORT_CODES: Record<string, string> = {
@@ -43,6 +47,9 @@ export const TABLE_SHORT_CODES: Record<string, string> = {
   projects: "PRJ",
   additional_wo_requests: "AWO",
   vessel_readiness_forms: "RDN",
+  docking_plans: "PLN",
+  docking_plan_work_orders: "PWO",
+  docking_plan_work_details: "PWD",
 };
 
 export function tableLabel(tableName: string): string {

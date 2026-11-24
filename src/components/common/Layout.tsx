@@ -25,6 +25,7 @@ import {
   ClipboardList,
   ClipboardCheck,
   Bell,
+  CalendarClock,
   Database,
   Braces,
   type LucideIcon,
@@ -202,7 +203,20 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           icon: LayoutDashboard,
           current:
             location.pathname === "/" || location.pathname === "/dashboard",
-          show: true,
+          // Shipping only works in Docking plans.
+          show: profile?.role !== "SHIPPING",
+        },
+      ],
+    },
+    {
+      title: "Planning",
+      items: [
+        {
+          name: "Docking Plans",
+          href: "/plans",
+          icon: CalendarClock,
+          current: location.pathname.startsWith("/plans"),
+          show: canAccess("shippingPlans"),
         },
       ],
     },
@@ -498,23 +512,27 @@ export default function Layout({ children, onLogout }: LayoutProps) {
             </div>
 
             <div className="ml-auto flex items-center gap-1">
-              <Link
-                to="/alerts"
-                aria-label={alertLabel}
-                className="relative inline-flex h-11 w-11 items-center justify-center rounded-md text-slate-700 transition-colors hover:bg-slate-100"
-              >
-                <Bell className="h-5 w-5" aria-hidden="true" />
-                {alertCount > 0 && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute right-0.5 top-0.5 flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-red-700 px-1 text-[11px] font-semibold leading-none text-white"
+              {profile?.role !== "SHIPPING" && (
+                <>
+                  <Link
+                    to="/alerts"
+                    aria-label={alertLabel}
+                    className="relative inline-flex h-11 w-11 items-center justify-center rounded-md text-slate-700 transition-colors hover:bg-slate-100"
                   >
-                    {alertCount > 9 ? "9+" : alertCount}
-                  </span>
-                )}
-              </Link>
+                    <Bell className="h-5 w-5" aria-hidden="true" />
+                    {alertCount > 0 && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute right-0.5 top-0.5 flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-red-700 px-1 text-[11px] font-semibold leading-none text-white"
+                      >
+                        {alertCount > 9 ? "9+" : alertCount}
+                      </span>
+                    )}
+                  </Link>
 
-              <div className="mx-1 h-6 w-px bg-slate-200" aria-hidden="true" />
+                  <div className="mx-1 h-6 w-px bg-slate-200" aria-hidden="true" />
+                </>
+              )}
 
               <div className="flex items-center gap-2 px-1">
                 <span

@@ -107,6 +107,11 @@ const MasterDataPage = lazy(
 const ApiDocs = lazy(() => import("./components/developer/ApiDocs"));
 const NotFound = lazy(() => import("./components/common/NotFound"));
 
+const PlansList = lazy(() => import("./components/plans/PlansList"));
+const PlanForm = lazy(() => import("./components/plans/PlanForm"));
+const PlanDetails = lazy(() => import("./components/plans/PlanDetails"));
+const ConvertPlan = lazy(() => import("./components/plans/ConvertPlan"));
+
 // A link opened while logged out (a shared invoice, a BASTP) goes to the
 // login page carrying the address it asked for...
 function RedirectToLogin() {
@@ -149,8 +154,25 @@ function RequireAccess({
   return allowed ? <>{children}</> : <Navigate to="/" replace />;
 }
 
+// Shipping's docking plans: /plans, /plans/new, /plans/:id, /plans/:id/edit
+// and /plans/:id/convert.
+function PlanPages() {
+  return (
+    <RequireAccess feature="shippingPlans">
+      <Routes>
+        <Route index element={<PlansList />} />
+        <Route path="new" element={<PlanForm />} />
+        <Route path=":planId" element={<PlanDetails />} />
+        <Route path=":planId/edit" element={<PlanForm />} />
+        <Route path=":planId/convert" element={<ConvertPlan />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </RequireAccess>
+  );
+}
+
 function AppRoutes() {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, signOut, profile } = useAuth();
 
   const handleLogout = async () => {
     await signOut();
@@ -168,6 +190,25 @@ function AppRoutes() {
           <Route path="*" element={<RedirectToLogin />} />
         </Routes>
       </Suspense>
+    );
+  }
+
+  // The Shipping team only works in Docking plans (and sees its own activity
+  // log). Everything else sends them to the plans list.
+  if (profile?.role === "SHIPPING") {
+    return (
+      <DashboardDataProvider>
+        <Layout onLogout={handleLogout}>
+          <Suspense fallback={<LoadingState />}>
+            <Routes>
+              <Route path="/login" element={<AfterLoginRedirect />} />
+              <Route path="/plans/*" element={<PlanPages />} />
+              <Route path="/activity-logs" element={<ActivityLogPage />} />
+              <Route path="*" element={<Navigate to="/plans" replace />} />
+            </Routes>
+          </Suspense>
+        </Layout>
+      </DashboardDataProvider>
     );
   }
 
@@ -359,6 +400,9 @@ function AppRoutes() {
           {/* Import/Export Routes */}
           <Route path="/export-data" element={<ExportData />} />
           <Route path="/import-data" element={<ImportData />} />
+
+          {/* Shipping's docking plans */}
+          <Route path="/plans/*" element={<PlanPages />} />
 
           {/* Fallback: say so, instead of quietly opening the Dashboard */}
           <Route path="*" element={<NotFound />} />

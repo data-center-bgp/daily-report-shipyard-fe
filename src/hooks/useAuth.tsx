@@ -28,7 +28,8 @@ export interface UserProfile {
     | "FINANCE"
     | "MANAGER"
     | "HSSE"
-    | "ADMIN_SHIPPING";
+    | "ADMIN_SHIPPING"
+    | "SHIPPING";
   auth_user_id: string;
 }
 
@@ -174,6 +175,13 @@ const FEATURE_ACCESS = {
   activityLogs: ["MASTER", "MANAGER"],
   additionalWoApprovals: ["MASTER", "OP_HEAD", "MANAGER"],
   readinessQueue: ["MASTER", "HSSE", "MANAGER"],
+  // Shipping's docking plans (drafted ~2 months before a vessel docks).
+  // SHIPPING writes them; PPIC/HSSE review; MANAGER/OP_HEAD only look.
+  // SHIPPING has no other feature on purpose.
+  shippingPlans: ["SHIPPING", "MASTER", "PPIC", "HSSE", "MANAGER", "OP_HEAD"],
+  // Who may sign off (or send back) a submitted plan. PPIC and HSSE each give
+  // one sign-off; MASTER can act for either.
+  planReview: ["MASTER", "PPIC", "HSSE"],
   // The Shipyard Report API documentation. MASTER only — deliberately not
   // MANAGER, unlike most MASTER features (this is about how data leaves the
   // system, not about viewing it).
