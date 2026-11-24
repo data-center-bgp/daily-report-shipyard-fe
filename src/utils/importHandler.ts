@@ -38,7 +38,7 @@ async function getSampleWorkOrders(
 // write data validations — that's an ExcelJS-only capability, so template
 // *generation* uses ExcelJS while *parsing* stays on `xlsx`, unchanged.
 
-function addExcelRefSheet(
+export function addExcelRefSheet(
   wb: ExcelJS.Workbook,
   sheetName: string,
   header: string,
@@ -55,7 +55,7 @@ function addExcelRefSheet(
 }
 
 /** Excel list-validation formula pointing at a whole reference sheet column. */
-function refFormula(sheetName: string, count: number): string {
+export function refFormula(sheetName: string, count: number): string {
   const lastRow = Math.max(count + 1, 2);
   return `'${sheetName}'!$A$2:$A$${lastRow}`;
 }
@@ -63,7 +63,7 @@ function refFormula(sheetName: string, count: number): string {
 const YES_NO_FORMULA = '"yes,no"';
 
 /** Apply the same list validation to every cell in a column across a row range. */
-function applyListValidation(
+export function applyListValidation(
   ws: ExcelJS.Worksheet,
   col: string,
   startRow: number,
@@ -82,7 +82,7 @@ function applyListValidation(
   }
 }
 
-function buildInstructionsSheet(
+export function buildInstructionsSheet(
   wb: ExcelJS.Workbook,
   title: string,
   lines: Array<[string] | [string, string]>,
@@ -100,7 +100,7 @@ function buildInstructionsSheet(
   ws.getColumn(2).width = 50;
 }
 
-function addDataSheet(
+export function addDataSheet(
   wb: ExcelJS.Workbook,
   sheetName: string,
   headers: string[],
@@ -1493,7 +1493,7 @@ export interface ValidatedProgressRow extends ParsedProgressRow {
  * then any other stray punctuation (e.g. "*", "?", "%"), before lowercasing
  * and joining words with underscores.
  */
-function normaliseHeader(h: string): string {
+export function normaliseHeader(h: string): string {
   return String(h)
     .replace(/\(.*?\)/g, " ")
     .replace(/[^a-zA-Z0-9\s]/g, " ")

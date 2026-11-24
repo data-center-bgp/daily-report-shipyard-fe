@@ -3,6 +3,7 @@ import { Loader2, X } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { ActivityLogService } from "../../services/activityLogService";
 import SearchableSelect from "../common/SearchableSelect";
+import { PLAN_UOM_OPTIONS } from "../../constants/planUnits";
 import type {
   PlanRow,
   PlanWorkDetail,
@@ -21,19 +22,21 @@ export interface LookupOption {
   label: string;
 }
 
-const UOM_OPTIONS = ["Ls", "Unit", "Pcs", "Lbr"];
+const UOM_OPTIONS = PLAN_UOM_OPTIONS;
 const labelClass = "mb-1 block text-sm font-medium text-slate-700";
 
 // A native modal <dialog>: the page behind goes inert, focus moves in and
 // returns to the trigger, and Escape closes it. A click on the backdrop closes
 // it too.
-function Modal({
+export function Modal({
   title,
   onClose,
+  wide = false,
   children,
 }: {
   title: string;
   onClose: () => void;
+  wide?: boolean;
   children: React.ReactNode;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -52,7 +55,7 @@ function Modal({
       onClick={(e) => {
         if (e.target === dialogRef.current) onClose();
       }}
-      className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-xl overflow-hidden rounded-lg border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-950/50"
+      className={`m-auto max-h-[90dvh] w-[calc(100%-2rem)] ${wide ? "max-w-3xl" : "max-w-xl"} overflow-hidden rounded-lg border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-950/50`}
     >
       <div className="flex max-h-[90dvh] flex-col">
         <div className="flex items-center justify-between border-b border-slate-200 py-2 pl-4 pr-2">

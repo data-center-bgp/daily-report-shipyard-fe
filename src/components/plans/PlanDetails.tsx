@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Clock,
+  FileSpreadsheet,
   MessageSquare,
   Pencil,
   Plus,
@@ -41,6 +42,7 @@ import {
   primaryButton,
   secondaryButton,
 } from "./planStatus";
+import { PlanImportDialog } from "./PlanImportDialog";
 import {
   PlanReopenDialog,
   PlanReviewDialog,
@@ -52,6 +54,7 @@ import {
 type WorkDialog =
   | { kind: "work-order"; existing: PlanWorkOrder | null }
   | { kind: "work-detail"; workOrderId: number; existing: PlanWorkDetail | null }
+  | { kind: "import" }
   | { kind: "review" }
   | { kind: "reopen" };
 
@@ -503,14 +506,24 @@ export default function PlanDetails() {
             Work orders
           </h2>
           {editable && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => openDialog({ kind: "work-order", existing: null })}
-              className={secondaryButton}
-            >
-              <Plus className="h-4 w-4" aria-hidden="true" /> Add work order
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => openDialog({ kind: "import" })}
+                className={secondaryButton}
+              >
+                <FileSpreadsheet className="h-4 w-4" aria-hidden="true" /> Import from Excel
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => openDialog({ kind: "work-order", existing: null })}
+                className={secondaryButton}
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" /> Add work order
+              </button>
+            </div>
           )}
         </div>
 
@@ -716,6 +729,20 @@ export default function PlanDetails() {
 
       <ReviewHistory reviews={reviews} />
 
+      {dialog?.kind === "import" && (
+        <PlanImportDialog
+          plan={plan}
+          existingWorkOrderCount={workOrders.length}
+          scopes={scopes}
+          locations={locations}
+          onClose={closeDialog}
+          onImported={(counts) =>
+            savedAndClose(
+              `Imported ${counts.workOrders} work order${counts.workOrders === 1 ? "" : "s"} and ${counts.details} work detail${counts.details === 1 ? "" : "s"}.`,
+            )
+          }
+        />
+      )}
       {dialog?.kind === "work-order" && (
         <PlanWorkOrderDialog
           plan={plan}
