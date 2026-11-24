@@ -1,100 +1,19 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  AlertTriangle,
-  ArrowRight,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Filter,
-  Gauge,
-  LayoutGrid,
-  List,
-  Receipt,
-  Search,
-  Ship,
-  X,
-} from "lucide-react";
-import {
-  useDashboardData,
-  type VesselSummary,
-} from "../../hooks/useDashboardData";
+import { useId, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { X } from "lucide-react";
+import { useAuth } from "../../hooks/useAuth";
+import { useDashboardData } from "../../hooks/useDashboardData";
 import SearchableSelect from "../common/SearchableSelect";
 import { DashboardSkeleton } from "../common/Skeleton";
-
-// Fixed-order categorical hues (slots 1-3 of the validated 8-hue set) — used
-// for nominal breakdowns where the categories don't have an inherent order.
-const CATEGORICAL = { blue: "#2a78d6", orange: "#eb6834", aqua: "#1baf7a" };
-// Reserved status hues — never reused for a plain "series N".
-const STATUS = { good: "#0ca30c", warning: "#fab219", critical: "#d03b3b" };
-// One-hue ordinal ramp (light -> dark) for the BASTP pipeline, where the
-// stage order carries meaning. Steps 250/350/450/550/650 of the sequential
-// blue ramp — the lightest step still clears 2:1 on a light surface.
-const PIPELINE_RAMP = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281"];
-
-const pct = (part: number, total: number) =>
-  total > 0 ? Math.round((part / total) * 100) : 0;
-
-// Status pills for a vessel. Overdue and ready-to-invoice can both apply, so
-// they stack; a vessel with neither shows a single neutral pill instead.
-function VesselBadges({ vessel }: { vessel: VesselSummary }) {
-  const pill =
-    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset";
-  const none = !vessel.hasOverdue && vessel.readyForInvoiceCount === 0;
-  const allDone = vessel.completed > 0 && vessel.inProgress === 0;
-  return (
-    <>
-      {vessel.hasOverdue && (
-        <span className={`${pill} bg-red-50 text-red-700 ring-red-100`}>
-          <AlertTriangle className="h-3 w-3" /> Overdue
-        </span>
-      )}
-      {vessel.readyForInvoiceCount > 0 && (
-        <span className={`${pill} bg-amber-50 text-amber-700 ring-amber-100`}>
-          <Receipt className="h-3 w-3" /> Ready to invoice
-        </span>
-      )}
-      {none && (
-        <span
-          className={`${pill} ${
-            allDone
-              ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
-              : "bg-slate-50 text-slate-600 ring-slate-200"
-          }`}
-        >
-          <CheckCircle2 className="h-3 w-3" />
-          {allDone ? "Completed" : "Normal"}
-        </span>
-      )}
-    </>
-  );
-}
-
-function ProgressTrack({
-  value,
-  color,
-  height,
-}: {
-  value: number;
-  color: string;
-  height: string;
-}) {
-  return (
-    <div
-      className={`w-full overflow-hidden rounded-full bg-slate-100 ${height}`}
-      role="progressbar"
-      aria-valuenow={value}
-      aria-valuemin={0}
-      aria-valuemax={100}
-    >
-      <div
-        className={`${color} ${height} rounded-full transition-all`}
-        style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
-      />
-    </div>
-  );
-}
+import VesselSection from "./VesselSection";
+import {
+  CATEGORICAL,
+  PIPELINE_RAMP,
+  STATUS,
+  formatCurrency,
+  pct,
+} from "./chartTokens";
+import { Donut, Panel, Section, StackedBar } from "./widgets";
 
 const MONTH_NAMES = [
   "January",
@@ -111,9 +30,14 @@ const MONTH_NAMES = [
   "December",
 ];
 
+type WorkOrderCategory = "DOCKING" | "REPAIR" | "NEW_BUILDING";
+
+const numberCell = "px-3 py-2.5 text-right tabular-nums";
+
 export default function Dashboard() {
   const {
     stats,
+    alerts,
     vesselSummaries,
     workOrderRecords,
     workDetailRecords,
@@ -121,25 +45,15 @@ export default function Dashboard() {
     error,
     refetch,
   } = useDashboardData();
-  // 0 means "All" for both — matches SearchableSelect's own "cleared" value.
+  const { canAccess } = useAuth();
+  const filterId = useId();
+  // 0 means "All" for both: matches SearchableSelect's own "cleared" value.
   const [woVesselFilterId, setWoVesselFilterId] = useState<number>(0);
   const [woMonthFilterId, setWoMonthFilterId] = useState<number>(0);
-  const [vesselViewMode, setVesselViewMode] = useState<"grid" | "list">("grid");
-  const [vesselFilter, setVesselFilter] = useState<
-    "all" | "active" | "completed" | "alerts"
-  >("active");
-  const [vesselSearchTerm, setVesselSearchTerm] = useState("");
-  const [vesselSortBy, setVesselSortBy] = useState<
-    "name" | "activity" | "progress" | "workOrders"
-  >("activity");
-  const [vesselPage, setVesselPage] = useState(1);
-  const [vesselsPerPage] = useState(12);
 
-  const navigate = useNavigate();
-
-  // Distinct vessels present among work orders, alphabetical — the option
-  // list for the Work Orders vessel filter. `id` doubles as the value
-  // SearchableSelect reports (0 is reserved there for "cleared" / "All").
+  // Distinct vessels present among work orders, alphabetical: the option
+  // list for the vessel filter. `id` doubles as the value SearchableSelect
+  // reports (0 is reserved there for "cleared" / "All").
   const woVesselOptions = useMemo(() => {
     const byId = new Map<number, string>();
     workOrderRecords.forEach((wo) => {
@@ -189,9 +103,8 @@ export default function Dashboard() {
   }, [workOrderRecords, woVesselFilterId, woMonthFilterValue]);
 
   // Re-derives the "work order" slice of DashboardStats from the filtered
-  // records. Vessel Projects and Vessel Summary keep showing unfiltered
-  // totals — only the sections driven by work orders/work details
-  // (Work Orders, Work Detail Progress, BASTP Pipeline, Invoiced) filter.
+  // records. Projects, the attention band and Vessels keep showing unfiltered
+  // totals; only the sections driven by work orders / work details filter.
   const filteredWorkOrderStats = useMemo(() => {
     const inProgress = filteredWorkOrderRecords.filter(
       (wo) => wo.status !== "completed",
@@ -201,30 +114,28 @@ export default function Dashboard() {
     );
     const countCategory = (
       list: typeof filteredWorkOrderRecords,
-      category: "DOCKING" | "REPAIR" | "NEW_BUILDING",
+      category: WorkOrderCategory,
     ) => list.filter((wo) => wo.category === category).length;
 
     return {
       totalWorkOrders: filteredWorkOrderRecords.length,
-      workOrdersInProgressTotal: inProgress.length,
-      workOrdersInProgressDocking: countCategory(inProgress, "DOCKING"),
-      workOrdersInProgressRepair: countCategory(inProgress, "REPAIR"),
-      workOrdersInProgressNewBuilding: countCategory(inProgress, "NEW_BUILDING"),
-      workOrdersCompletedTotal: completed.length,
-      workOrdersCompletedDocking: countCategory(completed, "DOCKING"),
-      workOrdersCompletedRepair: countCategory(completed, "REPAIR"),
-      workOrdersCompletedNewBuilding: countCategory(completed, "NEW_BUILDING"),
-      workOrdersOriginal: filteredWorkOrderRecords.filter(
-        (wo) => !wo.isAdditional,
-      ).length,
-      workOrdersAdditional: filteredWorkOrderRecords.filter(
-        (wo) => wo.isAdditional,
-      ).length,
+      inProgressTotal: inProgress.length,
+      inProgressDocking: countCategory(inProgress, "DOCKING"),
+      inProgressRepair: countCategory(inProgress, "REPAIR"),
+      inProgressNewBuilding: countCategory(inProgress, "NEW_BUILDING"),
+      completedTotal: completed.length,
+      completedDocking: countCategory(completed, "DOCKING"),
+      completedRepair: countCategory(completed, "REPAIR"),
+      completedNewBuilding: countCategory(completed, "NEW_BUILDING"),
+      original: filteredWorkOrderRecords.filter((wo) => !wo.isAdditional)
+        .length,
+      additional: filteredWorkOrderRecords.filter((wo) => wo.isAdditional)
+        .length,
     };
   }, [filteredWorkOrderRecords]);
 
-  // Same vessel/month filter, applied at the work-detail level — drives
-  // Work Detail Progress, BASTP Pipeline, and Invoiced Work Details.
+  // Same vessel/month filter, applied at the work-detail level: drives
+  // Work Details and the BASTP-to-payment pipeline.
   const filteredWorkDetailRecords = useMemo(() => {
     return workDetailRecords.filter((wd) => {
       if (woVesselFilterId !== 0 && wd.vesselId !== woVesselFilterId) {
@@ -240,1359 +151,483 @@ export default function Dashboard() {
     });
   }, [workDetailRecords, woVesselFilterId, woMonthFilterValue]);
 
-  const filteredWorkDetailStats = useMemo(() => {
+  const wd = useMemo(() => {
     const notInvoiced = filteredWorkDetailRecords.filter(
-      (wd) => wd.bastpStatus !== "INVOICED",
+      (r) => r.bastpStatus !== "INVOICED",
     );
     const invoicedPaid = filteredWorkDetailRecords.filter(
-      (wd) => wd.bastpStatus === "INVOICED" && wd.isPaid,
+      (r) => r.bastpStatus === "INVOICED" && r.isPaid,
     );
     const invoicedUnpaid = filteredWorkDetailRecords.filter(
-      (wd) => wd.bastpStatus === "INVOICED" && !wd.isPaid,
+      (r) => r.bastpStatus === "INVOICED" && !r.isPaid,
     );
+    const sumValue = (list: typeof invoicedPaid) =>
+      list.reduce((sum, r) => sum + r.invoicedValue, 0);
 
     return {
-      totalWorkDetails: filteredWorkDetailRecords.length,
-      workDetailsCompleted: filteredWorkDetailRecords.filter(
-        (wd) => wd.isCompleted,
-      ).length,
-      workDetailsInProgress: filteredWorkDetailRecords.filter(
-        (wd) => wd.isInProgress,
-      ).length,
-      workDetailsNoProgress: filteredWorkDetailRecords.filter(
-        (wd) => wd.isNoProgress,
-      ).length,
-      workDetailsMissedDeadline: filteredWorkDetailRecords.filter(
-        (wd) => wd.isMissedDeadline,
-      ).length,
-      workDetailsOnTimeOrEarly: filteredWorkDetailRecords.filter(
-        (wd) => wd.isOnTimeOrEarly,
-      ).length,
-      workDetailsNotInBastp: notInvoiced.filter((wd) => wd.bastpStatus === null)
+      total: filteredWorkDetailRecords.length,
+      completed: filteredWorkDetailRecords.filter((r) => r.isCompleted).length,
+      inProgress: filteredWorkDetailRecords.filter((r) => r.isInProgress)
         .length,
-      workDetailsBastpDraft: notInvoiced.filter(
-        (wd) => wd.bastpStatus === "DRAFT",
+      noProgress: filteredWorkDetailRecords.filter((r) => r.isNoProgress)
+        .length,
+      missedDeadline: filteredWorkDetailRecords.filter(
+        (r) => r.isMissedDeadline,
       ).length,
-      workDetailsBastpVerified: notInvoiced.filter(
-        (wd) => wd.bastpStatus === "VERIFIED",
+      onTimeOrEarly: filteredWorkDetailRecords.filter((r) => r.isOnTimeOrEarly)
+        .length,
+      notInBastp: notInvoiced.filter((r) => r.bastpStatus === null).length,
+      bastpDraft: notInvoiced.filter((r) => r.bastpStatus === "DRAFT").length,
+      bastpReady: notInvoiced.filter(
+        (r) => r.bastpStatus === "READY_FOR_INVOICE",
       ).length,
-      workDetailsBastpReadyForInvoice: notInvoiced.filter(
-        (wd) => wd.bastpStatus === "READY_FOR_INVOICE",
-      ).length,
-      workDetailsInvoicedPaid: invoicedPaid.length,
-      workDetailsInvoicedUnpaid: invoicedUnpaid.length,
-      workDetailsInvoicedPaidValue: invoicedPaid.reduce(
-        (sum, wd) => sum + wd.invoicedValue,
-        0,
-      ),
-      workDetailsInvoicedUnpaidValue: invoicedUnpaid.reduce(
-        (sum, wd) => sum + wd.invoicedValue,
-        0,
-      ),
+      invoicedPaid: invoicedPaid.length,
+      invoicedUnpaid: invoicedUnpaid.length,
+      invoicedPaidValue: sumValue(invoicedPaid),
+      invoicedUnpaidValue: sumValue(invoicedUnpaid),
     };
   }, [filteredWorkDetailRecords]);
 
-  const isWorkOrderFilterActive =
-    woVesselFilterId !== 0 || woMonthFilterId !== 0;
-
-  const filteredVessels = useMemo(() => {
-    let filtered = vesselSummaries;
-
-    if (vesselSearchTerm) {
-      const searchLower = vesselSearchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (vessel) =>
-          (vessel.name?.toLowerCase() || "").includes(searchLower) ||
-          (vessel.type?.toLowerCase() || "").includes(searchLower) ||
-          (vessel.company?.toLowerCase() || "").includes(searchLower),
-      );
-    }
-
-    switch (vesselFilter) {
-      case "active":
-        filtered = filtered.filter(
-          (vessel) =>
-            vessel.inProgress > 0 ||
-            vessel.planned > 0 ||
-            vessel.readyForInvoiceCount > 0,
-        );
-        break;
-      case "completed":
-        filtered = filtered.filter((vessel) => vessel.completed > 0);
-        break;
-      case "alerts":
-        filtered = filtered.filter(
-          (vessel) => vessel.hasOverdue || vessel.readyForInvoiceCount > 0,
-        );
-        break;
-      default:
-        break;
-    }
-
-    filtered.sort((a, b) => {
-      switch (vesselSortBy) {
-        case "name":
-          return a.name.localeCompare(b.name);
-        case "progress":
-          return b.overallProgress - a.overallProgress;
-        case "workOrders":
-          return b.totalWorkOrders - a.totalWorkOrders;
-        case "activity":
-        default:
-          if (a.lastActivity && !b.lastActivity) return -1;
-          if (!a.lastActivity && b.lastActivity) return 1;
-          if (a.lastActivity && b.lastActivity) {
-            return (
-              new Date(b.lastActivity).getTime() -
-              new Date(a.lastActivity).getTime()
-            );
-          }
-          return a.name.localeCompare(b.name);
-      }
-    });
-
-    return filtered;
-  }, [vesselSummaries, vesselSearchTerm, vesselFilter, vesselSortBy]);
-
-  const paginationValues = useMemo(() => {
-    const totalPages = Math.ceil(filteredVessels.length / vesselsPerPage);
-    const startIndex = (vesselPage - 1) * vesselsPerPage;
-    const currentVessels = filteredVessels.slice(
-      startIndex,
-      startIndex + vesselsPerPage,
+  // The attention band is deliberately not filtered: it answers "what needs
+  // doing anywhere in the yard", whatever the analysis below is scoped to.
+  const attention = useMemo(() => {
+    const unpaid = workDetailRecords.filter(
+      (r) => r.bastpStatus === "INVOICED" && !r.isPaid,
     );
-    return { totalPages, startIndex, currentVessels };
-  }, [filteredVessels, vesselPage, vesselsPerPage]);
-
-  const vesselFilterCounts = useMemo(
-    () => ({
-      all: vesselSummaries.length,
-      active: vesselSummaries.filter((v) => v.inProgress > 0 || v.planned > 0)
-        .length,
-      completed: vesselSummaries.filter((v) => v.completed > 0).length,
-      alerts: vesselSummaries.filter(
-        (v) => v.hasOverdue || v.readyForInvoiceCount > 0,
-      ).length,
-    }),
-    [vesselSummaries],
-  );
-
-  const vesselQuickStats = useMemo(() => {
-    if (vesselSummaries.length === 0) {
-      return { overdue: 0, readyToInvoice: 0, avgProgress: 0 };
-    }
     return {
-      overdue: vesselSummaries.filter((v) => v.hasOverdue).length,
-      readyToInvoice: vesselSummaries.filter((v) => v.readyForInvoiceCount > 0)
+      overdue: alerts.filter((a) => a.type === "overdue").length,
+      readyToInvoice: alerts.filter((a) => a.type === "ready_for_invoice")
         .length,
-      avgProgress: Math.round(
-        vesselSummaries.reduce((sum, v) => sum + v.overallProgress, 0) /
-          vesselSummaries.length,
-      ),
+      unpaidCount: unpaid.length,
+      unpaidValue: unpaid.reduce((sum, r) => sum + r.invoicedValue, 0),
     };
-  }, [vesselSummaries]);
+  }, [alerts, workDetailRecords]);
 
-  const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return "-";
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
-
-  // Tint for the vessel's icon tile, in the same priority order the old
-  // left-border color used.
-  const getVesselStatus = (summary: VesselSummary) => {
-    if (summary.hasOverdue) return { tile: "bg-red-50 text-red-600" };
-    if (summary.readyForInvoiceCount > 0)
-      return { tile: "bg-amber-50 text-amber-600" };
-    if (summary.completed > 0)
-      return { tile: "bg-emerald-50 text-emerald-600" };
-    if (summary.inProgress > 0) return { tile: "bg-blue-50 text-blue-600" };
-    return { tile: "bg-slate-100 text-slate-400" };
+  const isFilterActive = woVesselFilterId !== 0 || woMonthFilterId !== 0;
+  const clearFilter = () => {
+    setWoVesselFilterId(0);
+    setWoMonthFilterId(0);
   };
 
   if (loading) {
     return <DashboardSkeleton />;
   }
 
-  const StatCard = ({
-    label,
-    value,
-    color,
-    borderColor,
-    percentOf,
-  }: {
-    label: string;
-    value: string | number;
-    color?: string;
-    borderColor: string;
-    // When set, shows "N% of <percentOf.total>" underneath the value.
-    percentOf?: { total: number; ofLabel: string };
-  }) => (
-    <div className={`bg-white rounded-lg shadow p-3 sm:p-6 border-l-4 ${borderColor}`}>
-      <p className="text-xs sm:text-sm font-medium text-gray-600">{label}</p>
-      <p className={`text-xl sm:text-2xl font-bold ${color || "text-gray-900"}`}>
-        {value}
-      </p>
-      {percentOf && (
-        <p className="text-xs text-gray-400 mt-1">
-          {pct(Number(value), percentOf.total)}% of {percentOf.ofLabel}
-        </p>
-      )}
-    </div>
-  );
-
-  // A horizontal part-to-whole bar: thin segments separated by a 2px surface
-  // gap, rounded at the two outer ends, with a legend row underneath (a
-  // legend is always shown for 2+ series — color alone is never the only
-  // way to tell segments apart).
-  const StackedBar = ({
-    title,
-    subtitle,
-    segments,
-  }: {
-    title: string;
-    subtitle?: string;
-    segments: { label: string; value: number; color: string }[];
-  }) => {
-    const total = segments.reduce((sum, s) => sum + s.value, 0);
-    return (
-      <div className="bg-white rounded-lg shadow p-4 sm:p-6">
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        {subtitle && <p className="text-xs text-gray-500 mb-3">{subtitle}</p>}
-        <div
-          className={`w-full h-6 rounded-full bg-gray-100 flex gap-[2px] overflow-hidden ${subtitle ? "" : "mt-3"}`}
-        >
-          {segments.map(
-            (s) =>
-              s.value > 0 && (
-                <div
-                  key={s.label}
-                  className="h-full first:rounded-l-full last:rounded-r-full"
-                  style={{
-                    width: `${(s.value / total) * 100}%`,
-                    backgroundColor: s.color,
-                  }}
-                  title={`${s.label}: ${s.value.toLocaleString()} (${pct(s.value, total)}%)`}
-                />
-              ),
-          )}
-        </div>
-        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1">
-          {segments.map((s) => (
-            <div key={s.label} className="flex items-center gap-1.5 text-xs">
-              <span
-                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                style={{ backgroundColor: s.color }}
-              />
-              <span className="text-gray-600">{s.label}</span>
-              <span className="font-semibold text-gray-900">
-                {s.value.toLocaleString()}
-              </span>
-              <span className="text-gray-400">({pct(s.value, total)}%)</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  // A donut — reserved for genuine part-to-whole among 3+ non-ordinal
-  // categories. A 2-slice pie reads no better than the stat tile's own
-  // percentage, so binary splits (Paid/Unpaid, Original/Additional, deadline
-  // performance) stay bar-only; the 5-stage BASTP pipeline is an ordinal
-  // sequence, where a pie would flatten the stage order a bar preserves.
-  const DonutChart = ({
-    title,
-    subtitle,
-    segments,
-    size = 168,
-  }: {
-    title: string;
-    subtitle?: string;
-    segments: { label: string; value: number; color: string }[];
-    size?: number;
-  }) => {
-    const total = segments.reduce((sum, s) => sum + s.value, 0);
-    const strokeWidth = 24;
-    const radius = size / 2 - strokeWidth / 2;
-    const circumference = 2 * Math.PI * radius;
-    let cumulative = 0;
-
-    return (
-      <div className="bg-white rounded-lg shadow p-4 sm:p-6">
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        {subtitle && <p className="text-xs text-gray-500 mb-3">{subtitle}</p>}
-        <div className="flex items-center gap-6 flex-wrap">
-          <svg
-            width={size}
-            height={size}
-            viewBox={`0 0 ${size} ${size}`}
-            className="flex-shrink-0"
-          >
-            <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
-              <circle
-                cx={size / 2}
-                cy={size / 2}
-                r={radius}
-                fill="none"
-                stroke="#f3f4f6"
-                strokeWidth={strokeWidth}
-              />
-              {segments.map((s) => {
-                if (s.value <= 0) return null;
-                const fraction = s.value / total;
-                // A 2px surface gap between segments, matching the bar chart.
-                const dash = Math.max(fraction * circumference - 2, 0);
-                const dashOffset = -cumulative;
-                cumulative += fraction * circumference;
-                return (
-                  <circle
-                    key={s.label}
-                    cx={size / 2}
-                    cy={size / 2}
-                    r={radius}
-                    fill="none"
-                    stroke={s.color}
-                    strokeWidth={strokeWidth}
-                    strokeLinecap="round"
-                    strokeDasharray={`${dash} ${circumference - dash}`}
-                    strokeDashoffset={dashOffset}
-                  >
-                    <title>{`${s.label}: ${s.value.toLocaleString()} (${pct(s.value, total)}%)`}</title>
-                  </circle>
-                );
-              })}
-            </g>
-            <text
-              x={size / 2}
-              y={size / 2 - 3}
-              textAnchor="middle"
-              fontSize={22}
-              fontWeight={700}
-              fill="#111827"
-            >
-              {total.toLocaleString()}
-            </text>
-            <text
-              x={size / 2}
-              y={size / 2 + 15}
-              textAnchor="middle"
-              fontSize={11}
-              fill="#9ca3af"
-            >
-              total
-            </text>
-          </svg>
-          <div className="flex-1 min-w-[140px] space-y-1.5">
-            {segments.map((s) => (
-              <div key={s.label} className="flex items-center gap-1.5 text-xs">
-                <span
-                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: s.color }}
-                />
-                <span className="text-gray-600">{s.label}</span>
-                <span className="font-semibold text-gray-900 ml-auto">
-                  {s.value.toLocaleString()}
-                </span>
-                <span className="text-gray-400">({pct(s.value, total)}%)</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Two independently-scaled horizontal bars, one per row (each sized
-  // against the larger of the two), rather than one bar split
-  // proportionally — lets you compare absolute magnitude directly instead
-  // of just share-of-whole. Label/value columns are fixed-width so both
-  // line up across rows.
-  const ComparisonBars = ({
-    title,
-    subtitle,
-    segments,
-    formatValue,
-  }: {
-    title: string;
-    subtitle?: string;
-    segments: { label: string; value: number; color: string }[];
-    formatValue?: (value: number) => string;
-  }) => {
-    const max = Math.max(...segments.map((s) => s.value), 1);
-    const fmt = formatValue || ((v: number) => v.toLocaleString());
-    return (
-      <div className="bg-white rounded-lg shadow p-4 sm:p-6">
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        {subtitle && <p className="text-xs text-gray-500 mb-3">{subtitle}</p>}
-        <div className={`space-y-4 ${subtitle ? "" : "mt-3"}`}>
-          {segments.map((s) => {
-            const widthPct =
-              s.value > 0 ? Math.max((s.value / max) * 100, 2) : 0;
-            return (
-              <div key={s.label} className="flex items-center gap-3">
-                <span className="w-36 flex-shrink-0 text-xs text-gray-600 text-right">
-                  {s.label}
-                </span>
-                <div className="flex-1 h-6 rounded-full bg-gray-100 overflow-hidden">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${widthPct}%`,
-                      backgroundColor: s.color,
-                    }}
-                  />
-                </div>
-                <span className="w-24 flex-shrink-0 text-sm font-semibold text-gray-900">
-                  {fmt(s.value)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-    }).format(amount);
+  const invoicedTotal = wd.invoicedPaid + wd.invoicedUnpaid;
+  const filteredNote = isFilterActive ? " (filtered)" : "";
+  const woRows: { label: string; inProgress: number; completed: number }[] = [
+    {
+      label: "Docking",
+      inProgress: filteredWorkOrderStats.inProgressDocking,
+      completed: filteredWorkOrderStats.completedDocking,
+    },
+    {
+      label: "Repair",
+      inProgress: filteredWorkOrderStats.inProgressRepair,
+      completed: filteredWorkOrderStats.completedRepair,
+    },
+    {
+      label: "New Building",
+      inProgress: filteredWorkOrderStats.inProgressNewBuilding,
+      completed: filteredWorkOrderStats.completedNewBuilding,
+    },
+  ];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      {/* Header */}
-      <div className="mb-5 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600">
-          Work Order Management & Financial Overview
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-[96rem] space-y-8 px-4 py-5 sm:space-y-10 sm:px-6 lg:px-8 lg:py-8">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">
+            Dashboard
+          </h1>
+          <p className="mt-1 text-sm text-slate-600 sm:text-base">
+            Work orders, BASTP and invoices across all vessels.
+          </p>
+        </div>
+        <dl className="grid grid-cols-3 divide-x divide-slate-200 rounded-lg border border-slate-200 bg-white">
+          {[
+            { label: "Projects", value: stats.totalProjects, tone: "text-slate-900" },
+            {
+              label: "In progress",
+              value: stats.projectsInProgressTotal,
+              tone: "text-blue-800",
+            },
+            {
+              label: "Completed",
+              value: stats.projectsCompletedTotal,
+              tone: "text-emerald-800",
+            },
+          ].map((item) => (
+            <div key={item.label} className="px-4 py-2.5 text-center sm:px-6">
+              <dt className="text-xs text-slate-600 sm:text-sm">{item.label}</dt>
+              <dd
+                className={`text-xl font-semibold tabular-nums sm:text-2xl ${item.tone}`}
+              >
+                {item.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </header>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-          <p className="text-red-600">{error}</p>
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-lg border border-red-300 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="text-sm text-red-900">
+            <span className="font-semibold">The dashboard could not load.</span>{" "}
+            {error}
+          </p>
           <button
+            type="button"
             onClick={refetch}
-            className="mt-2 text-red-600 hover:text-red-800 underline"
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-red-700 bg-white px-4 text-sm font-medium text-red-800 hover:bg-red-100"
           >
-            Retry
+            Try again
           </button>
         </div>
       )}
 
-      {/* 1. Vessel projects, grouped by project — a project is "in progress"
-             while any of its work orders isn't completed yet, and
-             "completed" once every work order in it is done. */}
-      <div className="mb-6 sm:mb-8">
-        <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
-          Vessel Projects
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1">
-          <StatCard
-            label="All Projects"
-            value={stats.totalProjects}
-            color="text-gray-900"
-            borderColor="border-gray-400"
-          />
-          <StatCard
-            label="Projects In Progress"
-            value={stats.projectsInProgressTotal}
-            color="text-blue-600"
-            borderColor="border-blue-500"
-          />
-          <StatCard
-            label="Completed"
-            value={stats.projectsCompletedTotal}
-            color="text-green-600"
-            borderColor="border-green-500"
-          />
+      {/* The one thing to look at first: what is waiting on someone. */}
+      <Section
+        id="attention"
+        title="Needs attention"
+        description="Across every vessel, whatever the filter below is set to."
+      >
+        <div className="grid divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <Link
+            to="/alerts"
+            className="block p-4 transition-colors hover:bg-slate-50 sm:p-5"
+          >
+            <p className="text-sm font-medium text-slate-700">
+              Overdue work details
+            </p>
+            <p
+              className={`mt-1 text-4xl font-bold tabular-nums ${
+                attention.overdue > 0 ? "text-red-800" : "text-slate-900"
+              }`}
+            >
+              {attention.overdue.toLocaleString()}
+            </p>
+            <p className="mt-1 text-sm text-slate-600 underline decoration-slate-400 underline-offset-2">
+              {attention.overdue > 0 ? "Open the alert list" : "Nothing overdue"}
+            </p>
+          </Link>
+          <Link
+            to="/alerts"
+            className="block p-4 transition-colors hover:bg-slate-50 sm:p-5"
+          >
+            <p className="text-sm font-medium text-slate-700">Ready to invoice</p>
+            <p
+              className={`mt-1 text-4xl font-bold tabular-nums ${
+                attention.readyToInvoice > 0 ? "text-amber-900" : "text-slate-900"
+              }`}
+            >
+              {attention.readyToInvoice.toLocaleString()}
+            </p>
+            <p className="mt-1 text-sm text-slate-600 underline decoration-slate-400 underline-offset-2">
+              {attention.readyToInvoice > 0
+                ? "Open the alert list"
+                : "Nothing waiting for an invoice"}
+            </p>
+          </Link>
+          {(() => {
+            const body = (
+              <>
+                <p className="text-sm font-medium text-slate-700">
+                  Invoiced, not yet paid
+                </p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 sm:text-3xl">
+                  {formatCurrency(attention.unpaidValue)}
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  {attention.unpaidCount.toLocaleString()} work detail
+                  {attention.unpaidCount === 1 ? "" : "s"}
+                  {canAccess("invoices") && (
+                    <span className="underline decoration-slate-400 underline-offset-2">
+                      {" "}
+                      · Open invoices
+                    </span>
+                  )}
+                </p>
+              </>
+            );
+            return canAccess("invoices") ? (
+              <Link
+                to="/invoices"
+                className="block p-4 transition-colors hover:bg-slate-50 sm:p-5"
+              >
+                {body}
+              </Link>
+            ) : (
+              <div className="p-4 sm:p-5">{body}</div>
+            );
+          })()}
         </div>
-      </div>
+      </Section>
 
-      {/* Vessel/month filter — drives Work Orders, Work Detail Progress,
-             BASTP Pipeline, and Invoiced Work Details below. Pulled out as
-             its own prominent panel since it now spans several sections,
-             not just the one it happens to sit above. */}
-      <div
-        className={`mb-6 sm:mb-8 rounded-lg shadow p-3 sm:p-4 border-2 transition-colors ${
-          isWorkOrderFilterActive
-            ? "bg-blue-50 border-blue-300"
-            : "bg-white border-gray-200"
+      {/* Scope for the two sections that follow. */}
+      <form
+        role="search"
+        aria-label="Filter work orders and work details"
+        onSubmit={(e) => e.preventDefault()}
+        className={`rounded-lg border p-4 ${
+          isFilterActive
+            ? "border-blue-700 bg-blue-50"
+            : "border-slate-200 bg-white"
         }`}
       >
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 text-gray-700 font-semibold text-sm shrink-0">
-            <Filter className="w-4 h-4 text-blue-600" />
-            Filter Work Orders &amp; Progress
-          </div>
-          <SearchableSelect
-            value={woVesselFilterId}
-            onChange={setWoVesselFilterId}
-            options={woVesselOptions}
-            placeholder="All Vessels"
-            className="w-full sm:w-56"
-          />
-          <SearchableSelect
-            value={woMonthFilterId}
-            onChange={setWoMonthFilterId}
-            options={woMonthOptions}
-            placeholder="All Months"
-            className="w-full sm:w-48"
-          />
-          {isWorkOrderFilterActive && (
-            <button
-              onClick={() => {
-                setWoVesselFilterId(0);
-                setWoMonthFilterId(0);
-              }}
-              className="flex items-center gap-1 text-sm text-blue-700 hover:text-blue-900 font-medium sm:ml-auto"
+        <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-[auto_16rem_14rem_auto]">
+          <p className="text-sm font-semibold text-slate-900 sm:col-span-2 lg:col-span-1 lg:pb-2.5">
+            Filter the work and payment sections
+          </p>
+          <div>
+            <label
+              htmlFor={`${filterId}-vessel`}
+              className="mb-1 block text-sm font-medium text-slate-700"
             >
-              <X className="w-3.5 h-3.5" />
+              Vessel
+            </label>
+            <SearchableSelect
+              id={`${filterId}-vessel`}
+              value={woVesselFilterId}
+              onChange={setWoVesselFilterId}
+              options={woVesselOptions}
+              placeholder="All vessels"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor={`${filterId}-month`}
+              className="mb-1 block text-sm font-medium text-slate-700"
+            >
+              Month of work order
+            </label>
+            <SearchableSelect
+              id={`${filterId}-month`}
+              value={woMonthFilterId}
+              onChange={setWoMonthFilterId}
+              options={woMonthOptions}
+              placeholder="All months"
+            />
+          </div>
+          {isFilterActive && (
+            <button
+              type="button"
+              onClick={clearFilter}
+              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md border border-blue-800 bg-white px-4 text-sm font-medium text-blue-900 hover:bg-blue-100 sm:min-h-10"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
               Clear filter
             </button>
           )}
         </div>
-        {isWorkOrderFilterActive && (
-          <p className="text-xs text-blue-700/80 mt-2">
-            Applied to Work Orders, Work Detail Progress, BASTP Pipeline, and
-            Invoiced Work Details below.
-          </p>
-        )}
+        <p role="status" className="mt-2 text-sm text-slate-700">
+          {isFilterActive
+            ? "Showing only the selected vessel and month in Work orders, Work details and Work to payment. Needs attention, Projects and Vessels stay unfiltered."
+            : "Showing every vessel and month."}
+        </p>
+      </form>
+
+      <div className="grid gap-8 lg:grid-cols-2 lg:gap-6 xl:gap-8">
+        <Section
+          id="work-orders"
+          title={`Work orders${filteredNote}`}
+          description={
+            isFilterActive
+              ? `${filteredWorkOrderStats.totalWorkOrders.toLocaleString()} of ${stats.totalWorkOrders.toLocaleString()} work orders`
+              : `${filteredWorkOrderStats.totalWorkOrders.toLocaleString()} work orders`
+          }
+        >
+          <Panel className="space-y-6">
+            <div className="-mx-1 overflow-x-auto">
+              <table className="w-full min-w-[20rem] text-sm">
+                <caption className="sr-only">
+                  Work orders by type and status
+                </caption>
+                <thead>
+                  <tr className="border-b border-slate-300 text-slate-700">
+                    <th scope="col" className="px-3 py-2 text-left font-semibold">
+                      Type
+                    </th>
+                    <th scope="col" className="px-3 py-2 text-right font-semibold">
+                      In progress
+                    </th>
+                    <th scope="col" className="px-3 py-2 text-right font-semibold">
+                      Completed
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {woRows.map((row) => (
+                    <tr key={row.label}>
+                      <th
+                        scope="row"
+                        className="px-3 py-2.5 text-left font-medium text-slate-800"
+                      >
+                        {row.label}
+                      </th>
+                      <td className={`${numberCell} text-blue-800`}>
+                        {row.inProgress}
+                      </td>
+                      <td className={`${numberCell} text-emerald-800`}>
+                        {row.completed}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-300 font-semibold">
+                    <th scope="row" className="px-3 py-2.5 text-left text-slate-900">
+                      All work types
+                    </th>
+                    <td className={`${numberCell} text-blue-800`}>
+                      {filteredWorkOrderStats.inProgressTotal}
+                    </td>
+                    <td className={`${numberCell} text-emerald-800`}>
+                      {filteredWorkOrderStats.completedTotal}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <StackedBar
+              title="Original and additional work orders"
+              subtitle={`Share of ${filteredWorkOrderStats.totalWorkOrders.toLocaleString()} work orders`}
+              segments={[
+                {
+                  label: "Original",
+                  value: filteredWorkOrderStats.original,
+                  color: CATEGORICAL.blue,
+                },
+                {
+                  label: "Additional",
+                  value: filteredWorkOrderStats.additional,
+                  color: CATEGORICAL.orange,
+                },
+              ]}
+            />
+          </Panel>
+        </Section>
+
+        <Section
+          id="work-details"
+          title={`Work details${filteredNote}`}
+          description={
+            isFilterActive
+              ? `${wd.total.toLocaleString()} of ${stats.totalWorkDetails.toLocaleString()} work details`
+              : `${wd.total.toLocaleString()} work details`
+          }
+        >
+          <Panel className="space-y-6">
+            <Donut
+              title="Progress state"
+              subtitle={`Share of all ${wd.total.toLocaleString()} work details`}
+              segments={[
+                {
+                  label: "Completed",
+                  value: wd.completed,
+                  color: CATEGORICAL.blue,
+                },
+                {
+                  label: "In progress",
+                  value: wd.inProgress,
+                  color: CATEGORICAL.orange,
+                },
+                {
+                  label: "No progress",
+                  value: wd.noProgress,
+                  color: CATEGORICAL.aqua,
+                },
+              ]}
+            />
+            <StackedBar
+              title="Deadline performance"
+              subtitle={`${(wd.missedDeadline + wd.onTimeOrEarly).toLocaleString()} work details have a judged deadline`}
+              segments={[
+                {
+                  label: "On time or early",
+                  value: wd.onTimeOrEarly,
+                  color: STATUS.good,
+                },
+                {
+                  label: "Missed deadline",
+                  value: wd.missedDeadline,
+                  color: STATUS.critical,
+                },
+              ]}
+            />
+          </Panel>
+        </Section>
       </div>
 
-      {/* 1b. Individual work orders — separate from the project rollup above,
-             since a project can still be "in progress" overall while some of
-             its own work orders are already done. */}
-      <div className="mb-6 sm:mb-8">
-        <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
-          Work Orders ({filteredWorkOrderStats.totalWorkOrders}
-          {isWorkOrderFilterActive ? ` of ${stats.totalWorkOrders}` : ""}{" "}
-          total)
-        </h2>
-        <p className="text-sm font-medium text-gray-500 mb-2">In Progress</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1 mb-4 sm:mb-6">
-          <StatCard
-            label="All Work Types"
-            value={filteredWorkOrderStats.workOrdersInProgressTotal}
-            color="text-blue-600"
-            borderColor="border-blue-500"
-          />
-          <StatCard
-            label="Docking Work"
-            value={filteredWorkOrderStats.workOrdersInProgressDocking}
-            color="text-indigo-600"
-            borderColor="border-indigo-500"
-          />
-          <StatCard
-            label="Repair Work"
-            value={filteredWorkOrderStats.workOrdersInProgressRepair}
-            color="text-teal-600"
-            borderColor="border-teal-500"
-          />
-          <StatCard
-            label="New Building"
-            value={filteredWorkOrderStats.workOrdersInProgressNewBuilding}
-            color="text-amber-600"
-            borderColor="border-amber-500"
-          />
-        </div>
-        <p className="text-sm font-medium text-gray-500 mb-2">Completed</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1">
-          <StatCard
-            label="All Work Types"
-            value={filteredWorkOrderStats.workOrdersCompletedTotal}
-            color="text-green-600"
-            borderColor="border-green-500"
-          />
-          <StatCard
-            label="Docking Work"
-            value={filteredWorkOrderStats.workOrdersCompletedDocking}
-            color="text-green-600"
-            borderColor="border-green-500"
-          />
-          <StatCard
-            label="Repair Work"
-            value={filteredWorkOrderStats.workOrdersCompletedRepair}
-            color="text-green-600"
-            borderColor="border-green-500"
-          />
-          <StatCard
-            label="New Building"
-            value={filteredWorkOrderStats.workOrdersCompletedNewBuilding}
-            color="text-green-600"
-            borderColor="border-green-500"
-          />
-        </div>
-      </div>
-
-      {/* 3 & 7. Work detail progress */}
-      <div className="mb-6 sm:mb-8">
-        <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
-          Work Detail Progress ({filteredWorkDetailStats.totalWorkDetails}
-          {isWorkOrderFilterActive ? ` of ${stats.totalWorkDetails}` : ""}{" "}
-          total)
-          {isWorkOrderFilterActive && (
-            <span className="ml-2 text-sm font-normal text-gray-400">
-              (filtered)
-            </span>
-          )}
-        </h2>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6 [&>*:last-child:nth-child(odd)]:col-span-2 lg:[&>*:last-child:nth-child(odd)]:col-span-1 mb-4 sm:mb-6">
-          <StatCard
-            label="Completed"
-            value={filteredWorkDetailStats.workDetailsCompleted}
-            color="text-green-600"
-            borderColor="border-green-500"
-          />
-          <StatCard
-            label="In Progress"
-            value={filteredWorkDetailStats.workDetailsInProgress}
-            color="text-blue-600"
-            borderColor="border-blue-500"
-          />
-          <StatCard
-            label="No Progress At All"
-            value={filteredWorkDetailStats.workDetailsNoProgress}
-            color="text-gray-600"
-            borderColor="border-gray-400"
-          />
-          <StatCard
-            label="Missed Deadline"
-            value={filteredWorkDetailStats.workDetailsMissedDeadline}
-            color="text-red-600"
-            borderColor="border-red-500"
-          />
-          <StatCard
-            label="On Time / Early"
-            value={filteredWorkDetailStats.workDetailsOnTimeOrEarly}
-            color="text-emerald-600"
-            borderColor="border-emerald-500"
-          />
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-          <DonutChart
-            title="Progress State"
-            subtitle={`Share of all ${filteredWorkDetailStats.totalWorkDetails.toLocaleString()} work details`}
-            segments={[
-              {
-                label: "Completed",
-                value: filteredWorkDetailStats.workDetailsCompleted,
-                color: CATEGORICAL.blue,
-              },
-              {
-                label: "In Progress",
-                value: filteredWorkDetailStats.workDetailsInProgress,
-                color: CATEGORICAL.orange,
-              },
-              {
-                label: "No Progress",
-                value: filteredWorkDetailStats.workDetailsNoProgress,
-                color: CATEGORICAL.aqua,
-              },
-            ]}
-          />
+      <Section
+        id="payment"
+        title={`Work to payment${filteredNote}`}
+        description="Where each work detail stands, from not yet in a BASTP to paid."
+      >
+        <Panel className="space-y-6">
           <StackedBar
-            title="Deadline Performance"
-            subtitle={`Of ${(
-              filteredWorkDetailStats.workDetailsMissedDeadline +
-              filteredWorkDetailStats.workDetailsOnTimeOrEarly
-            ).toLocaleString()} work details with a judged deadline`}
+            title="BASTP and invoice stage"
+            subtitle={`Every one of ${wd.total.toLocaleString()} work details, in order`}
             segments={[
               {
-                label: "On Time / Early",
-                value: filteredWorkDetailStats.workDetailsOnTimeOrEarly,
-                color: STATUS.good,
-              },
-              {
-                label: "Missed Deadline",
-                value: filteredWorkDetailStats.workDetailsMissedDeadline,
-                color: STATUS.critical,
-              },
-            ]}
-          />
-        </div>
-      </div>
-
-      {/* 5 & 6. BASTP pipeline */}
-      <div className="mb-6 sm:mb-8">
-        <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
-          BASTP Pipeline
-          {isWorkOrderFilterActive && (
-            <span className="ml-2 text-sm font-normal text-gray-400">
-              (filtered)
-            </span>
-          )}
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1 mb-4 sm:mb-6">
-          <StatCard
-            label="Not Made Into BASTP Yet"
-            value={filteredWorkDetailStats.workDetailsNotInBastp}
-            color="text-gray-600"
-            borderColor="border-gray-400"
-            percentOf={{
-              total: filteredWorkDetailStats.totalWorkDetails,
-              ofLabel: "work details",
-            }}
-          />
-          <StatCard
-            label="In BASTP — Awaiting Verification"
-            value={filteredWorkDetailStats.workDetailsBastpDraft}
-            color="text-orange-600"
-            borderColor="border-orange-500"
-            percentOf={{
-              total: filteredWorkDetailStats.totalWorkDetails,
-              ofLabel: "work details",
-            }}
-          />
-          <StatCard
-            label="Ready For Invoice"
-            value={filteredWorkDetailStats.workDetailsBastpReadyForInvoice}
-            color="text-purple-600"
-            borderColor="border-purple-500"
-            percentOf={{
-              total: filteredWorkDetailStats.totalWorkDetails,
-              ofLabel: "work details",
-            }}
-          />
-        </div>
-        <ComparisonBars
-          title="Not Made Into BASTP vs Already Made Into BASTP"
-          subtitle={`Of ${filteredWorkDetailStats.totalWorkDetails.toLocaleString()} work details`}
-          segments={[
-            {
-              label: "Not Made Into BASTP",
-              value: filteredWorkDetailStats.workDetailsNotInBastp,
-              color: CATEGORICAL.orange,
-            },
-            {
-              label: "Already Made Into BASTP",
-              value:
-                filteredWorkDetailStats.totalWorkDetails -
-                filteredWorkDetailStats.workDetailsNotInBastp,
-              color: CATEGORICAL.blue,
-            },
-          ]}
-        />
-      </div>
-
-      {/* 4. Invoiced */}
-      <div className="mb-6 sm:mb-8">
-        <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
-          Invoiced Work Details
-          {isWorkOrderFilterActive && (
-            <span className="ml-2 text-sm font-normal text-gray-400">
-              (filtered)
-            </span>
-          )}
-        </h2>
-        <div className="grid grid-cols-2 gap-3 sm:gap-6 mb-4 sm:mb-6">
-          <StatCard
-            label="Paid"
-            value={filteredWorkDetailStats.workDetailsInvoicedPaid}
-            color="text-green-600"
-            borderColor="border-green-500"
-            percentOf={{
-              total:
-                filteredWorkDetailStats.workDetailsInvoicedPaid +
-                filteredWorkDetailStats.workDetailsInvoicedUnpaid,
-              ofLabel: "invoiced work details",
-            }}
-          />
-          <StatCard
-            label="Unpaid"
-            value={filteredWorkDetailStats.workDetailsInvoicedUnpaid}
-            color="text-red-600"
-            borderColor="border-red-500"
-            percentOf={{
-              total:
-                filteredWorkDetailStats.workDetailsInvoicedPaid +
-                filteredWorkDetailStats.workDetailsInvoicedUnpaid,
-              ofLabel: "invoiced work details",
-            }}
-          />
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-          <StackedBar
-            title="BASTP Pipeline Stage"
-            subtitle={`Every one of ${filteredWorkDetailStats.totalWorkDetails.toLocaleString()} work details, from not-yet-BASTP to invoiced`}
-            segments={[
-              {
-                label: "Not in BASTP",
-                value: filteredWorkDetailStats.workDetailsNotInBastp,
+                label: "Not made into a BASTP yet",
+                value: wd.notInBastp,
                 color: PIPELINE_RAMP[0],
               },
               {
-                label: "Awaiting Verification",
-                value: filteredWorkDetailStats.workDetailsBastpDraft,
+                label: "In a BASTP, awaiting verification",
+                value: wd.bastpDraft,
                 color: PIPELINE_RAMP[1],
               },
               {
-                label: "Ready For Invoice",
-                value: filteredWorkDetailStats.workDetailsBastpReadyForInvoice,
+                label: "Ready for invoice",
+                value: wd.bastpReady,
                 color: PIPELINE_RAMP[3],
               },
               {
-                label: "Invoiced",
-                value:
-                  filteredWorkDetailStats.workDetailsInvoicedPaid +
-                  filteredWorkDetailStats.workDetailsInvoicedUnpaid,
-                color: PIPELINE_RAMP[4],
-              },
-            ]}
-          />
-          <ComparisonBars
-            title="Invoiced — Paid vs Unpaid"
-            subtitle={`Of ${(
-              filteredWorkDetailStats.workDetailsInvoicedPaid +
-              filteredWorkDetailStats.workDetailsInvoicedUnpaid
-            ).toLocaleString()} invoiced work details`}
-            segments={[
-              {
-                label: "Paid",
-                value: filteredWorkDetailStats.workDetailsInvoicedPaid,
-                color: STATUS.good,
-              },
-              {
-                label: "Unpaid",
-                value: filteredWorkDetailStats.workDetailsInvoicedUnpaid,
+                label: "Invoiced, unpaid",
+                value: wd.invoicedUnpaid,
                 color: STATUS.warning,
               },
-            ]}
-          />
-        </div>
-        <div className="grid grid-cols-1 mt-6">
-          <ComparisonBars
-            title="Invoiced Value — Paid vs Unpaid"
-            subtitle="Total invoiced amount by payment status"
-            formatValue={formatCurrency}
-            segments={[
               {
-                label: "Paid",
-                value: filteredWorkDetailStats.workDetailsInvoicedPaidValue,
+                label: "Invoiced, paid",
+                value: wd.invoicedPaid,
                 color: STATUS.good,
               },
-              {
-                label: "Unpaid",
-                value: filteredWorkDetailStats.workDetailsInvoicedUnpaidValue,
-                color: STATUS.warning,
-              },
             ]}
           />
-        </div>
-      </div>
-
-      {/* 8. Work order composition */}
-      <div className="mb-6 sm:mb-8">
-        <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">
-          Work Orders ({filteredWorkOrderStats.totalWorkOrders}
-          {isWorkOrderFilterActive ? ` of ${stats.totalWorkOrders}` : ""}{" "}
-          total)
-          {isWorkOrderFilterActive && (
-            <span className="ml-2 text-sm font-normal text-gray-400">
-              (filtered)
-            </span>
-          )}
-        </h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-          <div className="grid grid-cols-2 gap-3 sm:gap-6">
-            <StatCard
-              label="Original"
-              value={filteredWorkOrderStats.workOrdersOriginal}
-              color="text-blue-600"
-              borderColor="border-blue-500"
-              percentOf={{
-                total: filteredWorkOrderStats.totalWorkOrders,
-                ofLabel: "work orders",
-              }}
-            />
-            <StatCard
-              label="Additional"
-              value={filteredWorkOrderStats.workOrdersAdditional}
-              color="text-purple-600"
-              borderColor="border-purple-500"
-              percentOf={{
-                total: filteredWorkOrderStats.totalWorkOrders,
-                ofLabel: "work orders",
-              }}
-            />
-          </div>
-          <StackedBar
-            title="Original vs Additional"
-            subtitle={`Share of all ${filteredWorkOrderStats.totalWorkOrders.toLocaleString()} work orders`}
-            segments={[
-              {
-                label: "Original",
-                value: filteredWorkOrderStats.workOrdersOriginal,
-                color: CATEGORICAL.blue,
-              },
-              {
-                label: "Additional",
-                value: filteredWorkOrderStats.workOrdersAdditional,
-                color: CATEGORICAL.orange,
-              },
-            ]}
-          />
-        </div>
-      </div>
-
-      {/* Vessel Summary */}
-      {vesselSummaries.length > 0 && (
-        <div className="mb-6 sm:mb-8">
-          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h2 className="text-xl font-semibold text-slate-900">
-                  Vessel Summary
-                </h2>
-                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 tabular-nums">
-                  {filteredVessels.length} of {vesselSummaries.length} vessels
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-slate-500">
-                Work progress across all vessels — combined, and split between
-                Docking, Repair and New Building
-              </p>
+          <dl className="grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 sm:grid-cols-2">
+            <div className="bg-white p-4">
+              <dt className="text-sm font-medium text-slate-700">Paid value</dt>
+              <dd className="mt-1 text-2xl font-bold tabular-nums text-emerald-800">
+                {formatCurrency(wd.invoicedPaidValue)}
+              </dd>
+              <dd className="mt-0.5 text-sm text-slate-600">
+                {wd.invoicedPaid.toLocaleString()} work details,{" "}
+                {pct(wd.invoicedPaid, invoicedTotal)}% of those invoiced
+              </dd>
             </div>
-
-            <div
-              role="group"
-              aria-label="View mode"
-              className="inline-flex self-start lg:self-auto items-center gap-0.5 rounded-lg bg-slate-100 p-1"
-            >
-              {(
-                [
-                  { mode: "grid", label: "Grid", Icon: LayoutGrid },
-                  { mode: "list", label: "List", Icon: List },
-                ] as const
-              ).map(({ mode, label, Icon }) => (
-                <button
-                  key={mode}
-                  onClick={() => setVesselViewMode(mode)}
-                  aria-pressed={vesselViewMode === mode}
-                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                    vesselViewMode === mode
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {label}
-                </button>
-              ))}
+            <div className="bg-white p-4">
+              <dt className="text-sm font-medium text-slate-700">
+                Unpaid value
+              </dt>
+              <dd className="mt-1 text-2xl font-bold tabular-nums text-slate-900">
+                {formatCurrency(wd.invoicedUnpaidValue)}
+              </dd>
+              <dd className="mt-0.5 text-sm text-slate-600">
+                {wd.invoicedUnpaid.toLocaleString()} work details,{" "}
+                {pct(wd.invoicedUnpaid, invoicedTotal)}% of those invoiced
+              </dd>
             </div>
-          </div>
+          </dl>
+        </Panel>
+      </Section>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-4 mb-5 shadow-sm">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex-1 relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search vessels..."
-                  value={vesselSearchTerm}
-                  onChange={(e) => {
-                    setVesselSearchTerm(e.target.value);
-                    setVesselPage(1);
-                  }}
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50/60 py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                />
-              </div>
-
-              <select
-                value={vesselFilter}
-                onChange={(e) => {
-                  setVesselFilter(e.target.value as typeof vesselFilter);
-                  setVesselPage(1);
-                }}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              >
-                <option value="all">
-                  All Vessels ({vesselFilterCounts.all})
-                </option>
-                <option value="active">
-                  Active Work ({vesselFilterCounts.active})
-                </option>
-                <option value="completed">
-                  Has Completed ({vesselFilterCounts.completed})
-                </option>
-                <option value="alerts">
-                  Needs Attention ({vesselFilterCounts.alerts})
-                </option>
-              </select>
-
-              <select
-                value={vesselSortBy}
-                onChange={(e) =>
-                  setVesselSortBy(e.target.value as typeof vesselSortBy)
-                }
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              >
-                <option value="activity">Recent Activity</option>
-                <option value="name">Name (A-Z)</option>
-                <option value="progress">Progress %</option>
-                <option value="workOrders">Work Orders Count</option>
-              </select>
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-100">
-                <AlertTriangle className="h-3.5 w-3.5" />
-                Overdue
-                <b className="tabular-nums">{vesselQuickStats.overdue}</b>
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-100">
-                <Receipt className="h-3.5 w-3.5" />
-                Ready to Invoice
-                <b className="tabular-nums">{vesselQuickStats.readyToInvoice}</b>
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-100">
-                <Gauge className="h-3.5 w-3.5" />
-                Avg Progress
-                <b className="tabular-nums">{vesselQuickStats.avgProgress}%</b>
-              </span>
-            </div>
-          </div>
-
-          {paginationValues.currentVessels.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-white py-12 text-center">
-              <Ship className="mx-auto h-8 w-8 text-slate-300" />
-              <p className="mt-2 text-sm font-medium text-slate-600">
-                No vessels match your filters
-              </p>
-              <p className="text-xs text-slate-400">
-                Try a different search or filter.
-              </p>
-            </div>
-          ) : vesselViewMode === "grid" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {paginationValues.currentVessels.map((vessel) => (
-                <button
-                  type="button"
-                  key={vessel.id}
-                  className="group flex flex-col rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                  onClick={() => navigate(`/vessel/${vessel.id}/work-orders`)}
-                >
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg ${getVesselStatus(vessel).tile}`}
-                    >
-                      <Ship className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3
-                        className="truncate text-sm font-semibold text-slate-900"
-                        title={vessel.name}
-                      >
-                        {vessel.name}
-                      </h3>
-                      <p
-                        className="truncate text-xs text-slate-500"
-                        title={`${vessel.type} • ${vessel.company}`}
-                      >
-                        {vessel.type} • {vessel.company}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    <VesselBadges vessel={vessel} />
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-3 divide-x divide-slate-100 rounded-lg bg-slate-50 py-2 text-center">
-                    <div>
-                      <div className="text-base font-semibold leading-tight text-slate-900 tabular-nums">
-                        {vessel.totalWorkOrders}
-                      </div>
-                      <div className="text-[11px] text-slate-500">Total WO</div>
-                    </div>
-                    <div>
-                      <div className="text-base font-semibold leading-tight text-blue-700 tabular-nums">
-                        {vessel.inProgress}
-                      </div>
-                      <div className="text-[11px] text-slate-500">
-                        In progress
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-base font-semibold leading-tight text-emerald-700 tabular-nums">
-                        {vessel.completed}
-                      </div>
-                      <div className="text-[11px] text-slate-500">Done</div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4">
-                    <div className="mb-1.5 flex items-baseline justify-between">
-                      <span className="text-xs font-medium text-slate-500">
-                        Overall progress
-                      </span>
-                      <span className="text-sm font-semibold text-slate-900 tabular-nums">
-                        {vessel.overallProgress}%
-                      </span>
-                    </div>
-                    <ProgressTrack
-                      value={vessel.overallProgress}
-                      color="bg-blue-600"
-                      height="h-2"
-                    />
-                  </div>
-
-                  {(vessel.dockingProgress !== null ||
-                    vessel.repairProgress !== null ||
-                    vessel.newBuildingProgress !== null) && (
-                    <div className="mt-3 space-y-1.5">
-                      {vessel.dockingProgress !== null && (
-                        <div className="flex items-center gap-2">
-                          <span className="w-14 flex-shrink-0 text-[11px] text-slate-500">
-                            Docking
-                          </span>
-                          <ProgressTrack
-                            value={vessel.dockingProgress}
-                            color="bg-indigo-500"
-                            height="h-1.5"
-                          />
-                          <span className="w-9 flex-shrink-0 text-right text-[11px] text-slate-500 tabular-nums">
-                            {vessel.dockingProgress}%
-                          </span>
-                        </div>
-                      )}
-                      {vessel.repairProgress !== null && (
-                        <div className="flex items-center gap-2">
-                          <span className="w-14 flex-shrink-0 text-[11px] text-slate-500">
-                            Repair
-                          </span>
-                          <ProgressTrack
-                            value={vessel.repairProgress}
-                            color="bg-teal-500"
-                            height="h-1.5"
-                          />
-                          <span className="w-9 flex-shrink-0 text-right text-[11px] text-slate-500 tabular-nums">
-                            {vessel.repairProgress}%
-                          </span>
-                        </div>
-                      )}
-                      {vessel.newBuildingProgress !== null && (
-                        <div className="flex items-center gap-2">
-                          <span className="w-14 flex-shrink-0 text-[11px] text-slate-500">
-                            New Bldg
-                          </span>
-                          <ProgressTrack
-                            value={vessel.newBuildingProgress}
-                            color="bg-amber-500"
-                            height="h-1.5"
-                          />
-                          <span className="w-9 flex-shrink-0 text-right text-[11px] text-slate-500 tabular-nums">
-                            {vessel.newBuildingProgress}%
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-400">
-                    <span className="inline-flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5" />
-                      {vessel.lastActivity
-                        ? formatDate(vessel.lastActivity)
-                        : "No activity"}
-                    </span>
-                    <ArrowRight className="h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-blue-600" />
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="table-stack min-w-full divide-y divide-slate-200">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      {[
-                        "Vessel",
-                        "Work Orders",
-                        "Progress",
-                        "Status",
-                        "Last Activity",
-                      ].map((heading) => (
-                        <th
-                          key={heading}
-                          className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500"
-                        >
-                          {heading}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
-                    {paginationValues.currentVessels.map((vessel) => (
-                      <tr
-                        key={vessel.id}
-                        className="cursor-pointer transition-colors hover:bg-slate-50"
-                        onClick={() =>
-                          navigate(`/vessel/${vessel.id}/work-orders`)
-                        }
-                      >
-                        <td className="px-5 py-3.5 whitespace-nowrap">
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg ${getVesselStatus(vessel).tile}`}
-                            >
-                              <Ship className="h-4 w-4" />
-                            </div>
-                            <div>
-                              <div className="text-sm font-medium text-slate-900">
-                                {vessel.name}
-                              </div>
-                              <div className="text-xs text-slate-500">
-                                {vessel.type} • {vessel.company}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap">
-                          <div className="flex gap-4 text-sm tabular-nums">
-                            <span className="font-medium text-slate-900">
-                              {vessel.totalWorkOrders}{" "}
-                              <span className="font-normal text-slate-500">
-                                total
-                              </span>
-                            </span>
-                            <span className="text-blue-700">
-                              {vessel.inProgress}{" "}
-                              <span className="text-slate-500">in progress</span>
-                            </span>
-                            <span className="text-emerald-700">
-                              {vessel.completed}{" "}
-                              <span className="text-slate-500">done</span>
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap">
-                          <div className="flex items-center gap-3">
-                            <div className="w-28">
-                              <ProgressTrack
-                                value={vessel.overallProgress}
-                                color="bg-blue-600"
-                                height="h-2"
-                              />
-                            </div>
-                            <span className="w-10 text-sm font-semibold text-slate-900 tabular-nums">
-                              {vessel.overallProgress}%
-                            </span>
-                            <span className="text-xs text-slate-500 tabular-nums">
-                              Docking{" "}
-                              {vessel.dockingProgress !== null
-                                ? `${vessel.dockingProgress}%`
-                                : "—"}{" "}
-                              · Repair{" "}
-                              {vessel.repairProgress !== null
-                                ? `${vessel.repairProgress}%`
-                                : "—"}
-                              {vessel.newBuildingProgress !== null &&
-                                ` · New Building ${vessel.newBuildingProgress}%`}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap">
-                          <div className="flex gap-1.5">
-                            <VesselBadges vessel={vessel} />
-                          </div>
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap text-sm text-slate-500">
-                          {vessel.lastActivity
-                            ? formatDate(vessel.lastActivity)
-                            : "No activity"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {paginationValues.totalPages > 1 && (
-            <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="text-sm text-slate-500 tabular-nums">
-                Showing {paginationValues.startIndex + 1}–
-                {Math.min(
-                  paginationValues.startIndex + vesselsPerPage,
-                  filteredVessels.length,
-                )}{" "}
-                of {filteredVessels.length} vessels
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setVesselPage(Math.max(1, vesselPage - 1))}
-                  disabled={vesselPage === 1}
-                  aria-label="Previous page"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-
-                {Array.from(
-                  { length: Math.min(5, paginationValues.totalPages) },
-                  (_, i) => {
-                    const pageNum =
-                      Math.max(
-                        1,
-                        Math.min(
-                          paginationValues.totalPages - 4,
-                          vesselPage - 2,
-                        ),
-                      ) + i;
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => setVesselPage(pageNum)}
-                        aria-current={pageNum === vesselPage ? "page" : undefined}
-                        className={`h-9 min-w-9 rounded-lg px-3 text-sm font-medium tabular-nums ${
-                          pageNum === vesselPage
-                            ? "bg-blue-600 text-white shadow-sm"
-                            : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  },
-                )}
-
-                <button
-                  onClick={() =>
-                    setVesselPage(
-                      Math.min(paginationValues.totalPages, vesselPage + 1),
-                    )
-                  }
-                  disabled={vesselPage === paginationValues.totalPages}
-                  aria-label="Next page"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="mt-5 text-center">
-            <button
-              onClick={() => navigate("/work-orders")}
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-800"
-            >
-              View Detailed Vessel Dashboard
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
+      <VesselSection vessels={vesselSummaries} />
     </div>
   );
 }

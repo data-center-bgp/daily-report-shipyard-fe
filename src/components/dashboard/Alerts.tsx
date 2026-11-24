@@ -1,6 +1,12 @@
 import { useState } from "react";
-import { useDashboardData, type DashboardAlert } from "../../hooks/useDashboardData";
+import { Link } from "react-router-dom";
+import { AlertTriangle, ChevronLeft, ChevronRight, Receipt } from "lucide-react";
+import {
+  useDashboardData,
+  type DashboardAlert,
+} from "../../hooks/useDashboardData";
 import LoadingState from "../common/LoadingState";
+import { Section } from "./widgets";
 
 const PER_PAGE = 10;
 
@@ -13,50 +19,64 @@ const formatDate = (dateString: string | null | undefined) => {
   });
 };
 
-const getAlertIcon = (type: DashboardAlert["type"]) =>
-  type === "overdue" ? "🚨" : "💰";
-
-const getAlertColor = (priority: DashboardAlert["priority"]) =>
-  priority === "high"
-    ? "bg-red-50 border-red-200 text-red-800"
-    : "bg-yellow-50 border-yellow-200 text-yellow-800";
+// Each alert names its kind in words and with an icon, so the red and amber
+// tint is a second cue, never the only one.
+const ALERT_STYLE: Record<
+  DashboardAlert["type"],
+  { label: string; tag: string; Icon: typeof AlertTriangle }
+> = {
+  overdue: {
+    label: "Overdue",
+    tag: "bg-red-50 text-red-800",
+    Icon: AlertTriangle,
+  },
+  ready_for_invoice: {
+    label: "Ready to invoice",
+    tag: "bg-amber-50 text-amber-900",
+    Icon: Receipt,
+  },
+};
 
 function AlertCard({ alert }: { alert: DashboardAlert }) {
+  const { label, tag, Icon } = ALERT_STYLE[alert.type];
   return (
-    <div className={`p-4 rounded-lg border ${getAlertColor(alert.priority)}`}>
-      <div className="flex items-start space-x-3">
-        <span className="text-lg">{getAlertIcon(alert.type)}</span>
-        <div className="flex-1">
-          {/* The work item itself — without this, every alert on the same
-              WO with the same target date renders as an identical-looking
-              card, which is what made this look like a duplication bug. */}
-          <div className="font-medium text-sm text-gray-900">
-            {alert.workDetailDescription || "(no description)"}
-          </div>
-          <div className="text-sm font-semibold text-gray-700 mt-0.5">
-            {alert.vesselName}
-          </div>
-          <div className="text-xs text-gray-600 mb-1">
-            {alert.vesselCompany} · {alert.woLabel}
-          </div>
-          <div className="text-sm">{alert.message}</div>
-          {alert.targetCloseDate && (
-            <div className="text-xs mt-2">
-              Target: {formatDate(alert.targetCloseDate)}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+    <li className="rounded-lg border border-slate-200 bg-white p-4">
+      <span
+        className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${tag}`}
+      >
+        <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+        {label}
+        {alert.priority === "high" && " · High priority"}
+      </span>
+      {/* The work item itself: without it, alerts on the same work order
+          with the same target date look like duplicates. */}
+      <p className="mt-2 text-sm font-semibold text-slate-900">
+        {alert.workDetailDescription || "(no description)"}
+      </p>
+      <p className="mt-0.5 text-sm font-medium text-slate-800">
+        {alert.vesselName}
+      </p>
+      <p className="text-sm text-slate-600">
+        {alert.vesselCompany} · {alert.woLabel}
+      </p>
+      <p className="mt-2 text-sm text-slate-800">{alert.message}</p>
+      {alert.targetCloseDate && (
+        <p className="mt-1 text-sm text-slate-600">
+          Target: {formatDate(alert.targetCloseDate)}
+        </p>
+      )}
+    </li>
   );
 }
 
 function Pagination({
+  label,
   page,
   totalPages,
   onPageChange,
   totalCount,
 }: {
+  label: string;
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -65,57 +85,63 @@ function Pagination({
   if (totalPages <= 1) return null;
 
   return (
-    <div className="mt-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
-      <div className="text-sm text-gray-600">
+    <nav
+      aria-label={`${label} pages`}
+      className="mt-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-between"
+    >
+      <p className="text-sm tabular-nums text-slate-600">
         Showing {(page - 1) * PER_PAGE + 1} to{" "}
         {Math.min(page * PER_PAGE, totalCount)} of {totalCount}
-      </div>
-
-      <div className="flex flex-wrap items-center justify-center gap-2">
+      </p>
+      <div className="flex items-center gap-1.5">
         <button
+          type="button"
           onClick={() => onPageChange(Math.max(1, page - 1))}
           disabled={page === 1}
-          className="px-3 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 text-sm"
+          aria-label="Previous page"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white sm:h-10 sm:w-10"
         >
-          ← Previous
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </button>
-
-        <div className="flex space-x-1">
-          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-            const pageNum =
-              Math.max(1, Math.min(totalPages - 4, page - 2)) + i;
-            return (
-              <button
-                key={pageNum}
-                onClick={() => onPageChange(pageNum)}
-                className={`px-3 py-2 text-sm rounded-lg ${
-                  pageNum === page
-                    ? "bg-blue-600 text-white"
-                    : "border border-gray-300 hover:bg-gray-50"
-                }`}
-              >
-                {pageNum}
-              </button>
-            );
-          })}
-        </div>
-
+        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+          const pageNum = Math.max(1, Math.min(totalPages - 4, page - 2)) + i;
+          return (
+            <button
+              key={pageNum}
+              type="button"
+              onClick={() => onPageChange(pageNum)}
+              aria-label={`Page ${pageNum}`}
+              aria-current={pageNum === page ? "page" : undefined}
+              className={`h-11 min-w-11 rounded-md px-3 text-sm font-medium tabular-nums sm:h-10 sm:min-w-10 ${
+                pageNum === page
+                  ? "bg-blue-950 text-white"
+                  : "border border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+              }`}
+            >
+              {pageNum}
+            </button>
+          );
+        })}
         <button
+          type="button"
           onClick={() => onPageChange(Math.min(totalPages, page + 1))}
           disabled={page === totalPages}
-          className="px-3 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 text-sm"
+          aria-label="Next page"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white sm:h-10 sm:w-10"
         >
-          Next →
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
-    </div>
+    </nav>
   );
 }
 
 function AlertSection({
+  id,
   title,
   alerts,
 }: {
+  id: string;
   title: string;
   alerts: DashboardAlert[];
 }) {
@@ -132,22 +158,20 @@ function AlertSection({
   if (alerts.length === 0) return null;
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h3 className="text-lg font-medium text-gray-900 mb-4">
-        {title} ({alerts.length})
-      </h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <Section id={id} title={`${title} (${alerts.length})`}>
+      <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {pageAlerts.map((alert) => (
           <AlertCard key={alert.key} alert={alert} />
         ))}
-      </div>
+      </ul>
       <Pagination
+        label={title}
         page={currentPage}
         totalPages={totalPages}
         onPageChange={setPage}
         totalCount={alerts.length}
       />
-    </div>
+    </Section>
   );
 }
 
@@ -160,14 +184,20 @@ export default function Alerts() {
 
   if (error) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-600">{error}</p>
+      <div className="mx-auto w-full max-w-[96rem] px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-lg border border-red-300 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="text-sm text-red-900">
+            <span className="font-semibold">Alerts could not load.</span> {error}
+          </p>
           <button
+            type="button"
             onClick={refetch}
-            className="mt-2 text-red-600 hover:text-red-800 underline"
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-red-700 bg-white px-4 text-sm font-medium text-red-800 hover:bg-red-100"
           >
-            Retry
+            Try again
           </button>
         </div>
       </div>
@@ -180,25 +210,38 @@ export default function Alerts() {
   );
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Alerts</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          {alerts.length} active alert{alerts.length === 1 ? "" : "s"} —{" "}
+    <div className="mx-auto w-full max-w-[96rem] space-y-8 px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+      <header>
+        <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">Alerts</h1>
+        <p className="mt-1 text-sm text-slate-600 sm:text-base">
+          {alerts.length} active alert{alerts.length === 1 ? "" : "s"}:{" "}
           {overdueAlerts.length} overdue, {readyForInvoiceAlerts.length} ready
-          for invoicing
+          for invoicing.
         </p>
-      </div>
+      </header>
 
       {alerts.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-          No active alerts right now.
+        <div className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-12 text-center">
+          <p className="text-sm font-medium text-slate-900">
+            No active alerts right now
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            Work details past their target date, and BASTPs ready to invoice,
+            show up here.
+          </p>
+          <Link
+            to="/"
+            className="mt-4 inline-flex min-h-11 items-center rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50"
+          >
+            Back to the dashboard
+          </Link>
         </div>
       ) : (
         <>
-          <AlertSection title="Overdue" alerts={overdueAlerts} />
+          <AlertSection id="overdue" title="Overdue" alerts={overdueAlerts} />
           <AlertSection
-            title="Ready for Invoicing"
+            id="ready-to-invoice"
+            title="Ready for invoicing"
             alerts={readyForInvoiceAlerts}
           />
         </>

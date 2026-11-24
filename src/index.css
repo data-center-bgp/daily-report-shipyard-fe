@@ -1,5 +1,129 @@
 @import "tailwindcss";
 
+/* Base layer for the whole app.
+   - Tailwind v4's preflight resets every <button> to cursor: default, which
+     hides the "this is clickable" signal from mouse users. Restore it once
+     here for every enabled control, and show "not-allowed" on disabled ones.
+   - One visible keyboard focus ring (3:1 against both the light page and the
+     navy sidebar) so no component has to invent its own, or remove it.
+   - Honour prefers-reduced-motion everywhere: transitions and animations
+     collapse to an instant change. */
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary,
+  select:not(:disabled),
+  label[for],
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled) {
+    cursor: pointer;
+  }
+  button:disabled,
+  [aria-disabled="true"],
+  select:disabled {
+    cursor: not-allowed;
+  }
+  :focus-visible {
+    outline: 2px solid #1d4ed8;
+    outline-offset: 2px;
+  }
+  /* On the navy sidebar the blue ring would vanish; use white there. */
+  .on-navy :focus-visible {
+    outline-color: #ffffff;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Mobile navigation drawer (src/components/common/MobileNavDrawer.tsx).
+   A modal <dialog> filling the viewport, holding a horizontal scroll-snap
+   scroller with two stops: the sheet (open) and an empty spacer (closed).
+   The browser does the swipe: dragging the sheet off-screen scrolls to the
+   spacer, and an IntersectionObserver closes the dialog once it is gone. */
+.mobile-drawer {
+  --drawer-width: min(20rem, 85dvw, 100dvw - 24px);
+  --drawer-backdrop: 0;
+  inset: 0;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  overflow: visible;
+}
+.mobile-drawer::backdrop {
+  background: #020617;
+  opacity: calc(var(--drawer-backdrop) * 0.6);
+}
+.mobile-drawer-scroller {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--drawer-width) 100%;
+  overflow-x: scroll;
+  overscroll-behavior: none;
+  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+}
+.mobile-drawer-scroller::-webkit-scrollbar {
+  display: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mobile-drawer-scroller {
+    scroll-behavior: smooth;
+  }
+}
+.mobile-drawer-scroller::after {
+  content: "";
+  scroll-snap-align: end;
+  scroll-initial-target: nearest;
+}
+.mobile-drawer-sheet {
+  display: flex;
+  flex-direction: column;
+  /* svh, not dvh: the sheet must not resize while the mobile address bar
+     collapses mid-swipe. */
+  height: 100svh;
+  overflow: hidden;
+  scroll-snap-align: start;
+}
+@supports (animation-timeline: scroll()) {
+  .mobile-drawer {
+    timeline-scope: --drawer-fade;
+    animation: drawer-backdrop-fade linear both;
+    animation-timeline: --drawer-fade;
+  }
+  .mobile-drawer-scroller {
+    scroll-timeline: --drawer-fade x;
+  }
+  @property --drawer-backdrop {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 0;
+  }
+  @keyframes drawer-backdrop-fade {
+    0% {
+      --drawer-backdrop: 1;
+    }
+    100% {
+      --drawer-backdrop: 0;
+    }
+  }
+}
+
 /* LoadingState (src/components/common/LoadingState.tsx). The arc is a
    conic gradient masked down to a 3px ring, so it reads as a comet with a
    fading tail rather than the old flat border-b spinner. */

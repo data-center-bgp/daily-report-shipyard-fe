@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { supabase } from "../../lib/supabase";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { useDashboardData } from "../../hooks/useDashboardData";
 import { useStackedTables } from "../../hooks/useStackedTables";
+import MobileNavDrawer from "./MobileNavDrawer";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -20,7 +20,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  User,
+  X,
   Users,
   ClipboardList,
   ClipboardCheck,
@@ -48,8 +48,13 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// ─── Sidebar navigation list — shared between the desktop and mobile
-// drawers so grouping/styling can't drift out of sync between the two.
+const BRAND_NAME = "Shipyard System";
+const COMPANY_NAME = "Barokah Galangan Perkasa";
+
+// Sidebar navigation list, shared between the desktop sidebar and the mobile
+// drawer so grouping and styling can't drift apart. Every entry is a real
+// link (open in a new tab, copy the address, middle-click) and the current
+// page is exposed with aria-current, not just a colour.
 function SidebarNav({
   groups,
   collapsed,
@@ -57,110 +62,129 @@ function SidebarNav({
 }: {
   groups: NavGroup[];
   collapsed: boolean;
-  onNavigate: (href: string) => void;
+  onNavigate?: () => void;
 }) {
   return (
     <>
-      {groups.map((group, groupIndex) => (
-        <div
-          key={group.title ?? `group-${groupIndex}`}
-          className={groupIndex > 0 ? "mt-6" : ""}
-        >
-          {group.title && !collapsed && (
-            <p className="px-3 mb-2 text-xs font-semibold text-blue-300/70 uppercase tracking-wider">
-              {group.title}
-            </p>
-          )}
-          {group.title && collapsed && groupIndex > 0 && (
-            <div className="border-t border-blue-700/50 mx-2 mb-3" />
-          )}
-          <div className="space-y-1">
-            {group.items.map((item) => {
-              const IconComponent = item.icon;
-              return (
-                <div key={item.name} className="relative group">
-                  <button
-                    onClick={() => onNavigate(item.href)}
-                    className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center transition-all duration-200 ${
-                      collapsed ? "justify-center" : "space-x-3"
-                    } ${
-                      item.current
-                        ? "bg-white text-blue-800 shadow-lg shadow-black/10"
-                        : "text-blue-100 hover:bg-white/10 hover:text-white hover:translate-x-0.5"
-                    }`}
-                  >
-                    <IconComponent className="w-5 h-5 flex-shrink-0" />
-                    {!collapsed && (
-                      <span className="font-medium truncate">
+      {groups.map((group, groupIndex) => {
+        const headingId = group.title
+          ? `nav-group-${group.title.replace(/\W+/g, "-").toLowerCase()}`
+          : undefined;
+        return (
+          <div
+            key={group.title ?? `group-${groupIndex}`}
+            className={groupIndex > 0 ? "mt-5" : ""}
+          >
+            {group.title && !collapsed && (
+              <h2
+                id={headingId}
+                className="mb-1.5 px-3 text-xs font-semibold text-blue-200"
+              >
+                {group.title}
+              </h2>
+            )}
+            {group.title && collapsed && groupIndex > 0 && (
+              <div className="mx-2 mb-3 border-t border-white/15" />
+            )}
+            <ul aria-labelledby={headingId} className="space-y-0.5">
+              {group.items.map((item) => {
+                const IconComponent = item.icon;
+                return (
+                  <li key={item.name} className="group relative">
+                    <Link
+                      to={item.href}
+                      onClick={onNavigate}
+                      aria-current={item.current ? "page" : undefined}
+                      aria-label={collapsed ? item.name : undefined}
+                      className={`flex min-h-11 items-center rounded-md px-3 py-2 text-sm transition-colors ${
+                        collapsed ? "justify-center" : "gap-3"
+                      } ${
+                        item.current
+                          ? "bg-white font-semibold text-blue-950"
+                          : "text-blue-50 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      <IconComponent
+                        className="h-5 w-5 flex-shrink-0"
+                        aria-hidden="true"
+                      />
+                      {!collapsed && <span className="truncate">{item.name}</span>}
+                    </Link>
+
+                    {/* Name shown beside the icon while the sidebar is
+                        collapsed. Reachable by keyboard focus as well as hover. */}
+                    {collapsed && (
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2.5 py-1.5 text-sm text-white opacity-0 shadow-md transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+                      >
                         {item.name}
                       </span>
                     )}
-                  </button>
-
-                  {/* Tooltip for collapsed state */}
-                  {collapsed && (
-                    <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white px-2 py-1 rounded text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 pointer-events-none">
-                      {item.name}
-                      <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-900 rotate-45"></div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                  </li>
+                );
+              })}
+            </ul>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </>
+  );
+}
+
+function BrandMark({ showName }: { showName: boolean }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <img
+        src="/bgp-icon.jpg"
+        alt={COMPANY_NAME}
+        width={32}
+        height={32}
+        className="h-8 w-8 flex-shrink-0 rounded-md object-cover"
+      />
+      {showName && (
+        <span className="truncate text-base font-semibold text-white">
+          {BRAND_NAME}
+        </span>
+      )}
+    </div>
   );
 }
 
 export default function Layout({ children, onLogout }: LayoutProps) {
   useStackedTables();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  // While the drawer is open the page behind it shouldn't scroll, and
-  // Escape closes it.
-  useEffect(() => {
-    if (!sidebarOpen) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSidebarOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = previous;
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [sidebarOpen]);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [_user, setUser] = useState<any>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("sidebar-collapsed") ?? "false");
+    } catch {
+      return false;
+    }
+  });
   const location = useLocation();
-  const navigate = useNavigate();
   const { canAccess, profile, canVerifyExternalVesselWork } = useAuth();
   const { alerts } = useDashboardData();
 
+  // The drawer only exists below lg. If the window grows past it while the
+  // drawer is open (rotating a tablet, resizing), close it instead of leaving
+  // an invisible modal holding the page inert.
   useEffect(() => {
-    const getUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setUser(user);
+    const query = window.matchMedia("(min-width: 1024px)");
+    const onChange = () => {
+      if (query.matches) setDrawerOpen(false);
     };
-    getUser();
-  }, []);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("sidebar-collapsed");
-    if (saved) {
-      setSidebarCollapsed(JSON.parse(saved));
-    }
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
   }, []);
 
   const toggleSidebar = () => {
-    const newState = !sidebarCollapsed;
-    setSidebarCollapsed(newState);
-    localStorage.setItem("sidebar-collapsed", JSON.stringify(newState));
+    const next = !sidebarCollapsed;
+    setSidebarCollapsed(next);
+    try {
+      localStorage.setItem("sidebar-collapsed", JSON.stringify(next));
+    } catch {
+      // Storage can be blocked; the toggle still works for this visit.
+    }
   };
 
   // One work detail's progress reports: /work-details/:id/progress.
@@ -354,194 +378,179 @@ export default function Layout({ children, onLogout }: LayoutProps) {
     }))
     .filter((group) => group.items.length > 0);
 
-  const handleNavigate = (href: string) => navigate(href);
+  const alertCount = alerts.length;
+  const alertLabel =
+    alertCount > 0
+      ? `Alerts, ${alertCount} active`
+      : "Alerts, none active";
+  const userName = profile?.name || "User";
+
+  const skipToContent = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    const main = document.getElementById("main-content");
+    main?.focus();
+    main?.scrollIntoView();
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar for desktop */}
-      <div className="hidden lg:flex lg:flex-shrink-0 lg:fixed lg:inset-y-0 lg:z-30">
+    <div className="flex min-h-dvh bg-slate-50">
+      <a
+        href="#main-content"
+        onClick={skipToContent}
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-md focus:bg-white focus:px-4 focus:py-2.5 focus:text-sm focus:font-semibold focus:text-blue-950 focus:shadow-lg"
+      >
+        Skip to main content
+      </a>
+
+      {/* Desktop sidebar. A flat navy surface: the navy is the brand colour
+          from the logo, and nothing on it blurs, glows or floats. */}
+      <aside className="on-navy fixed inset-y-0 z-30 hidden lg:flex lg:flex-shrink-0">
         <div
-          className={`relative flex flex-col h-screen overflow-hidden bg-gradient-to-b from-blue-950 via-blue-900 to-slate-950 shadow-xl transition-all duration-300 ease-in-out ${
+          className={`flex h-dvh flex-col overflow-hidden bg-blue-950 transition-[width] duration-200 ease-out ${
             sidebarCollapsed ? "w-16" : "w-64"
           }`}
         >
-          {/* Decorative glow + texture, matching the login page */}
-          <div className="pointer-events-none absolute -top-16 -left-16 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl" />
-          <div className="pointer-events-none absolute bottom-24 -right-16 w-64 h-64 bg-indigo-400/15 rounded-full blur-3xl" />
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.06)_1px,transparent_0)] bg-[size:22px_22px]" />
-
-          {/* Logo/Header */}
-          <div className="relative z-10 flex-shrink-0 flex items-center justify-between h-16 px-4 bg-blue-950/60 border-b border-white/10">
-            <div className="flex items-center space-x-3 min-w-0">
-              <img
-                src="/bgp-icon.jpg"
-                alt="Barokah Galangan Perkasa"
-                className="w-8 h-8 rounded-lg object-cover flex-shrink-0 ring-1 ring-white/20"
-              />
-              {!sidebarCollapsed && (
-                <h1 className="text-lg font-bold text-white transition-opacity duration-200 truncate">
-                  Shipyard System
-                </h1>
-              )}
-            </div>
-
-            {/* Collapse Toggle Button */}
+          <div
+            className={`flex h-16 flex-shrink-0 items-center border-b border-white/10 px-3 ${
+              sidebarCollapsed ? "justify-center" : "justify-between"
+            }`}
+          >
+            {!sidebarCollapsed && <BrandMark showName />}
             <button
+              type="button"
               onClick={toggleSidebar}
-              className="flex-shrink-0 w-8 h-8 bg-white/10 hover:bg-white/20 rounded-lg flex items-center justify-center text-white transition-all duration-200 hover:scale-105"
-              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={!sidebarCollapsed}
+              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-md text-blue-100 transition-colors hover:bg-white/10 hover:text-white"
             >
               {sidebarCollapsed ? (
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="h-5 w-5" aria-hidden="true" />
               ) : (
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="h-5 w-5" aria-hidden="true" />
               )}
             </button>
           </div>
 
-          {/* Navigation */}
-          <nav className="relative z-10 flex-1 px-3 py-6 overflow-y-auto sidebar-scroll">
-            <SidebarNav
-              groups={visibleGroups}
-              collapsed={sidebarCollapsed}
-              onNavigate={handleNavigate}
-            />
+          <nav
+            aria-label="Main"
+            className="sidebar-scroll flex-1 overflow-y-auto px-3 py-5"
+          >
+            <SidebarNav groups={visibleGroups} collapsed={sidebarCollapsed} />
           </nav>
         </div>
-      </div>
+      </aside>
 
-      {/* Mobile sidebar — always mounted so it can slide and fade instead of
-          popping in; `invisible` (after the slide finishes) keeps it out of
-          the tab order and hit-testing while closed. */}
-      <div
-        className={`fixed inset-0 z-40 lg:hidden ${
-          sidebarOpen
-            ? ""
-            : "pointer-events-none invisible transition-[visibility] delay-300"
-        }`}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Navigation menu"
+      {/* Mobile and tablet: the same navigation in a swipeable drawer. */}
+      <MobileNavDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        label="Navigation menu"
       >
-        <div
-          className={`fixed inset-0 bg-slate-900/50 backdrop-blur-[2px] transition-opacity duration-300 ease-out motion-reduce:transition-none ${
-            sidebarOpen ? "opacity-100" : "opacity-0"
-          }`}
-          onClick={() => setSidebarOpen(false)}
-        />
-        <div
-          className={`relative flex flex-col max-w-xs w-full h-full overflow-hidden bg-gradient-to-b from-blue-950 via-blue-900 to-slate-950 shadow-2xl transition-transform duration-300 ease-out will-change-transform motion-reduce:transition-none ${
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
-        >
-          <div className="pointer-events-none absolute -top-16 -left-16 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl" />
-          <div className="pointer-events-none absolute bottom-24 -right-16 w-64 h-64 bg-indigo-400/15 rounded-full blur-3xl" />
-
-          {/* Mobile sidebar header */}
-          <div className="relative z-10 flex-shrink-0 flex items-center justify-between h-16 px-6 bg-blue-950/60 border-b border-white/10">
-            <div className="flex items-center space-x-3">
-              <img
-                src="/bgp-icon.jpg"
-                alt="Barokah Galangan Perkasa"
-                className="w-8 h-8 rounded-lg object-cover ring-1 ring-white/20"
-              />
-              <h1 className="text-xl font-bold text-white">
-                Shipyard System
-              </h1>
-            </div>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="text-white hover:text-blue-200 transition-colors p-1"
-            >
-              <span className="text-xl">✕</span>
-            </button>
-          </div>
-
-          {/* Mobile navigation */}
-          <nav className="relative z-10 flex-1 px-4 py-6 overflow-y-auto sidebar-scroll">
-            <SidebarNav
-              groups={visibleGroups}
-              collapsed={false}
-              onNavigate={(href) => {
-                handleNavigate(href);
-                setSidebarOpen(false);
-              }}
-            />
-          </nav>
+        <div className="flex h-16 flex-shrink-0 items-center justify-between border-b border-white/10 pl-4 pr-2">
+          <BrandMark showName />
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(false)}
+            aria-label="Close menu"
+            data-autofocus
+            className="flex h-11 w-11 items-center justify-center rounded-md text-blue-100 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
         </div>
-      </div>
+        <nav
+          aria-label="Main"
+          className="sidebar-scroll flex-1 overflow-y-auto px-3 py-5"
+        >
+          <SidebarNav
+            groups={visibleGroups}
+            collapsed={false}
+            onNavigate={() => setDrawerOpen(false)}
+          />
+        </nav>
+      </MobileNavDrawer>
 
-      {/* Main content */}
       <div
-        className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${
+        className={`flex min-w-0 flex-1 flex-col transition-[margin] duration-200 ease-out ${
           sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
         }`}
       >
-        {/* Top navbar */}
-        <div className="flex-shrink-0 sticky top-0 z-20 lg:static bg-white border-b border-gray-200 px-3 sm:px-4 py-2.5 sm:py-3 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2 lg:hidden">
+        <header className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-white px-2 sm:px-4">
+          <div className="flex min-h-14 items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-1 lg:hidden">
               <button
-                onClick={() => setSidebarOpen(true)}
-                className="-ml-2 text-gray-600 hover:text-gray-900 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                type="button"
+                onClick={() => setDrawerOpen(true)}
+                aria-haspopup="dialog"
+                aria-expanded={drawerOpen}
+                className="inline-flex h-11 items-center gap-2 rounded-md px-3 text-sm font-medium text-slate-800 transition-colors hover:bg-slate-100"
               >
-                <Menu className="w-6 h-6" />
+                <Menu className="h-5 w-5" aria-hidden="true" />
+                Menu
               </button>
               <img
                 src="/bgp-icon.jpg"
-                alt="Barokah Galangan Perkasa"
-                className="w-6 h-6 rounded object-cover"
+                alt={COMPANY_NAME}
+                width={28}
+                height={28}
+                className="h-7 w-7 flex-shrink-0 rounded-md object-cover"
               />
-              <h1 className="text-base sm:text-lg font-medium text-gray-900 whitespace-nowrap">
-                Shipyard System
-              </h1>
             </div>
 
-            <div className="flex items-center space-x-1 ml-auto">
-              <button
-                onClick={() => navigate("/alerts")}
-                title="Alerts"
-                className="relative p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+            <div className="ml-auto flex items-center gap-1">
+              <Link
+                to="/alerts"
+                aria-label={alertLabel}
+                className="relative inline-flex h-11 w-11 items-center justify-center rounded-md text-slate-700 transition-colors hover:bg-slate-100"
               >
-                <Bell className="w-5 h-5" />
-                {alerts.length > 0 && (
-                  <span className="absolute top-0.5 right-0.5 flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold leading-none">
-                    {alerts.length > 9 ? "9+" : alerts.length}
+                <Bell className="h-5 w-5" aria-hidden="true" />
+                {alertCount > 0 && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute right-0.5 top-0.5 flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-red-700 px-1 text-[11px] font-semibold leading-none text-white"
+                  >
+                    {alertCount > 9 ? "9+" : alertCount}
                   </span>
                 )}
-              </button>
+              </Link>
 
-              <div className="w-px h-6 bg-gray-200 mx-1"></div>
+              <div className="mx-1 h-6 w-px bg-slate-200" aria-hidden="true" />
 
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center ring-2 ring-blue-100 flex-shrink-0">
-                  {profile?.name ? (
-                    <span className="text-white text-xs font-bold">
-                      {profile.name.charAt(0).toUpperCase()}
-                    </span>
-                  ) : (
-                    <User className="w-4 h-4 text-white" />
-                  )}
-                </div>
-                <span className="hidden sm:block text-sm font-medium text-gray-700 max-w-[10rem] truncate">
-                  {profile?.name || "User"}
+              <div className="flex items-center gap-2 px-1">
+                <span
+                  aria-hidden="true"
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-950 text-xs font-semibold text-white"
+                >
+                  {userName.charAt(0).toUpperCase()}
                 </span>
+                <span className="hidden max-w-[10rem] truncate text-sm font-medium text-slate-800 sm:block">
+                  {userName}
+                </span>
+                <span className="sr-only sm:hidden">Signed in as {userName}</span>
               </div>
 
               <button
+                type="button"
                 onClick={onLogout}
-                title="Logout"
-                className="flex items-center space-x-1.5 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors"
+                className="inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-md px-3 text-sm font-medium text-red-700 transition-colors hover:bg-red-50"
               >
-                <LogOut className="w-4 h-4" />
-                <span className="hidden sm:inline">Logout</span>
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only sm:not-sr-only">Logout</span>
               </button>
             </div>
           </div>
-        </div>
+        </header>
 
-        {/* Page content */}
-        <main className="flex-1 overflow-auto bg-gray-50">{children}</main>
+        {/* overflow-x-clip (not auto): a wide child can't push the page
+            sideways, and it doesn't turn <main> into a scroll container that
+            would stop the header sticking. */}
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="min-w-0 flex-1 overflow-x-clip outline-none"
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

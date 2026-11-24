@@ -253,36 +253,62 @@ export function TableSkeleton({
   );
 }
 
-/** Mirrors Dashboard: header, stat sections, filter bar, chart panels. */
+/**
+ * Mirrors Dashboard: header with project counts, the attention band, the
+ * filter bar, two chart panels, the payment panel and the vessel cards.
+ */
 export function DashboardSkeleton() {
   return (
-    <div role="status" aria-busy="true" className="p-8 space-y-8">
+    <div
+      role="status"
+      aria-busy="true"
+      className="mx-auto w-full max-w-[96rem] space-y-8 px-4 py-5 sm:space-y-10 sm:px-6 lg:px-8 lg:py-8"
+    >
       <SrLabel label="Loading dashboard..." />
-      <div className="space-y-3">
-        <Skeleton className="h-9 w-48" />
-        <Skeleton className="h-4 w-80 max-w-full" />
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-3">
+          <Skeleton className="h-9 w-48" />
+          <Skeleton className="h-4 w-80 max-w-full" />
+        </div>
+        <Skeleton className="h-16 w-full lg:w-80" />
       </div>
       <div className="space-y-4">
         <Skeleton className="h-6 w-40" />
-        <StatCards count={3} size="lg" />
+        <div className="grid divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="space-y-3 p-5">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-4 w-36" />
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="bg-white rounded-lg shadow p-4 flex flex-wrap items-center gap-3">
-        <Skeleton className="h-4 w-16" />
-        <Skeleton className="h-9 w-48 rounded-lg" />
-        <Skeleton className="h-9 w-48 rounded-lg" />
-        <Skeleton className="h-9 w-40 rounded-lg" />
-      </div>
-      <div className="space-y-4">
-        <Skeleton className="h-6 w-52" />
-        <StatCards count={3} size="lg" />
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <Skeleton className="h-24 w-full sm:h-20" />
+      <div className="grid gap-8 lg:grid-cols-2 lg:gap-6">
         {[0, 1].map((i) => (
-          <div key={i} className="bg-white rounded-lg shadow p-6 space-y-4">
-            <Skeleton className="h-5 w-44" />
-            <Skeleton className="h-64 w-full rounded-lg" />
+          <div key={i} className="space-y-4">
+            <Skeleton className="h-6 w-44" />
+            <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
+              <Skeleton className="h-40 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
           </div>
         ))}
+      </div>
+      <div className="space-y-4">
+        <Skeleton className="h-6 w-44" />
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </div>
+      <div className="space-y-4">
+        <Skeleton className="h-6 w-28" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-60 w-full" />
+          ))}
+        </div>
       </div>
     </div>
   );
