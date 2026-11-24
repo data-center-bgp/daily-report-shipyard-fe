@@ -357,9 +357,9 @@ export default function ConvertPlan() {
         </section>
 
         <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-          The work orders skip the usual wait for an approved readiness form because HSSE has
-          already signed off this plan. The project's readiness form is still filled in
-          separately. Price, PIC and permit numbers are added on the work details afterwards.
+          The work orders are created now, without waiting for the project's readiness form.
+          The readiness form is still filled in separately and HSSE approves it there. Price,
+          PIC and permit numbers are added on the work details afterwards.
         </p>
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

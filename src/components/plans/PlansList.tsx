@@ -39,12 +39,8 @@ function signOffSummary(plan: PlanListRow): string | null {
   const current = (plan.docking_plan_reviews || []).filter(
     (r) => r.revision_no === plan.revision_no,
   );
-  return (["PPIC", "HSSE"] as const)
-    .map((role) => {
-      const review = current.find((r) => r.reviewer_role === role);
-      return `${role} ${review ? review.decision.toLowerCase() : "pending"}`;
-    })
-    .join(", ");
+  const review = current.find((r) => r.reviewer_role === "PPIC");
+  return `PPIC ${review ? review.decision.toLowerCase() : "pending"}`;
 }
 
 export default function PlansList() {
@@ -61,7 +57,7 @@ export default function PlansList() {
   const searchId = useId();
   const { profile } = useAuth();
   const canCreate = profile?.role === "SHIPPING" || profile?.role === "MASTER";
-  const isReviewer = profile?.role === "PPIC" || profile?.role === "HSSE";
+  const isReviewer = profile?.role === "PPIC";
 
   const fetchPlans = useCallback(async () => {
     try {

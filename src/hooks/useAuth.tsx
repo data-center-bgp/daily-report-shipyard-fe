@@ -176,12 +176,23 @@ const FEATURE_ACCESS = {
   additionalWoApprovals: ["MASTER", "OP_HEAD", "MANAGER"],
   readinessQueue: ["MASTER", "HSSE", "MANAGER"],
   // Shipping's docking plans (drafted ~2 months before a vessel docks).
-  // SHIPPING writes them; PPIC/HSSE review; MANAGER/OP_HEAD only look.
-  // SHIPPING has no other feature on purpose.
-  shippingPlans: ["SHIPPING", "MASTER", "PPIC", "HSSE", "MANAGER", "OP_HEAD"],
-  // Who may sign off (or send back) a submitted plan. PPIC and HSSE each give
-  // one sign-off; MASTER can act for either.
-  planReview: ["MASTER", "PPIC", "HSSE"],
+  // Every role can view them; only SHIPPING and MASTER write them (checked on
+  // the plan pages and by RLS). SHIPPING has no other feature on purpose.
+  shippingPlans: [
+    "SHIPPING",
+    "MASTER",
+    "PPIC",
+    "PRODUCTION",
+    "OP_HEAD",
+    "ADMIN",
+    "FINANCE",
+    "MANAGER",
+    "HSSE",
+    "ADMIN_SHIPPING",
+  ],
+  // Who may sign off (or send back) a submitted plan: PPIC, with MASTER able
+  // to act for it. HSSE's approval is the project's readiness form instead.
+  planReview: ["MASTER", "PPIC"],
   // The Shipyard Report API documentation. MASTER only — deliberately not
   // MANAGER, unlike most MASTER features (this is about how data leaves the
   // system, not about viewing it).

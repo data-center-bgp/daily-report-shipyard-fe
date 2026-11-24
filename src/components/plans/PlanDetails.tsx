@@ -60,7 +60,9 @@ interface LineNote {
   note: string;
 }
 
-const REVIEWERS: ReviewerRole[] = ["PPIC", "HSSE"];
+// PPIC signs off the plan itself. HSSE's approval stays on the project's
+// readiness form, which is filled in after the plan becomes a project.
+const REVIEWERS: ReviewerRole[] = ["PPIC"];
 
 export default function PlanDetails() {
   const { planId } = useParams();
@@ -172,8 +174,7 @@ export default function PlanDetails() {
 
   const reviewRoleOptions: ReviewerRole[] = useMemo(() => {
     if (!plan || plan.status !== "SUBMITTED") return [];
-    const mine: ReviewerRole[] =
-      role === "PPIC" ? ["PPIC"] : role === "HSSE" ? ["HSSE"] : role === "MASTER" ? REVIEWERS : [];
+    const mine: ReviewerRole[] = role === "PPIC" || role === "MASTER" ? REVIEWERS : [];
     return mine.filter((r) => !currentReviews.some((rv) => rv.reviewer_role === r));
   }, [plan, role, currentReviews]);
 
@@ -403,7 +404,7 @@ export default function PlanDetails() {
                   onClick={() =>
                     runAction(
                       () => submitPlan(plan),
-                      "Plan submitted. PPIC and HSSE will review it.",
+                      "Plan submitted. PPIC will review it.",
                     )
                   }
                   className={primaryButton}
@@ -475,9 +476,9 @@ export default function PlanDetails() {
       {plan.revision_no > 0 && plan.status !== "DRAFT" && (
         <section aria-labelledby="signoff-title" className="rounded-lg border border-slate-200 bg-white p-4">
           <h2 id="signoff-title" className="text-base font-semibold text-slate-900">
-            Shipyard sign-off, submission #{plan.revision_no}
+            PPIC sign-off, submission #{plan.revision_no}
           </h2>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="mt-3 grid gap-3">
             {REVIEWERS.map((reviewer) => (
               <SignOffCard
                 key={reviewer}
@@ -801,7 +802,7 @@ function StatusPanel({
     case "SUBMITTED":
       tone = "border-amber-300 bg-amber-50 text-amber-950";
       Icon = Clock;
-      body = "Submitted for review. PPIC and HSSE each need to sign off before it can be approved.";
+      body = "Submitted for review. PPIC needs to sign off before it can be approved.";
       break;
     case "NEEDS_CLARIFICATION":
       tone = "border-orange-300 bg-orange-50 text-orange-950";
@@ -813,7 +814,7 @@ function StatusPanel({
     case "APPROVED":
       tone = "border-emerald-300 bg-emerald-50 text-emerald-950";
       Icon = CheckCircle2;
-      body = `Approved by PPIC and HSSE${
+      body = `Approved by PPIC${
         plan.approved_at ? ` on ${formatPlanDate(plan.approved_at.slice(0, 10))}` : ""
       }. PPIC converts it into a project when the vessel is ready.`;
       break;
