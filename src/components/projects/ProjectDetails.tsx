@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import {
@@ -9,22 +9,20 @@ import {
 } from "../../utils/deadlineUtils";
 import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import {
-  ArrowLeft,
-  FolderKanban,
-  Ship,
-  Plus,
-  ClipboardCheck,
-  FileText,
-  CheckCircle2,
-  X,
-  CalendarRange,
   AlertTriangle,
+  CheckCircle2,
+  ChevronLeft,
+  FileText,
   Link2,
   Loader2,
   Pencil,
+  Plus,
+  X,
 } from "lucide-react";
 import LoadingState from "../common/LoadingState";
 import RenameProjectModal from "./RenameProjectModal";
+import { ProgressTrack, Section } from "../dashboard/widgets";
+import { READINESS_STATUS } from "./readinessStatus";
 import {
   WORK_TYPE_GROUP_STYLE,
   workTypeGroup,
@@ -64,18 +62,12 @@ interface WorkOrderRow {
   }[];
 }
 
-const STATUS_BADGE: Record<string, { label: string; className: string }> = {
-  DRAFT: { label: "Draft", className: "bg-gray-100 text-gray-700" },
-  SUBMITTED: {
-    label: "Awaiting HSSE review",
-    className: "bg-amber-100 text-amber-700",
-  },
-  NEEDS_CLARIFICATION: {
-    label: "Needs clarification",
-    className: "bg-orange-100 text-orange-700",
-  },
-  APPROVED: { label: "Approved", className: "bg-green-100 text-green-700" },
-};
+const primaryButton =
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-blue-700 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-800 disabled:opacity-50 disabled:hover:bg-blue-700 sm:min-h-10";
+const secondaryButton =
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-800 transition-colors hover:bg-slate-50 sm:min-h-10";
+
+const TYPE_TAG = "inline-flex rounded px-2 py-0.5 text-xs font-medium";
 
 function overallProgress(wo: WorkOrderRow): number {
   // Cancelled work details don't count toward completion.
@@ -84,12 +76,176 @@ function overallProgress(wo: WorkOrderRow): number {
   const totals = activeDetails.map((wd) => {
     const progress = wd.work_progress || [];
     if (!progress.length) return 0;
-    // Latest by report_date, tie-broken by created_at — see WODetailsTable
+    // Latest by report_date, tie-broken by created_at: see WODetailsTable
     // for why report_date alone isn't enough for same-day entries.
     const latest = getLatestProgressRecord(progress);
     return latest?.progress_percentage || 0;
   });
   return Math.round(totals.reduce((sum, p) => sum + p, 0) / totals.length);
+}
+
+// Pick unassigned work orders of the vessel to move into this project. A
+// native modal <dialog>: the page behind goes inert, focus moves in and comes
+// back to the trigger, and Escape closes it.
+function AssignWorkOrderDialog({
+  vesselName,
+  workOrders,
+  loading,
+  loadError,
+  assignError,
+  selectedIds,
+  assigning,
+  onToggle,
+  onAssign,
+  onClose,
+}: {
+  vesselName: string | undefined;
+  workOrders: UnassignedWorkOrder[];
+  loading: boolean;
+  loadError: string | null;
+  assignError: string | null;
+  selectedIds: Set<number>;
+  assigning: boolean;
+  onToggle: (id: number) => void;
+  onAssign: () => void;
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
+  }, []);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-labelledby="assign-wo-title"
+      onClose={onClose}
+      onClick={(e) => {
+        // A click on the dialog's own box (the backdrop area) dismisses it.
+        if (e.target === dialogRef.current) onClose();
+      }}
+      className="m-auto max-h-[85dvh] w-[calc(100%-2rem)] max-w-2xl overflow-hidden rounded-lg border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-950/50"
+    >
+      <div className="flex max-h-[85dvh] flex-col">
+        <div className="flex items-center justify-between border-b border-slate-200 py-2 pl-4 pr-2">
+          <h2
+            id="assign-wo-title"
+            className="flex items-center gap-2 text-lg font-semibold"
+          >
+            <Link2 className="h-5 w-5" aria-hidden="true" /> Assign existing work
+            order
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-11 w-11 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100"
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4">
+          <p className="mb-4 text-sm text-slate-600">
+            Only unassigned work orders for {vesselName} are shown. Once
+            assigned, a work order can't be picked up by another project.
+          </p>
+
+          {loading ? (
+            <div
+              role="status"
+              className="flex items-center justify-center py-8 text-slate-600"
+            >
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden="true" />
+              Loading work orders
+            </div>
+          ) : loadError ? (
+            <p role="alert" className="text-sm text-red-800">
+              {loadError}
+            </p>
+          ) : workOrders.length === 0 ? (
+            <p className="py-4 text-sm text-slate-600">
+              This vessel has no unassigned work orders. Create one from Add
+              work order instead.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {workOrders.map((wo) => (
+                <li key={wo.id}>
+                  <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-slate-200 p-3 hover:bg-slate-50">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(wo.id)}
+                      onChange={() => onToggle(wo.id)}
+                      className="h-5 w-5 flex-shrink-0"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium text-slate-900">
+                        {wo.shipyard_wo_number}
+                      </span>
+                      <span className="block text-sm text-slate-600">
+                        {new Date(wo.shipyard_wo_date).toLocaleDateString()}
+                      </span>
+                    </span>
+                    <span className="flex flex-wrap justify-end gap-1.5">
+                      {wo.work_type ? (
+                        <span
+                          title={wo.work_type}
+                          className={`${TYPE_TAG} ${
+                            WORK_TYPE_GROUP_STYLE[workTypeGroup(wo.work_type)]
+                          }`}
+                        >
+                          {workTypeGroup(wo.work_type)}
+                        </span>
+                      ) : (
+                        <span className={`${TYPE_TAG} bg-slate-100 text-slate-700`}>
+                          Type unknown
+                        </span>
+                      )}
+                      <span
+                        className={`${TYPE_TAG} ${
+                          wo.is_additional_wo
+                            ? "bg-purple-50 text-purple-800"
+                            : "bg-blue-50 text-blue-800"
+                        }`}
+                      >
+                        {wo.is_additional_wo ? "Additional" : "Original"}
+                      </span>
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {assignError && (
+            <p role="alert" className="mt-3 text-sm text-red-800">
+              {assignError}
+            </p>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-slate-200 p-3">
+          <button type="button" onClick={onClose} className={secondaryButton}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onAssign}
+            disabled={selectedIds.size === 0 || assigning}
+            className={primaryButton}
+          >
+            {assigning && (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            )}
+            Assign{selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
+          </button>
+        </div>
+      </div>
+    </dialog>
+  );
 }
 
 export default function ProjectDetails() {
@@ -116,19 +272,6 @@ export default function ProjectDetails() {
   const [removingWOId, setRemovingWOId] = useState<number | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
 
-  // The work order opens on its vessel's Work Orders page, expanded and
-  // scrolled into view; Back there returns to this project.
-  const openWorkOrder = (workOrderId: number) => {
-    const vesselId = project?.vessel?.id;
-    if (!vesselId) return;
-    navigate(`/vessel/${vesselId}/work-orders`, {
-      state: {
-        highlightWorkOrderId: workOrderId,
-        from: { path: `/projects/${projectId}` },
-      },
-    });
-  };
-
   const fetchProject = useCallback(async () => {
     if (!projectId) return;
     try {
@@ -152,7 +295,7 @@ export default function ProjectDetails() {
         .single();
 
       if (fetchError) throw fetchError;
-      setProject(data as any);
+      setProject(data as unknown as ProjectDetail);
 
       const { data: woData, error: woError } = await supabase
         .from("work_order")
@@ -176,7 +319,7 @@ export default function ProjectDetails() {
         .order("shipyard_wo_date", { ascending: true });
 
       if (woError) throw woError;
-      setWorkOrders((woData as any) || []);
+      setWorkOrders((woData as unknown as WorkOrderRow[]) || []);
     } catch (err) {
       console.error("Error fetching project:", err);
       setError(err instanceof Error ? err.message : "Failed to load project");
@@ -204,8 +347,17 @@ export default function ProjectDetails() {
     });
   };
 
+  // The dialog unmounts as it closes, so the browser can't hand focus back to
+  // the button that opened it; do it by hand.
+  const assignTriggerRef = useRef<HTMLElement | null>(null);
+  const closeAssignModal = () => {
+    setShowAssignModal(false);
+    requestAnimationFrame(() => assignTriggerRef.current?.focus());
+  };
+
   const openAssignModal = async () => {
     if (!project?.vessel) return;
+    assignTriggerRef.current = document.activeElement as HTMLElement | null;
     setShowAssignModal(true);
     setSelectedWOIds(new Set());
     setAssignError(null);
@@ -221,7 +373,7 @@ export default function ProjectDetails() {
         .order("shipyard_wo_date", { ascending: true });
 
       if (fetchError) throw fetchError;
-      setUnassignedWOs((data as any) || []);
+      setUnassignedWOs((data as unknown as UnassignedWorkOrder[]) || []);
     } catch (err) {
       setUnassignedError(
         err instanceof Error ? err.message : "Failed to load unassigned work orders",
@@ -260,7 +412,7 @@ export default function ProjectDetails() {
       const updatedCount = data?.length || 0;
       if (updatedCount < ids.length) {
         setAssignError(
-          `${updatedCount} of ${ids.length} work orders were assigned — the rest were already claimed by another project in the meantime.`,
+          `${updatedCount} of ${ids.length} work orders were assigned. The rest were already claimed by another project in the meantime.`,
         );
       }
       setShowAssignModal(false);
@@ -276,7 +428,7 @@ export default function ProjectDetails() {
   const handleRemoveWorkOrder = async (wo: WorkOrderRow) => {
     if (!project) return;
     const confirmed = window.confirm(
-      `Remove ${wo.shipyard_wo_number} from this project?\n\nThe work order and its data won't be deleted — it becomes unassigned and can be re-assigned to a project later.`,
+      `Remove ${wo.shipyard_wo_number} from this project?\n\nThe work order and its data won't be deleted. It becomes unassigned and can be re-assigned to a project later.`,
     );
     if (!confirmed) return;
 
@@ -302,28 +454,32 @@ export default function ProjectDetails() {
     }
   };
 
+  const pageShell = "mx-auto w-full max-w-[96rem] px-4 py-5 sm:px-6 lg:px-8 lg:py-8";
+
   if (loading) {
     return <LoadingState label="Loading project..." />;
   }
 
   if (error || !project) {
     return (
-      <div className="p-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <h3 className="text-red-800 font-medium">Error Loading Project</h3>
-          <p className="text-red-600 mt-1">{error || "Project not found"}</p>
-          <button
-            onClick={() => navigate("/projects")}
-            className="mt-3 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-          >
+      <div className={pageShell}>
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-lg border border-red-300 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="text-sm text-red-900">
+            <span className="font-semibold">This project could not load.</span>{" "}
+            {error || "Project not found"}
+          </p>
+          <Link to="/projects" className={secondaryButton}>
             Back to Projects
-          </button>
+          </Link>
         </div>
       </div>
     );
   }
 
-  // Project deadline comes only from ORIGINAL work orders' work details —
+  // Project deadline comes only from ORIGINAL work orders' work details;
   // additional work orders get their own deadline but never move this one.
   const originalWorkOrders = workOrders.filter((wo) => !wo.is_additional_wo);
   const projectRange = computeDateRange(
@@ -335,256 +491,318 @@ export default function ProjectDetails() {
     return exceedsDeadline(woRange, projectRange);
   });
 
-  const statusKey = project.readiness_form?.status || null;
-  const badge = statusKey ? STATUS_BADGE[statusKey] : null;
+  const readiness = project.readiness_form
+    ? READINESS_STATUS[project.readiness_form.status] || null
+    : READINESS_STATUS.NONE;
+  const vesselId = project.vessel?.id;
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="min-w-0">
-          <button
-            onClick={() => navigate("/projects")}
-            className="text-gray-600 hover:text-gray-900 flex items-center gap-2 mb-2"
-          >
-            <ArrowLeft className="w-4 h-4" /> Back to Projects
-          </button>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <FolderKanban className="w-7 h-7 text-blue-600 shrink-0" />
-            <span className="min-w-0 break-words">{project.project_name}</span>
-          </h1>
-          <p className="text-gray-600 flex items-center gap-1 mt-1">
-            <Ship className="w-4 h-4" /> {project.vessel?.name} —{" "}
-            {project.vessel?.type} ({project.vessel?.company})
-          </p>
-          {project.docking_type && (
-            <p className="text-sm text-gray-500 mt-0.5">
-              Jenis Docking: {project.docking_type}
+    <div className={`${pageShell} space-y-8`}>
+      <header className="space-y-3">
+        <Link
+          to="/projects"
+          className="-ml-2 inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-sm font-medium text-blue-800 hover:underline"
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Back to Projects
+        </Link>
+
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="min-w-0">
+            <h1 className="break-words text-2xl font-bold text-slate-900 sm:text-3xl">
+              {project.project_name}
+            </h1>
+            <p className="mt-1 text-sm text-slate-700 sm:text-base">
+              {project.vessel ? (
+                <>
+                  <span className="font-medium">{project.vessel.name}</span>
+                  {", "}
+                  {project.vessel.type}, {project.vessel.company}
+                </>
+              ) : (
+                "No vessel"
+              )}
             </p>
+            {project.docking_type && (
+              <p className="mt-0.5 text-sm text-slate-600">
+                Jenis Docking: {project.docking_type}
+              </p>
+            )}
+          </div>
+
+          {!isOperationsReadOnly && (
+            <div className="flex flex-wrap gap-2">
+              {project.vessel && (
+                <button
+                  type="button"
+                  onClick={() => setShowRenameModal(true)}
+                  className={secondaryButton}
+                >
+                  <Pencil className="h-4 w-4" aria-hidden="true" /> Rename project
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={openAssignModal}
+                className={secondaryButton}
+              >
+                <Link2 className="h-4 w-4" aria-hidden="true" /> Assign existing
+                work order
+              </button>
+              <button
+                type="button"
+                onClick={handleAddWorkOrder}
+                className={primaryButton}
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" /> Add work order
+              </button>
+            </div>
           )}
         </div>
-        {!isOperationsReadOnly && (
-          <div className="flex flex-wrap gap-3">
-            {project.vessel && (
-              <button
-                onClick={() => setShowRenameModal(true)}
-                className="bg-white border border-gray-300 text-gray-700 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
-              >
-                <Pencil className="w-4 h-4" /> Rename Project
-              </button>
-            )}
-            <button
-              onClick={openAssignModal}
-              className="bg-white border border-gray-300 text-gray-700 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
-            >
-              <Link2 className="w-4 h-4" /> Assign Existing Work Order
-            </button>
-            <button
-              onClick={handleAddWorkOrder}
-              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-            >
-              <Plus className="w-5 h-5" /> Add Work Order
-            </button>
-          </div>
-        )}
-      </div>
+      </header>
 
       {showSuccessMessage && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center justify-between">
-          <div className="flex items-center">
-            <CheckCircle2 className="w-5 h-5 text-green-600 mr-2" />
-            <p className="text-green-700 font-medium">Saved successfully!</p>
-          </div>
+        <div
+          role="status"
+          className="flex items-center justify-between gap-3 rounded-lg border border-emerald-300 bg-emerald-50 p-4"
+        >
+          <p className="flex items-center gap-2 text-sm font-medium text-emerald-900">
+            <CheckCircle2 className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
+            Saved successfully.
+          </p>
           <button
+            type="button"
             onClick={() => setShowSuccessMessage(false)}
-            className="text-green-600 hover:text-green-800"
+            aria-label="Dismiss message"
+            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-md text-emerald-900 hover:bg-emerald-100"
           >
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       )}
 
-      {/* Project timeline — from original work orders only */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <CalendarRange className="w-5 h-5 text-blue-600" /> Project Timeline
-        </h2>
-        <p className="text-sm text-gray-600 mt-1">
-          {formatDateRange(projectRange)}
-        </p>
-        <p className="text-xs text-gray-500 mt-1">
-          Based on the planned start and target close dates of this
-          project's original work order's work details. Additional work
-          orders don't move this timeline.
-        </p>
-
-        {additionalWorkOrdersBeyondDeadline.length > 0 && (
-          <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
-            <div>
-              <p className="text-amber-800 text-sm font-medium">
-                {additionalWorkOrdersBeyondDeadline.length} additional work
-                order
-                {additionalWorkOrdersBeyondDeadline.length > 1 ? "s" : ""}{" "}
-                {additionalWorkOrdersBeyondDeadline.length > 1
-                  ? "extend"
-                  : "extends"}{" "}
-                beyond the project's target finish date
-              </p>
-              <p className="text-amber-700 text-sm mt-1">
-                {additionalWorkOrdersBeyondDeadline
-                  .map((wo) => wo.shipyard_wo_number)
-                  .join(", ")}{" "}
-                — the project's own deadline is unaffected, but these work
-                orders individually run later.
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Readiness Form section */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <ClipboardCheck className="w-5 h-5 text-blue-600" /> Vessel Readiness
-            Form
-          </h2>
-          {badge && (
-            <span
-              className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${badge.className}`}
-            >
-              {badge.label}
-            </span>
-          )}
-        </div>
-        <p className="text-sm text-gray-600 mt-2">
-          FM-OPS-04-11 — checks the vessel's readiness before entering the
-          shipyard. The original (non-additional) work order for this project
-          can't be created until this form is approved.
-        </p>
-        <button
-          onClick={() => navigate(`/projects/${project.id}/readiness`)}
-          className="mt-4 inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+      <div className="grid gap-8 lg:grid-cols-2 lg:gap-6 xl:gap-8">
+        <Section
+          id="timeline"
+          title="Project timeline"
+          description="From the planned start and target close dates of the original work orders' work details."
         >
-          <FileText className="w-4 h-4" />
-          {project.readiness_form ? "View / Edit Readiness Form" : "Start Readiness Form"}
-        </button>
+          <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+            <p className="text-xl font-semibold text-slate-900">
+              {formatDateRange(projectRange)}
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              Additional work orders don't move this timeline.
+            </p>
+
+            {additionalWorkOrdersBeyondDeadline.length > 0 && (
+              <div
+                role="note"
+                className="mt-4 flex gap-3 rounded-md border border-amber-300 bg-amber-50 p-3"
+              >
+                <AlertTriangle
+                  className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-800"
+                  aria-hidden="true"
+                />
+                <div className="text-sm text-amber-950">
+                  <p className="font-medium">
+                    {additionalWorkOrdersBeyondDeadline.length} additional work
+                    order
+                    {additionalWorkOrdersBeyondDeadline.length > 1 ? "s" : ""}{" "}
+                    {additionalWorkOrdersBeyondDeadline.length > 1
+                      ? "extend"
+                      : "extends"}{" "}
+                    beyond the project's target finish date
+                  </p>
+                  <p className="mt-1">
+                    {additionalWorkOrdersBeyondDeadline
+                      .map((wo) => wo.shipyard_wo_number)
+                      .join(", ")}
+                    . The project's own deadline is unaffected, but these work
+                    orders individually run later.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </Section>
+
+        <Section
+          id="readiness"
+          title="Vessel readiness form"
+          description="FM-OPS-04-11: checks the vessel's readiness before it enters the shipyard."
+        >
+          <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+            {readiness && (
+              <span
+                className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-sm font-medium ${readiness.className}`}
+              >
+                <readiness.Icon className="h-4 w-4" aria-hidden="true" />
+                {readiness.label}
+              </span>
+            )}
+            <p className="mt-3 text-sm text-slate-700">
+              The original (non-additional) work order for this project can't be
+              created until this form is approved.
+            </p>
+            <Link
+              to={`/projects/${project.id}/readiness`}
+              className={`mt-4 ${primaryButton}`}
+            >
+              <FileText className="h-4 w-4" aria-hidden="true" />
+              {project.readiness_form
+                ? "View or edit readiness form"
+                : "Start readiness form"}
+            </Link>
+          </div>
+        </Section>
       </div>
 
-      {/* Work orders in this project */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Work Orders in this Project ({workOrders.length})
-          </h2>
-        </div>
+      <Section
+        id="work-orders"
+        title={`Work orders in this project (${workOrders.length})`}
+      >
         {removeError && (
-          <div className="mx-6 mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
-            <p className="text-red-600 text-sm">{removeError}</p>
+          <div
+            role="alert"
+            className="mb-3 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900"
+          >
+            {removeError}
           </div>
         )}
         {workOrders.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="table-stack w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    WO Number
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Deadline
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Progress
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {workOrders.map((wo) => {
-                  const woRange = computeDateRange(wo.work_details);
-                  const beyondDeadline =
-                    !!wo.is_additional_wo && exceedsDeadline(woRange, projectRange);
-
-                  return (
-                    <tr key={wo.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm font-medium">
-                        {/* Opens this work order, with its work details, on
-                            the vessel's Work Orders page. */}
-                        <button
-                          type="button"
-                          onClick={() => openWorkOrder(wo.id)}
-                          title="Open this work order and its work details"
-                          className="text-left text-blue-600 hover:text-blue-800 hover:underline"
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="overflow-x-auto">
+              <table className="table-stack w-full divide-y divide-slate-200">
+                <caption className="sr-only">
+                  Work orders in this project, oldest first
+                </caption>
+                <thead className="bg-slate-50">
+                  <tr>
+                    {["WO number", "Date", "Type", "Deadline", "Progress", "Actions"].map(
+                      (heading) => (
+                        <th
+                          key={heading}
+                          scope="col"
+                          className="px-4 py-3 text-left text-sm font-semibold text-slate-700"
                         >
-                          {wo.shipyard_wo_number}
-                        </button>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {new Date(wo.shipyard_wo_date).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        {wo.is_additional_wo ? (
-                          <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-700">
-                            Additional
-                          </span>
-                        ) : (
-                          <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700">
-                            Original
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        <div>{formatDateRange(woRange)}</div>
-                        {beyondDeadline && (
-                          <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
-                            <AlertTriangle className="w-3 h-3" /> Beyond
-                            project deadline
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {overallProgress(wo)}%
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={() => navigate(`/edit-work-order/${wo.id}`)}
-                            className="text-blue-600 hover:text-blue-800"
-                          >
-                            Edit
-                          </button>
-                          {!isOperationsReadOnly && (
-                            <button
-                              onClick={() => handleRemoveWorkOrder(wo)}
-                              disabled={removingWOId === wo.id}
-                              className="text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                          {heading}
+                        </th>
+                      ),
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {workOrders.map((wo) => {
+                    const woRange = computeDateRange(wo.work_details);
+                    const beyondDeadline =
+                      !!wo.is_additional_wo && exceedsDeadline(woRange, projectRange);
+                    const progress = overallProgress(wo);
+
+                    return (
+                      <tr key={wo.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 text-sm font-semibold">
+                          {/* Opens this work order, with its work details, on
+                              the vessel's Work Orders page. Back there
+                              returns to this project. */}
+                          {vesselId ? (
+                            <Link
+                              to={`/vessel/${vesselId}/work-orders`}
+                              state={{
+                                highlightWorkOrderId: wo.id,
+                                from: { path: `/projects/${projectId}` },
+                              }}
+                              title="Open this work order and its work details"
+                              className="flex min-h-11 items-center text-blue-800 hover:underline md:inline-block md:min-h-0"
                             >
-                              {removingWOId === wo.id ? "Removing..." : "Remove"}
-                            </button>
+                              {wo.shipyard_wo_number}
+                            </Link>
+                          ) : (
+                            wo.shipyard_wo_number
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-700">
+                          {new Date(wo.shipyard_wo_date).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <span
+                            className={`${TYPE_TAG} ${
+                              wo.is_additional_wo
+                                ? "bg-purple-50 text-purple-800"
+                                : "bg-blue-50 text-blue-800"
+                            }`}
+                          >
+                            {wo.is_additional_wo ? "Additional" : "Original"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-700">
+                          <div>{formatDateRange(woRange)}</div>
+                          {beyondDeadline && (
+                            <span className="mt-1 inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900">
+                              <AlertTriangle
+                                className="h-3.5 w-3.5"
+                                aria-hidden="true"
+                              />
+                              Beyond project deadline
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-24">
+                              <ProgressTrack
+                                value={progress}
+                                color="bg-blue-700"
+                                height="h-2"
+                                label={`Progress of ${wo.shipyard_wo_number}`}
+                              />
+                            </div>
+                            <span className="text-sm font-semibold tabular-nums text-slate-900">
+                              {progress}%
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <div className="flex items-center gap-1">
+                            <Link
+                              to={`/edit-work-order/${wo.id}`}
+                              aria-label={`Edit ${wo.shipyard_wo_number}`}
+                              className="inline-flex min-h-11 items-center rounded-md px-3 font-medium text-blue-800 hover:bg-blue-50 md:min-h-10"
+                            >
+                              Edit
+                            </Link>
+                            {!isOperationsReadOnly && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveWorkOrder(wo)}
+                                disabled={removingWOId === wo.id}
+                                aria-label={`Remove ${wo.shipyard_wo_number} from this project`}
+                                className="inline-flex min-h-11 items-center rounded-md px-3 font-medium text-red-800 hover:bg-red-50 disabled:opacity-50 disabled:hover:bg-transparent md:min-h-10"
+                              >
+                                {removingWOId === wo.id ? "Removing..." : "Remove"}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
-          <div className="text-center py-12">
-            <p className="text-gray-500">No work orders in this project yet</p>
+          <div className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-12 text-center">
+            <p className="text-sm font-medium text-slate-900">
+              No work orders in this project yet
+            </p>
+            {!isOperationsReadOnly && (
+              <p className="mt-1 text-sm text-slate-600">
+                Add a new work order, or assign one the vessel already has.
+              </p>
+            )}
           </div>
         )}
-      </div>
+      </Section>
 
       {showRenameModal && project.vessel && (
         <RenameProjectModal
@@ -602,109 +820,18 @@ export default function ProjectDetails() {
       )}
 
       {showAssignModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Link2 className="w-5 h-5" /> Assign Existing Work Order
-              </h3>
-              <button
-                onClick={() => setShowAssignModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-4 overflow-y-auto flex-1">
-              <p className="text-sm text-gray-600 mb-4">
-                Only unassigned work orders for {project.vessel?.name} are
-                shown. Once assigned, a work order can't be picked up by
-                another project.
-              </p>
-
-              {unassignedLoading ? (
-                <div className="flex items-center justify-center py-8 text-gray-500">
-                  <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading...
-                </div>
-              ) : unassignedError ? (
-                <p className="text-red-600 text-sm">{unassignedError}</p>
-              ) : unassignedWOs.length === 0 ? (
-                <p className="text-gray-500 text-sm py-4">
-                  No unassigned work orders found for this vessel.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {unassignedWOs.map((wo) => (
-                    <label
-                      key={wo.id}
-                      className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedWOIds.has(wo.id)}
-                        onChange={() => toggleSelectedWO(wo.id)}
-                        className="w-4 h-4"
-                      />
-                      <div className="flex-1">
-                        <div className="text-sm font-medium text-gray-900">
-                          {wo.shipyard_wo_number}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {new Date(wo.shipyard_wo_date).toLocaleDateString()}
-                        </div>
-                      </div>
-                      {wo.work_type ? (
-                        <span
-                          title={wo.work_type}
-                          className={`inline-flex px-2 py-1 rounded text-xs font-medium cursor-help ${
-                            WORK_TYPE_GROUP_STYLE[workTypeGroup(wo.work_type)]
-                          }`}
-                        >
-                          {workTypeGroup(wo.work_type)}
-                        </span>
-                      ) : (
-                        <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-500">
-                          Type unknown
-                        </span>
-                      )}
-                      {wo.is_additional_wo ? (
-                        <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-700">
-                          Additional
-                        </span>
-                      ) : (
-                        <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700">
-                          Original
-                        </span>
-                      )}
-                    </label>
-                  ))}
-                </div>
-              )}
-
-              {assignError && (
-                <p className="text-red-600 text-sm mt-3">{assignError}</p>
-              )}
-            </div>
-
-            <div className="p-4 border-t border-gray-200 flex justify-end gap-3">
-              <button
-                onClick={() => setShowAssignModal(false)}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAssignWorkOrders}
-                disabled={selectedWOIds.size === 0 || assigning}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-              >
-                {assigning && <Loader2 className="w-4 h-4 animate-spin" />}
-                Assign {selectedWOIds.size > 0 ? `(${selectedWOIds.size})` : ""}
-              </button>
-            </div>
-          </div>
-        </div>
+        <AssignWorkOrderDialog
+          vesselName={project.vessel?.name}
+          workOrders={unassignedWOs}
+          loading={unassignedLoading}
+          loadError={unassignedError}
+          assignError={assignError}
+          selectedIds={selectedWOIds}
+          assigning={assigning}
+          onToggle={toggleSelectedWO}
+          onAssign={handleAssignWorkOrders}
+          onClose={closeAssignModal}
+        />
       )}
     </div>
   );

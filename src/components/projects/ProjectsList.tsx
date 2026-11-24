@@ -1,20 +1,21 @@
-import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useState, useEffect, useCallback, useId, useMemo } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import { computeDateRange, formatDateRange } from "../../utils/deadlineUtils";
 import {
-  RefreshCw,
-  Plus,
   CheckCircle2,
-  X,
-  Ship,
   FolderKanban,
-  ChevronRight,
-  ClipboardCheck,
-  CalendarRange,
+  Plus,
+  RefreshCw,
+  Search,
+  X,
 } from "lucide-react";
 import { PageSkeleton } from "../common/Skeleton";
+import Pagination from "../common/Pagination";
+import { READINESS_STATUS } from "./readinessStatus";
+
+const PAGE_SIZE = 20;
 
 interface ProjectRow {
   id: number;
@@ -34,22 +35,12 @@ interface ProjectRow {
     | null;
 }
 
-const STATUS_BADGE: Record<string, { label: string; className: string }> = {
-  NONE: { label: "No readiness form yet", className: "bg-gray-100 text-gray-600" },
-  DRAFT: { label: "Readiness: Draft", className: "bg-gray-100 text-gray-700" },
-  SUBMITTED: {
-    label: "Readiness: Awaiting HSSE review",
-    className: "bg-amber-100 text-amber-700",
-  },
-  NEEDS_CLARIFICATION: {
-    label: "Readiness: Needs clarification",
-    className: "bg-orange-100 text-orange-700",
-  },
-  APPROVED: {
-    label: "Readiness: Approved",
-    className: "bg-green-100 text-green-700",
-  },
-};
+const STATUS_BADGE = READINESS_STATUS;
+
+const primaryButton =
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-blue-700 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-800 sm:min-h-10";
+const secondaryButton =
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-800 transition-colors hover:bg-slate-50 sm:min-h-10";
 
 export default function ProjectsList() {
   const [projects, setProjects] = useState<ProjectRow[]>([]);
@@ -57,10 +48,12 @@ export default function ProjectsList() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [page, setPage] = useState(1);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
+  const searchId = useId();
   const { isOperationsReadOnly } = useAuth();
 
   const fetchProjects = useCallback(async () => {
@@ -89,7 +82,7 @@ export default function ProjectsList() {
         .order("created_at", { ascending: false });
 
       if (fetchError) throw fetchError;
-      setProjects((data as any) || []);
+      setProjects((data as unknown as ProjectRow[]) || []);
     } catch (err) {
       console.error("Error fetching projects:", err);
       setError(err instanceof Error ? err.message : "Failed to load projects");
@@ -111,34 +104,86 @@ export default function ProjectsList() {
     }
   }, [location, navigate]);
 
-  const filteredProjects = projects.filter((p) => {
-    if (statusFilter && (p.readiness_form?.status || "NONE") !== statusFilter) {
-      return false;
-    }
-    if (!searchTerm) return true;
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      p.project_name?.toLowerCase().includes(searchLower) ||
-      p.vessel?.name?.toLowerCase().includes(searchLower) ||
-      p.vessel?.company?.toLowerCase().includes(searchLower)
+  // Search narrows first; the status chips then count within the search, so
+  // the number on a chip is the number of rows it will show.
+  const searched = useMemo(() => {
+    if (!searchTerm) return projects;
+    const needle = searchTerm.toLowerCase();
+    return projects.filter(
+      (p) =>
+        p.project_name?.toLowerCase().includes(needle) ||
+        p.vessel?.name?.toLowerCase().includes(needle) ||
+        p.vessel?.company?.toLowerCase().includes(needle),
     );
-  });
+  }, [projects, searchTerm]);
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    searched.forEach((p) => {
+      const key = p.readiness_form?.status || "NONE";
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return counts;
+  }, [searched]);
+
+  const filteredProjects = useMemo(
+    () =>
+      statusFilter
+        ? searched.filter(
+            (p) => (p.readiness_form?.status || "NONE") === statusFilter,
+          )
+        : searched,
+    [searched, statusFilter],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filteredProjects.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageProjects = filteredProjects.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+  const hasFilters = searchTerm !== "" || statusFilter !== "";
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("");
+    setPage(1);
+  };
+
+  const pageShell = "mx-auto w-full max-w-[96rem] px-4 py-5 sm:px-6 lg:px-8 lg:py-8";
 
   if (loading) {
-    return <PageSkeleton label="Loading projects..." padding="p-4 sm:p-6" action filters list="grid" rows={6} />;
+    return (
+      <div className={pageShell}>
+        <PageSkeleton
+          label="Loading projects..."
+          padding="none"
+          action
+          filters
+          rows={8}
+          columns={5}
+        />
+      </div>
+    );
   }
 
   if (error) {
     return (
-      <div className="p-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <h3 className="text-red-800 font-medium">Error Loading Projects</h3>
-          <p className="text-red-600 mt-1">{error}</p>
+      <div className={pageShell}>
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-lg border border-red-300 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="text-sm text-red-900">
+            <span className="font-semibold">Projects could not load.</span>{" "}
+            {error}
+          </p>
           <button
+            type="button"
             onClick={fetchProjects}
-            className="mt-3 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-red-700 bg-white px-4 text-sm font-medium text-red-800 hover:bg-red-100"
           >
-            Retry
+            Try again
           </button>
         </div>
       </div>
@@ -146,159 +191,245 @@ export default function ProjectsList() {
   }
 
   return (
-    <div className="p-4 sm:p-6 space-y-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className={`${pageShell} space-y-6`}>
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
-          <p className="text-gray-600">
-            Every docking event, grouped by vessel — work orders live inside a
-            project
+          <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">
+            Projects
+          </h1>
+          <p className="mt-1 text-sm text-slate-600 sm:text-base">
+            Every docking event, grouped by vessel. Work orders live inside a
+            project.
           </p>
         </div>
-        <div className="flex gap-3">
-          <button
-            onClick={fetchProjects}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-          >
-            <RefreshCw className="w-4 h-4" /> Refresh
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={fetchProjects} className={secondaryButton}>
+            <RefreshCw className="h-4 w-4" aria-hidden="true" /> Refresh
           </button>
           {!isOperationsReadOnly && (
-            <button
-              onClick={() => navigate("/projects/add")}
-              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-            >
-              <Plus className="w-5 h-5" /> New Project
-            </button>
+            <Link to="/projects/add" className={primaryButton}>
+              <Plus className="h-4 w-4" aria-hidden="true" /> New project
+            </Link>
           )}
         </div>
-      </div>
+      </header>
 
       {showSuccessMessage && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center justify-between">
-          <div className="flex items-center">
-            <CheckCircle2 className="w-5 h-5 text-green-600 mr-2" />
-            <p className="text-green-700 font-medium">
-              Project created successfully!
-            </p>
-          </div>
+        <div
+          role="status"
+          className="flex items-center justify-between gap-3 rounded-lg border border-emerald-300 bg-emerald-50 p-4"
+        >
+          <p className="flex items-center gap-2 text-sm font-medium text-emerald-900">
+            <CheckCircle2 className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
+            Project created successfully.
+          </p>
           <button
+            type="button"
             onClick={() => setShowSuccessMessage(false)}
-            className="text-green-600 hover:text-green-800"
+            aria-label="Dismiss message"
+            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-md text-emerald-900 hover:bg-emerald-100"
           >
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200 space-y-3">
-          <input
-            type="text"
-            placeholder="Search by project name, vessel, or company..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full sm:w-96 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <div className="flex flex-wrap gap-2">
+      <section aria-label="Find a project" className="space-y-4">
+        <form
+          role="search"
+          onSubmit={(e) => e.preventDefault()}
+          className="max-w-xl"
+        >
+          <label
+            htmlFor={searchId}
+            className="mb-1 block text-sm font-medium text-slate-700"
+          >
+            Search projects
+          </label>
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600"
+              aria-hidden="true"
+            />
+            <input
+              id={searchId}
+              type="search"
+              placeholder="Project name, vessel or company"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(1);
+              }}
+              className="min-h-11 w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-3 text-base text-slate-900 placeholder:text-slate-500 focus:border-blue-700 sm:min-h-10 sm:text-sm"
+            />
+          </div>
+        </form>
+
+        <div
+          role="group"
+          aria-label="Filter by readiness form status"
+          className="flex flex-wrap gap-2"
+        >
+          {[
+            { key: "", label: "All", count: searched.length },
+            ...Object.entries(STATUS_BADGE).map(([key, { label }]) => ({
+              key,
+              label,
+              count: statusCounts[key] || 0,
+            })),
+          ].map((chip) => (
             <button
-              onClick={() => setStatusFilter("")}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                statusFilter === ""
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              key={chip.key || "all"}
+              type="button"
+              aria-pressed={statusFilter === chip.key}
+              onClick={() => {
+                setStatusFilter(chip.key);
+                setPage(1);
+              }}
+              className={`inline-flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors sm:min-h-10 ${
+                statusFilter === chip.key
+                  ? "border-blue-950 bg-blue-950 text-white"
+                  : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
               }`}
             >
-              All
-            </button>
-            {Object.entries(STATUS_BADGE).map(([key, { label }]) => (
-              <button
-                key={key}
-                onClick={() => setStatusFilter(key)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  statusFilter === key
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              {chip.label}
+              <span
+                className={`tabular-nums ${
+                  statusFilter === chip.key ? "text-blue-100" : "text-slate-600"
                 }`}
               >
-                {label}
-              </button>
-            ))}
-          </div>
+                {chip.count}
+              </span>
+            </button>
+          ))}
         </div>
 
-        <div className="p-6">
-          {filteredProjects.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredProjects.map((project) => {
-                const statusKey = project.readiness_form?.status || "NONE";
-                const badge = STATUS_BADGE[statusKey] || STATUS_BADGE.NONE;
-                const woCount = project.work_order?.length || 0;
-                const originalWorkDetails = (project.work_order || [])
-                  .filter((wo) => !wo.is_additional_wo)
-                  .flatMap((wo) => wo.work_details);
-                const projectRange = computeDateRange(originalWorkDetails);
+        <p role="status" className="text-sm text-slate-600">
+          {filteredProjects.length === projects.length
+            ? `${projects.length} projects`
+            : `${filteredProjects.length} of ${projects.length} projects`}
+        </p>
+      </section>
 
-                return (
-                  <div
-                    key={project.id}
-                    onClick={() => navigate(`/projects/${project.id}`)}
-                    className="border border-gray-200 rounded-lg p-6 hover:border-blue-500 hover:shadow-md transition-all cursor-pointer group"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center">
-                        <FolderKanban className="w-8 h-8 text-blue-600 mr-3 flex-shrink-0" />
-                        <div>
-                          <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
-                            {project.project_name}
-                          </h3>
-                          <p className="text-sm text-gray-600 flex items-center gap-1 mt-0.5">
-                            <Ship className="w-3.5 h-3.5" />{" "}
-                            {project.vessel?.name || "No vessel"}
-                          </p>
-                        </div>
-                      </div>
-                      <ChevronRight className="w-5 h-5 text-blue-500 group-hover:text-blue-700 transition-colors flex-shrink-0" />
-                    </div>
-
-                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-3">
-                      <CalendarRange className="w-3.5 h-3.5" />{" "}
-                      {formatDateRange(projectRange)}
-                    </p>
-
-                    <div className="flex items-center justify-between mt-3">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${badge.className}`}
-                      >
-                        <ClipboardCheck className="w-3.5 h-3.5" /> {badge.label}
-                      </span>
-                      <span className="text-sm text-gray-500">
-                        {woCount} WO{woCount === 1 ? "" : "s"}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+      {filteredProjects.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-12 text-center">
+          <FolderKanban
+            className="mx-auto h-8 w-8 text-slate-500"
+            aria-hidden="true"
+          />
+          <p className="mt-2 text-sm font-medium text-slate-900">
+            {hasFilters ? "No projects match these filters" : "No projects yet"}
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            {hasFilters
+              ? "Try a different search, or show every readiness status."
+              : "A project groups the work orders of one docking event for a vessel."}
+          </p>
+          {hasFilters ? (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className={`mt-4 ${secondaryButton}`}
+            >
+              Show all projects
+            </button>
           ) : (
-            <div className="text-center py-12">
-              <FolderKanban className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500 text-lg mb-2">
-                {searchTerm || statusFilter
-                  ? "No projects match your filters"
-                  : "No projects yet"}
-              </p>
-              {!searchTerm && !statusFilter && !isOperationsReadOnly && (
-                <button
-                  onClick={() => navigate("/projects/add")}
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" /> Create Your First Project
-                </button>
-              )}
-            </div>
+            !isOperationsReadOnly && (
+              <Link to="/projects/add" className={`mt-4 ${primaryButton}`}>
+                <Plus className="h-4 w-4" aria-hidden="true" /> Create the first
+                project
+              </Link>
+            )
           )}
         </div>
-      </div>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="overflow-x-auto">
+            <table className="table-stack min-w-full divide-y divide-slate-200">
+              <caption className="sr-only">Projects, newest first</caption>
+              <thead className="bg-slate-50">
+                <tr>
+                  {[
+                    "Project",
+                    "Vessel",
+                    "Planned dates",
+                    "Work orders",
+                    "Readiness",
+                  ].map((heading) => (
+                    <th
+                      key={heading}
+                      scope="col"
+                      className="px-4 py-3 text-left text-sm font-semibold text-slate-700"
+                    >
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 bg-white">
+                {pageProjects.map((project) => {
+                  const statusKey = project.readiness_form?.status || "NONE";
+                  const badge = STATUS_BADGE[statusKey] || STATUS_BADGE.NONE;
+                  const woCount = project.work_order?.length || 0;
+                  const originalWorkDetails = (project.work_order || [])
+                    .filter((wo) => !wo.is_additional_wo)
+                    .flatMap((wo) => wo.work_details);
+                  const projectRange = computeDateRange(originalWorkDetails);
+
+                  return (
+                    <tr
+                      key={project.id}
+                      onClick={() => navigate(`/projects/${project.id}`)}
+                      className="cursor-pointer transition-colors hover:bg-slate-50"
+                    >
+                      <td className="px-4 py-3">
+                        <Link
+                          to={`/projects/${project.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex min-h-11 items-center rounded text-sm font-semibold text-blue-800 hover:underline md:inline-block md:min-h-0"
+                        >
+                          {project.project_name}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <div className="font-medium text-slate-900">
+                          {project.vessel?.name || "No vessel"}
+                        </div>
+                        {project.vessel?.company && (
+                          <div className="text-slate-600">
+                            {project.vessel.company}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-700">
+                        {formatDateRange(projectRange)}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-sm tabular-nums text-slate-900">
+                        {woCount} work order{woCount === 1 ? "" : "s"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${badge.className}`}
+                        >
+                          <badge.Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                          {badge.label}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <Pagination
+        page={currentPage}
+        totalItems={filteredProjects.length}
+        pageSize={PAGE_SIZE}
+        onPageChange={setPage}
+      />
     </div>
   );
 }

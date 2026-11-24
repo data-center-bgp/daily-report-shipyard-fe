@@ -34,7 +34,7 @@ export function formatDateRange(range: DateRange): string {
       month: "short",
       day: "numeric",
     });
-  if (range.start && range.end) return `${fmt(range.start)} — ${fmt(range.end)}`;
+  if (range.start && range.end) return `${fmt(range.start)} to ${fmt(range.end)}`;
   return fmt((range.start || range.end) as string);
 }
 
