@@ -471,7 +471,7 @@ export default function PlanDetails() {
         </p>
       )}
 
-      <StatusPanel plan={plan} isAuthor={isAuthor} />
+      <StatusPanel plan={plan} isAuthor={isAuthor} isShipping={role === "SHIPPING"} />
 
       {plan.revision_no > 0 && plan.status !== "DRAFT" && (
         <section aria-labelledby="signoff-title" className="rounded-lg border border-slate-200 bg-white p-4">
@@ -775,9 +775,11 @@ export default function PlanDetails() {
 function StatusPanel({
   plan,
   isAuthor,
+  isShipping,
 }: {
   plan: PlanBundle["plan"];
   isAuthor: boolean;
+  isShipping: boolean;
 }) {
   let tone = "border-slate-300 bg-slate-50 text-slate-900";
   let Icon = Pencil;
@@ -824,11 +826,22 @@ function StatusPanel({
       body = (
         <>
           This plan is now a live project.{" "}
-          {plan.converted_project_id && (
-            <Link to={`/projects/${plan.converted_project_id}`} className="font-semibold underline">
-              Open the project
-            </Link>
-          )}
+          {plan.converted_project_id &&
+            (isShipping ? (
+              <>
+                Its readiness form still needs to be filled in and approved by HSSE.{" "}
+                <Link
+                  to={`/projects/${plan.converted_project_id}/readiness`}
+                  className="font-semibold underline"
+                >
+                  Open the readiness form
+                </Link>
+              </>
+            ) : (
+              <Link to={`/projects/${plan.converted_project_id}`} className="font-semibold underline">
+                Open the project
+              </Link>
+            ))}
         </>
       );
       break;

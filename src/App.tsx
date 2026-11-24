@@ -203,6 +203,11 @@ function AppRoutes() {
             <Routes>
               <Route path="/login" element={<AfterLoginRedirect />} />
               <Route path="/plans/*" element={<PlanPages />} />
+              {/* The readiness form of a project made from one of its plans */}
+              <Route
+                path="/projects/:projectId/readiness"
+                element={<ReadinessForm />}
+              />
               <Route path="/activity-logs" element={<ActivityLogPage />} />
               <Route path="*" element={<Navigate to="/plans" replace />} />
             </Routes>

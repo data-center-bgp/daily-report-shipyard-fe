@@ -78,22 +78,31 @@ export default function ReadinessForm() {
   // Opened from the Readiness Queue: Back/Cancel return there. Otherwise
   // (from the project page, or a direct link) they go to the project.
   const from = returnTargetFrom(location.state);
+  // SHIPPING has no Projects pages, so it comes from and returns to the
+  // docking plan that became this project.
+  const isShippingRole = profile?.role === "SHIPPING";
+  const [sourcePlanId, setSourcePlanId] = useState<number | null>(null);
   const goBack = () =>
-    from
-      ? navigate(from.path, { state: from.state })
-      : navigate(`/projects/${projectId}`);
-  const backLabel =
-    from?.path === "/readiness-queue"
+    isShippingRole
+      ? navigate(sourcePlanId ? `/plans/${sourcePlanId}` : "/plans")
+      : from
+        ? navigate(from.path, { state: from.state })
+        : navigate(`/projects/${projectId}`);
+  const backLabel = isShippingRole
+    ? "Back to Plan"
+    : from?.path === "/readiness-queue"
       ? "Back to Readiness Queue"
       : "Back to Project";
 
   // ADMIN_SHIPPING can fill/submit/resubmit the readiness form for a project
   // it created, same as PPIC/MASTER — it's part of the same create-only
-  // scope (see isShippingCreateOnly in useAuth.tsx).
+  // scope (see isShippingCreateOnly in useAuth.tsx). SHIPPING can do the same
+  // for projects that came from its docking plans (checked when loading).
   const canFillAsAdmin =
     profile?.role === "PPIC" ||
     profile?.role === "MASTER" ||
-    profile?.role === "ADMIN_SHIPPING";
+    profile?.role === "ADMIN_SHIPPING" ||
+    isShippingRole;
   const canReviewAsHsse = profile?.role === "HSSE" || profile?.role === "MASTER";
 
   const [project, setProject] = useState<ProjectInfo | null>(null);
@@ -167,6 +176,23 @@ export default function ReadinessForm() {
         ]);
 
       if (projectError) throw projectError;
+
+      // SHIPPING only fills in the form for projects made from its own plans.
+      if (isShippingRole) {
+        const { data: sourcePlan } = await supabase
+          .from("docking_plans")
+          .select("id")
+          .eq("converted_project_id", projectId)
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (!sourcePlan) {
+          throw new Error(
+            "Shipping can only open the readiness form of a project that came from a docking plan.",
+          );
+        }
+        setSourcePlanId(sourcePlan.id);
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setProject(projectData as any);
       setChecklistItems(items || []);
@@ -242,7 +268,7 @@ export default function ReadinessForm() {
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, isShippingRole]);
 
   useEffect(() => {
     loadData();
@@ -623,8 +649,17 @@ export default function ReadinessForm() {
     return (
       <div className="p-6">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-700">Project not found.</p>
+          <p className="text-red-700">{error || "Project not found."}</p>
         </div>
+        {isShippingRole && (
+          <button
+            type="button"
+            onClick={() => navigate("/plans")}
+            className="mt-3 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-blue-800 underline"
+          >
+            <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to plans
+          </button>
+        )}
       </div>
     );
   }
