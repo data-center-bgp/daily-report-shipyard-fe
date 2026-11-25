@@ -26,3 +26,6 @@ dist-ssr
 
 # one-off schema move (contains auth password hashes)
 supabase/_move_rumah_quran/
+
+# Playwright MCP session output (console logs and page snapshots)
+.playwright-mcp/

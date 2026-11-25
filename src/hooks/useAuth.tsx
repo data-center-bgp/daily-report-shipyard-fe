@@ -23,7 +23,6 @@ export interface UserProfile {
     | "MASTER"
     | "PPIC"
     | "PRODUCTION"
-    | "OP_HEAD"
     | "ADMIN"
     | "FINANCE"
     | "MANAGER"
@@ -46,12 +45,12 @@ interface AuthContextType {
   hasRole: (roles: string | string[]) => boolean;
   canAccess: (feature: string) => boolean;
   isReadOnly: boolean; // NEW: Simple read-only flag
-  // MANAGER (isReadOnly) everywhere, PLUS HSSE and OP_HEAD on Projects/Work
+  // MANAGER (isReadOnly) everywhere, PLUS HSSE and SHIPPING on Projects/Work
   // Orders/Work Details/Progress specifically. Kept separate from isReadOnly
-  // because HSSE (Readiness Form) and OP_HEAD (Work Verification, Additional
+  // because HSSE (Readiness Form) and SHIPPING (Work Verification, Additional
   // WO Approvals) each still have full write access to their own feature.
   isOperationsReadOnly: boolean;
-  // MANAGER (isReadOnly) everywhere, PLUS FINANCE and OP_HEAD on BASTP
+  // MANAGER (isReadOnly) everywhere, PLUS FINANCE and SHIPPING on BASTP
   // composition/materials specifically — both can view but never edit.
   isBastpReadOnly: boolean;
   // ADMIN_SHIPPING only — can create Projects/Work Orders/Work Details but
@@ -59,7 +58,7 @@ interface AuthContextType {
   isShippingCreateOnly: boolean;
   // Hendra Muzaki (PPIC — acting as PPIC Manager) can review work verification
   // for vessels outside our own fleet (vessel.fleet_number is null), since
-  // OP_HEAD's coverage doesn't extend to them. Scoped to this one person by
+  // SHIPPING's coverage doesn't extend to them. Scoped to this one person by
   // id, not by role — PPIC otherwise has no verification access at all.
   canVerifyExternalVesselWork: boolean;
   // Work Order "Docking Planning" (Docking/Floating/Vessel on Dock/
@@ -85,7 +84,7 @@ const FEATURE_ACCESS = {
     "MASTER",
     "PPIC",
     "PRODUCTION",
-    "OP_HEAD",
+    "SHIPPING",
     "ADMIN",
     "FINANCE",
     "MANAGER",
@@ -99,7 +98,7 @@ const FEATURE_ACCESS = {
     "MASTER",
     "PPIC",
     "PRODUCTION",
-    "OP_HEAD",
+    "SHIPPING",
     "ADMIN",
     "MANAGER",
     "HSSE",
@@ -109,7 +108,7 @@ const FEATURE_ACCESS = {
     "MASTER",
     "PPIC",
     "PRODUCTION",
-    "OP_HEAD",
+    "SHIPPING",
     "ADMIN",
     "MANAGER",
     "HSSE",
@@ -119,25 +118,25 @@ const FEATURE_ACCESS = {
     "MASTER",
     "PPIC",
     "PRODUCTION",
-    "OP_HEAD",
+    "SHIPPING",
     "ADMIN",
     "MANAGER",
     "HSSE",
   ],
-  // Verification is OP_HEAD's job specifically (the fleet/vessel
+  // Verification is SHIPPING's job specifically (the fleet/vessel
   // coordinator) — MASTER/MANAGER keep read-only visibility like everywhere
   // else, but PPIC/PRODUCTION/ADMIN no longer see or act on this page.
-  verification: ["MASTER", "OP_HEAD", "MANAGER"],
+  verification: ["MASTER", "SHIPPING", "MANAGER"],
   bastp: [
     "MASTER",
     "PPIC",
     "PRODUCTION",
-    "OP_HEAD",
+    "SHIPPING",
     "ADMIN",
     "FINANCE",
     "MANAGER",
   ],
-  vessels: ["MASTER", "PPIC", "PRODUCTION", "OP_HEAD", "ADMIN", "MANAGER"],
+  vessels: ["MASTER", "PPIC", "PRODUCTION", "SHIPPING", "ADMIN", "MANAGER"],
   invoices: ["MASTER", "FINANCE", "MANAGER"],
   // MANAGER gets the same view access as MASTER everywhere (see isReadOnly),
   // including here — UserManagementPage.tsx gates the actual write controls
@@ -154,12 +153,12 @@ const FEATURE_ACCESS = {
     "MASTER",
     "PPIC",
     "PRODUCTION",
-    "OP_HEAD",
+    "SHIPPING",
     "ADMIN",
     "FINANCE",
     "MANAGER",
   ],
-  exportData: ["MASTER", "PPIC", "PRODUCTION", "OP_HEAD", "ADMIN", "MANAGER"],
+  exportData: ["MASTER", "PPIC", "PRODUCTION", "SHIPPING", "ADMIN", "MANAGER"],
   // Separate from exportData so ADMIN_SHIPPING gets Import (its create-only
   // scope covers bulk-creating work orders/details) without also gaining
   // Export Data, which it was never meant to have.
@@ -167,13 +166,13 @@ const FEATURE_ACCESS = {
     "MASTER",
     "PPIC",
     "PRODUCTION",
-    "OP_HEAD",
+    "SHIPPING",
     "ADMIN",
     "MANAGER",
     "ADMIN_SHIPPING",
   ],
   activityLogs: ["MASTER", "MANAGER"],
-  additionalWoApprovals: ["MASTER", "OP_HEAD", "MANAGER"],
+  additionalWoApprovals: ["MASTER", "SHIPPING", "MANAGER"],
   readinessQueue: ["MASTER", "HSSE", "MANAGER"],
   // Shipping's docking plans (drafted ~2 months before a vessel docks).
   // Every role can view them; only SHIPPING and MASTER write them (checked on
@@ -183,7 +182,6 @@ const FEATURE_ACCESS = {
     "MASTER",
     "PPIC",
     "PRODUCTION",
-    "OP_HEAD",
     "ADMIN",
     "FINANCE",
     "MANAGER",
@@ -210,20 +208,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // NEW: Compute read-only status
   const isReadOnly = profile?.role === "MANAGER";
-  // HSSE and OP_HEAD can view Projects/Work Orders/Work Details/Progress, but
-  // should never write there. OP_HEAD's actual write privileges (Work
+  // HSSE and SHIPPING can view Projects/Work Orders/Work Details/Progress, but
+  // should never write there. SHIPPING's actual write privileges (Work
   // Verification, Additional WO Approvals) live in those pages' own role
   // checks and don't consume this flag, so they're unaffected. HSSE's write
   // privilege (the Readiness Form) is the same story.
   const isOperationsReadOnly =
-    isReadOnly || profile?.role === "HSSE" || profile?.role === "OP_HEAD";
-  // BASTP composition/materials: FINANCE and OP_HEAD can view (BASTP is on
-  // OP_HEAD's "monitor up to BASTP" path) but never edit, on top of
+    isReadOnly || profile?.role === "HSSE" || profile?.role === "SHIPPING";
+  // BASTP composition/materials: FINANCE and SHIPPING can view (BASTP is on
+  // SHIPPING's "monitor up to BASTP" path) but never edit, on top of
   // MANAGER's blanket isReadOnly. Kept separate from isOperationsReadOnly
   // since FINANCE has no access to Projects/Work Orders/Details/Progress at
   // all, so lumping it into that flag would be meaningless there.
   const isBastpReadOnly =
-    isReadOnly || profile?.role === "FINANCE" || profile?.role === "OP_HEAD";
+    isReadOnly || profile?.role === "FINANCE" || profile?.role === "SHIPPING";
   // ADMIN_SHIPPING exists to CREATE Projects/Work Orders/Work Details, and
   // was meant to never edit or delete one afterward (that's PPIC's job).
   // TEMPORARY: while the ADMIN_SHIPPING workflow is still being established,

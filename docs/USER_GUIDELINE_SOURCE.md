@@ -44,7 +44,7 @@ Tags used below:
 | **Work order (WO)** | A job order for a vessel inside a project. **Original** work orders are the planned scope. **Additional** work orders are added later and need approval. |
 | **Work detail** | One task line under a work order: description, location, scope, quantity, dates. |
 | **Work progress** | A dated percentage report on one work detail. |
-| **Work verification** | The Operation Head's review of a work detail that reached 100%. |
+| **Work verification** | The Operation Head duty (now done by Shipping): the review of a work detail that reached 100%. |
 | **Readiness form (FM-OPS-04-11)** | The checklist that shows a vessel is safe to enter the shipyard. HSSE approves it. |
 | **BASTP** | Berita Acara Serah Terima Pekerjaan: the work handover minutes for a vessel, listing finished work details and general services. |
 | **Form Penawaran** | The quotation PDF uploaded to a BASTP. |
@@ -92,7 +92,7 @@ Side branches:  Additional work order -> Operation Head approval (or Chairman Di
 
 ## 3. Roles and access
 
-There are ten roles: **MASTER, PPIC, PRODUCTION, OP_HEAD, ADMIN, FINANCE, MANAGER, HSSE, ADMIN_SHIPPING, SHIPPING.** An administrator creates accounts and assigns the role. See [6.15](#615-user-management).
+There are nine roles: **MASTER, PPIC, PRODUCTION, ADMIN, FINANCE, MANAGER, HSSE, ADMIN_SHIPPING, SHIPPING.** The former OP_HEAD role was retired on 25 November 2026: its people are SHIPPING now, and SHIPPING also does everything OP_HEAD did. "Operation Head" still names the duty (approving additional work orders, verifying finished work) and appears in some screen texts. An administrator creates accounts and assigns the role. See [6.15](#615-user-management).
 
 ### 3.1 Who can do what
 
@@ -100,20 +100,20 @@ There are ten roles: **MASTER, PPIC, PRODUCTION, OP_HEAD, ADMIN, FINANCE, MANAGE
 
 | Module | View | Change | Approve or review |
 |---|---|---|---|
-| Dashboard | Every role except SHIPPING | n/a | n/a |
+| Dashboard | Every role | n/a | n/a |
 | Docking Plans | Every role | MASTER, SHIPPING (SHIPPING only on its own plans) | PPIC reviews; PPIC or MASTER reopens and converts. MASTER can act for PPIC. |
-| Projects | MASTER, PPIC, PRODUCTION, OP_HEAD, ADMIN, MANAGER, HSSE, ADMIN_SHIPPING | MASTER, PPIC, PRODUCTION, ADMIN, ADMIN_SHIPPING | n/a |
-| Readiness form | Same as Projects, plus SHIPPING for projects made from its own plans | Fill and submit: PPIC, MASTER, ADMIN_SHIPPING, SHIPPING (plan projects only) | HSSE and MASTER review and sign off |
+| Projects | MASTER, PPIC, PRODUCTION, SHIPPING, ADMIN, MANAGER, HSSE, ADMIN_SHIPPING | MASTER, PPIC, PRODUCTION, ADMIN, ADMIN_SHIPPING | n/a |
+| Readiness form | Same as Projects | Fill and submit: PPIC, MASTER, ADMIN_SHIPPING, SHIPPING (plan projects only) | HSSE and MASTER review and sign off |
 | Readiness Queue | MASTER, HSSE, MANAGER | n/a | HSSE, MASTER (through the form) |
-| Work Orders | MASTER, PPIC, PRODUCTION, OP_HEAD, ADMIN, MANAGER, HSSE, ADMIN_SHIPPING | MASTER, PPIC, PRODUCTION, ADMIN, ADMIN_SHIPPING | n/a |
-| Additional WO Approvals | MASTER, OP_HEAD, MANAGER | n/a | MASTER, OP_HEAD |
+| Work Orders | MASTER, PPIC, PRODUCTION, SHIPPING, ADMIN, MANAGER, HSSE, ADMIN_SHIPPING | MASTER, PPIC, PRODUCTION, ADMIN, ADMIN_SHIPPING | n/a |
+| Additional WO Approvals | MASTER, SHIPPING, MANAGER | n/a | MASTER, SHIPPING |
 | Work Details | Same as Work Orders | Add: PPIC, MASTER, ADMIN_SHIPPING. Edit: PPIC (planning fields), PRODUCTION (execution fields), MASTER (both). ADMIN and ADMIN_SHIPPING get the full form **[To confirm]** | n/a |
-| Work Progress | MASTER, PPIC, PRODUCTION, OP_HEAD, ADMIN, MANAGER, HSSE | PRODUCTION, MASTER | n/a |
-| Work Verification | MASTER, OP_HEAD, MANAGER, plus one named external verifier | n/a | MASTER, OP_HEAD |
-| BASTP | MASTER, PPIC, PRODUCTION, OP_HEAD, ADMIN, FINANCE, MANAGER | MASTER, PPIC, PRODUCTION, ADMIN | n/a |
+| Work Progress | MASTER, PPIC, PRODUCTION, SHIPPING, ADMIN, MANAGER, HSSE | PRODUCTION, MASTER | n/a |
+| Work Verification | MASTER, SHIPPING, MANAGER, plus one named external verifier | n/a | MASTER, SHIPPING |
+| BASTP | MASTER, PPIC, PRODUCTION, SHIPPING, ADMIN, FINANCE, MANAGER | MASTER, PPIC, PRODUCTION, ADMIN | n/a |
 | Invoices | MASTER, FINANCE, MANAGER | MASTER, FINANCE | n/a |
-| Export Data | MASTER, PPIC, PRODUCTION, OP_HEAD, ADMIN, MANAGER | n/a | n/a |
-| Import Data | Menu: MASTER, PPIC, PRODUCTION, OP_HEAD, ADMIN, MANAGER, ADMIN_SHIPPING. The page only lets PPIC, MASTER, ADMIN_SHIPPING import. | PPIC, MASTER, ADMIN_SHIPPING (the Work Progress tab: PPIC, MASTER only) | n/a |
+| Export Data | MASTER, PPIC, PRODUCTION, SHIPPING, ADMIN, MANAGER | n/a | n/a |
+| Import Data | Menu: MASTER, PPIC, PRODUCTION, SHIPPING, ADMIN, MANAGER, ADMIN_SHIPPING. The page only lets PPIC, MASTER, ADMIN_SHIPPING import. | PPIC, MASTER, ADMIN_SHIPPING (the Work Progress tab: PPIC, MASTER only) | n/a |
 | Master Data | MASTER, PPIC, MANAGER | MASTER, PPIC | n/a |
 | User Management | MASTER, MANAGER | MASTER | n/a |
 | Activity Logs | Every role, each seeing a different scope | n/a | n/a |
@@ -122,11 +122,11 @@ There are ten roles: **MASTER, PPIC, PRODUCTION, OP_HEAD, ADMIN, FINANCE, MANAGE
 ### 3.2 Special rules per role
 
 - **MANAGER** is read-only everywhere.
-- **HSSE** and **OP_HEAD** can view Projects, Work Orders, Work Details and Progress but never change them. HSSE keeps write access to the readiness form review. OP_HEAD keeps Work Verification and Additional WO Approvals.
-- **FINANCE** and **OP_HEAD** can view BASTP but not edit it.
+- **HSSE** and **SHIPPING** can view Projects, Work Orders, Work Details and Progress but never change them. HSSE keeps write access to the readiness form review. SHIPPING keeps Docking Plans, Work Verification and Additional WO Approvals, and fills the readiness form of projects made from its own plans.
+- **FINANCE** and **SHIPPING** can view BASTP but not edit it.
 - **PPIC** plans work details (price, dates, scope). **PRODUCTION** executes them (PIC, SPK, permits, progress). Only PPIC and MASTER see or edit the PPIC price.
 - **ADMIN_SHIPPING** creates work orders and work details, and may leave planned dates empty for PPIC to fill later. A "create only" limit for this role exists in the code but is switched off for now **[To confirm]**.
-- **SHIPPING** only has Docking Plans, its own Activity Log, and the readiness form of a project made from one of its plans. It has no dashboard and no alerts bell.
+- **SHIPPING** (which now includes the former Operation Head role) has the Dashboard, alerts, Docking Plans, Work Verification and Additional WO Approvals, plus view access to Projects, Work Orders, Work Details, Work Progress, BASTP and Export Data. It can fill the readiness form only for projects made from its own plans, and can read the others.
 - One named PPIC user (acting as PPIC Manager) can also review Work Verification, but only for vessels outside the company fleet. It is set by user id in the code.
 
 ---
@@ -136,7 +136,7 @@ There are ten roles: **MASTER, PPIC, PRODUCTION, OP_HEAD, ADMIN, FINANCE, MANAGE
 ### 4.1 Signing in and out
 
 1. Open the live address and enter your email and password. The eye icon shows or hides the password.
-2. After signing in you go to the page you asked for, otherwise the Dashboard. SHIPPING goes to Docking Plans.
+2. After signing in you go to the page you asked for, otherwise the Dashboard.
 3. **Logout** is the red button at the top right.
 
 There is no self-signup and no "forgot password" screen. Ask an administrator for an account or a reset. How the administrator creates accounts and resets passwords is outside this app **[To confirm]**.
@@ -265,7 +265,7 @@ If your account is deactivated, or has no profile, you are signed straight out w
 **Project name format.** `COMPANY-VESSEL NAME-DOCKING TYPE-YYYY-##`, for example `BAROKAH GEMILANG PERKASA-MT M PATRICIA-Repair-2026-01`. YYYY is the current year and ## is that vessel's number of projects created that year, two digits. Nothing forces a typed name to follow it.
 
 **Project details page.**
-- Header: name, vessel, docking type, the PPIC and HSSE tags, and the buttons Rename project, Assign existing work order, Add work order (hidden for MANAGER, HSSE, OP_HEAD).
+- Header: name, vessel, docking type, the PPIC and HSSE tags, and the buttons Rename project, Assign existing work order, Add work order (hidden for MANAGER, HSSE, SHIPPING).
 - Project timeline: from the original work orders. Additional work orders do not move it, but a warning shows if one runs past the project's finish.
 - Vessel readiness form: status and a button to start or open it.
 - Work orders table: WO number (link), date, type (Original or Additional), deadline (flagged "Beyond project deadline"), progress, Edit and Remove. **Remove only un-assigns the work order from the project.** The work order and its data stay.
@@ -337,7 +337,7 @@ An additional work order is extra scope added after the original. It needs one o
 
 Each approval backs exactly one work order.
 
-**Additional WO Approvals** (`/additional-wo-approvals`; MASTER, OP_HEAD, MANAGER view). Filters: Pending (default), Approved, Rejected, All. A decider opens **Review**, writes notes (required to reject), then Approve or Reject. MASTER and OP_HEAD decide. MANAGER views only.
+**Additional WO Approvals** (`/additional-wo-approvals`; MASTER, SHIPPING, MANAGER view). Filters: Pending (default), Approved, Rejected, All. A decider opens **Review**, writes notes (required to reject), then Approve or Reject. MASTER and SHIPPING decide. MANAGER views only.
 
 ### 6.6 Work Details
 
@@ -353,7 +353,7 @@ Each approval backs exactly one work order.
 - **PPIC:** description, location, scope, quantity, UOM, additional flag, planned start, target close, period close target, price.
 - **PRODUCTION:** PIC, SPK number, SPKK number, work permit file, PTW number, notes, actual start, actual close (not before the actual start).
 - **MASTER:** both sets.
-- MANAGER, HSSE and OP_HEAD are redirected away.
+- MANAGER, HSSE and SHIPPING are redirected away.
 
 **Cancel** (PPIC, PRODUCTION, MASTER, with optional reason). A cancelled work detail leaves the progress average and verification and cannot get new progress. It can still go into a BASTP at zero price, for the record. **Uncancel** restores it.
 
@@ -380,7 +380,7 @@ Each approval backs exactly one work order.
 
 ### 6.8 Work Verification
 
-**Purpose.** The Operation Head's review of work details that reached 100%, before they go into a BASTP. Menu Approvals & Review, Work Verification (`/work-verification`).
+**Purpose.** The Operation Head duty, now done by Shipping: the review of work details that reached 100%, before they go into a BASTP. Menu Approvals & Review, Work Verification (`/work-verification`).
 
 **Tabs.**
 - **Pending Review:** at 100%, not approved, not open for rework, not yet in a BASTP.
@@ -388,7 +388,7 @@ Each approval backs exactly one work order.
 - **Needs Rework:** sent back and no newer progress yet.
 - **Verified:** the latest review is approved. Auto-approved items say "Auto-approved (2-day deadline)".
 
-**Review steps** (MASTER, OP_HEAD).
+**Review steps** (MASTER, SHIPPING).
 1. Open the item and read its history.
 2. Set the review date (not in the future).
 3. Add notes (up to 500 characters). Notes are optional to approve and required to send back.
@@ -469,7 +469,7 @@ There is no BASTP delete in the screen.
 
 ### 6.11 Dashboard and Alerts
 
-**Dashboard** (`/`; every role except SHIPPING).
+**Dashboard** (`/`; every role).
 - **Header strip:** Projects, In progress, Completed. A project is completed only when all its work orders are.
 - **Needs attention** (never filtered): Overdue work details, Ready to invoice, Invoiced but not paid (value and count).
 - **Filter:** Vessel and Month. It filters only Work orders, Work details and Work to payment.
@@ -493,7 +493,7 @@ Content: one row per progress report with its vessel, project, work order, work 
 
 ### 6.13 Import Data
 
-Menu Data Tools, Import Data (`/import-data`). PPIC, MASTER and ADMIN_SHIPPING can import. MANAGER sees a view-only notice. PRODUCTION, OP_HEAD and ADMIN see the menu item but get a message that they cannot import **[Known gap]**.
+Menu Data Tools, Import Data (`/import-data`). PPIC, MASTER and ADMIN_SHIPPING can import. MANAGER sees a view-only notice. PRODUCTION, SHIPPING and ADMIN see the menu item but get a message that they cannot import **[Known gap]**.
 
 **Tabs:** Work Orders, Work Details, Work Progress (PPIC and MASTER only). Files: `.csv`, `.xlsx`, `.xls`.
 
@@ -577,7 +577,7 @@ Dates typed or imported are always `YYYY-MM-DD`.
 - **Progress** never goes down, and cannot be added at 100%, except after a rework request.
 - **Original work orders** need an approved readiness form. **Additional work orders** need Operation Head approval or a Chairman Directive.
 - **BASTP and invoice locks:** a BASTP locks at Ready for Invoice. A paid invoice locks its prices.
-- **Read-only roles** (MANAGER everywhere, HSSE and OP_HEAD on operations, FINANCE and OP_HEAD on BASTP) see the pages without any change buttons.
+- **Read-only roles** (MANAGER everywhere, HSSE and SHIPPING on operations, FINANCE and SHIPPING on BASTP) see the pages without any change buttons.
 - **Everything is logged** in the Activity Log.
 - **The browser matters.** Auto-approval of unreviewed work and the automatic BASTP statuses run in the browser when an allowed user opens the page. They are not background jobs.
 
@@ -604,7 +604,7 @@ Dates typed or imported are always `YYYY-MM-DD`.
 |---|---|
 | Role lists per feature | `src/hooks/useAuth.tsx` (`FEATURE_ACCESS`, role flags) |
 | Menu and groups | `src/components/common/Layout.tsx` |
-| Routes and the SHIPPING-only route tree | `src/App.tsx` |
+| Routes | `src/App.tsx` |
 | Docking plans | `src/components/plans/`, `src/utils/dockingPlans.ts`, `src/utils/planImport.ts`, `supabase/migrations/20261124*` |
 | Check tags on projects and plans | `src/components/projects/ApprovalTags.tsx` |
 | Readiness form and gate | `src/components/readiness/`, `src/components/workOrders/AddWorkOrder.tsx` |
@@ -623,7 +623,7 @@ These need a decision, or a check with the team. Remove a line once it is settle
 **Decisions for the team**
 
 1. **Converted plans skip the readiness gate.** Conversion creates the work orders at once, even before HSSE has approved the project's readiness form. Options: convert creates only the project and work orders come after approval, or keep it and show a "readiness pending" warning on the project. The tags on the Projects list show the status, but nothing blocks work.
-2. **Docking plan permissions are enforced in the screens, and in the database for plan tables only.** The restriction that keeps SHIPPING on the plan pages is a screen rule. The live work order and project tables are open to any signed-in user at database level. A later tightening is planned, not done.
+2. **Docking plan permissions are enforced in the screens, and in the database for plan tables only.** SHIPPING's view-only access to operations is a screen rule. The live work order and project tables are open to any signed-in user at database level. A later tightening is planned, not done.
 3. **ADMIN_SHIPPING "create only" limit** is switched off in the code. Decide when to turn it back on, then update 3.2 and 6.4.
 4. **Auto-approval after 2 days** runs only when an allowed user opens the verification queue.
 5. **Hard-coded names and ids:** the named external verifier (user id) and the two BASTP signer names in the print template.
@@ -634,7 +634,7 @@ These need a decision, or a check with the team. Remove a line once it is settle
 7. The Edit Work Order form has an "additional" box that does not run the approval check. Whether the database blocks it is unknown.
 8. A VERIFIED BASTP has no segment in the dashboard "Work to payment" bar.
 9. Paid and unpaid invoice values show on the dashboard to every viewer, including roles that cannot open Invoices.
-10. PRODUCTION, OP_HEAD and ADMIN see the Import Data menu but cannot import.
+10. PRODUCTION, SHIPPING and ADMIN see the Import Data menu but cannot import.
 11. Import preview does not check work order numbers against existing data. Whether the database stops duplicates is unknown.
 12. The readiness form does not force the header fields before submitting.
 
@@ -655,11 +655,10 @@ This source file is detailed on purpose. The guideline people read should be sho
 
 1. **Quick start for everyone:** sign in, the menu, alerts, who to ask for access.
 2. **One short guide per role,** each with only that role's daily tasks:
-   - SHIPPING: making a docking plan, importing, answering PPIC's notes, the readiness form.
+   - SHIPPING: making a docking plan, importing, answering PPIC's notes, the readiness form, verification and additional work order approvals.
    - PPIC: reviewing and converting plans, planning work details, BASTP.
    - HSSE: readiness queue and sign-off.
    - PRODUCTION: execution fields and progress.
-   - OP_HEAD: verification and additional work order approvals.
    - FINANCE: invoices.
    - MANAGER: where to look (read-only).
    - MASTER and ADMIN: administration and master data.
@@ -678,5 +677,6 @@ This source file is detailed on purpose. The guideline people read should be sho
 |---|---|---|
 | 2026-11-25 | Docking Plans list: added a "Checked by" column next to Status with PPIC and HSSE tags for every plan; the same tags show on the plan page. | 6.1 |
 | 2026-11-24 | The in-app guide is written in Indonesian; the menu item is now "Panduan Pengguna" under "Bantuan". This file stays in English. | 1, 4.2, 10, 12 |
+| 2026-11-25 | OP_HEAD role retired: its users are SHIPPING, and SHIPPING now has everything OP_HEAD had (Dashboard, alerts, Work Verification, Additional WO Approvals, view access to operations and BASTP, Export Data) on top of Docking Plans. SHIPPING is no longer limited to the plan pages. The guide has no Operation Head path any more; its topics moved to the Shipping path. | 3, 4, 5, 6.1, 6.3, 6.5, 6.8, 6.11, 12 |
 | 2026-11-24 | In-app User Guide added (menu Help, User Guide; `/guide`): 26 step-by-step topics from this file, a start-here path for each of the 10 roles, search. Open to every role, including Shipping. | 1, 4.2, 10, 12 |
 | 2026-11-24 | First version, compiled from the code at commit `56eb1ff`. Covers every module. Docking plans: Shipping drafts plans, all roles view them, only MASTER and SHIPPING change them, PPIC alone approves, HSSE's approval stays on the readiness form, Shipping can fill the readiness form of plan projects, Excel import for plans, and PPIC and HSSE check tags on projects and converted plans. | All |

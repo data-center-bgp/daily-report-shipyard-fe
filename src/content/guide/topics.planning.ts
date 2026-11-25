@@ -13,16 +13,28 @@ export const planningTopics: GuideTopic[] = [
       {
         title: "Buka Docking Plans lalu tekan New plan",
         detail: "Docking Plans ada di bawah Planning pada menu.",
+        image: {
+          src: "/guide/plans-list.png",
+          alt: "Halaman Docking Plans dengan tombol New plan di kanan atas, kotak pencarian, chip status, dan tabel plan dengan kolom Status dan Checked by.",
+        },
       },
       {
         title: "Pilih kapal, jenis docking, dan target tanggal",
         detail:
           "Nama plan disarankan dengan pola Kapal - jenis - Bulan Tahun. Anda boleh mengubahnya. Catatan bersifat opsional.",
+        image: {
+          src: "/guide/plan-new.png",
+          alt: "Form New docking plan yang sudah terisi: kapal, jenis docking Docking, target tanggal, dan nama plan yang disarankan, dengan tombol Create plan.",
+        },
       },
       {
         title: "Simpan, lalu tambahkan work order",
         detail:
           "Tekan Add work order. Lokasi kerja, nomor WO customer, dan catatan semuanya opsional.",
+        image: {
+          src: "/guide/plan-detail.png",
+          alt: "Halaman sebuah plan berstatus Draft, dengan tombol Submit for review, Import from Excel, dan Add work order, serta work order beserta lima work detail-nya.",
+        },
       },
       {
         title: "Tambahkan work detail di bawah work order itu",
@@ -70,6 +82,10 @@ export const planningTopics: GuideTopic[] = [
         title: "Tekan Download template",
         detail:
           "File berisi sheet Work Orders, sheet Work Details, dan sheet Instructions. Location, Work Scope, dan UOM punya dropdown.",
+        image: {
+          src: "/guide/plan-import-dialog.png",
+          alt: "Jendela Import from Excel dengan tombol Download template dan kotak untuk memilih file .xlsx.",
+        },
       },
       {
         title: "Isi sheet Work Orders",
@@ -89,6 +105,10 @@ export const planningTopics: GuideTopic[] = [
         title: "Pilih file lalu baca hasil pemeriksaan",
         detail:
           "Masalah ditampilkan per sheet dan baris, misalnya Work Details, row 3: Location not found. Perbaiki di Excel lalu pilih file lagi. Tidak ada yang disimpan sebelum file bebas dari masalah.",
+        image: {
+          src: "/guide/plan-import-ready.png",
+          alt: "Jendela Import from Excel setelah file dipilih: pesan hijau bahwa file siap dengan 1 work order dan 5 work detail, dan tombol Import into plan.",
+        },
       },
       {
         title: "Tekan Import into plan",
@@ -134,6 +154,10 @@ export const planningTopics: GuideTopic[] = [
         title: "Jika statusnya Sent back, baca catatannya",
         detail:
           "Catatan umum ada di bagian atas. Catatan untuk satu work order atau work detail muncul sebagai tanda pada baris itu.",
+        image: {
+          src: "/guide/plan-sent-back.png",
+          alt: "Halaman plan berstatus Sent back: kotak PPIC sign-off berisi catatan PPIC, lalu work order dan riwayat review di bagian bawah.",
+        },
       },
       {
         title: "Perbaiki baris-barisnya",
@@ -276,6 +300,10 @@ export const planningTopics: GuideTopic[] = [
         title: "Baca kolom Status dan Checked by",
         detail:
           "Status menunjukkan tahap plan. Checked by menunjukkan dua pemeriksaan: PPIC (Not submitted yet, Awaiting review, Sent back, atau Approved) dan HSSE. HSSE baru punya status setelah plan dikonversi, karena HSSE menyetujui form kesiapan project; sebelum itu tertulis After conversion.",
+        image: {
+          src: "/guide/plans-list.png",
+          alt: "Daftar Docking Plans dengan kolom Status dan kolom Checked by yang menunjukkan tag PPIC dan HSSE untuk setiap plan.",
+        },
       },
       {
         title: "Buka Projects dan baca kolom Checked by",

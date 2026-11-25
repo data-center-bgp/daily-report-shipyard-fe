@@ -85,8 +85,8 @@ export default function BASTPDetails() {
   // nobody quietly changes what's being billed after the fact.
   const isLocked =
     bastp?.status === "READY_FOR_INVOICE" || bastp?.status === "INVOICED";
-  // FINANCE and OP_HEAD consume/monitor BASTPs but shouldn't edit their
-  // composition — see isBastpReadOnly (MANAGER + FINANCE + OP_HEAD).
+  // FINANCE and SHIPPING consume/monitor BASTPs but shouldn't edit their
+  // composition — see isBastpReadOnly (MANAGER + FINANCE + SHIPPING).
   const canEditBastp = !isBastpReadOnly && !isLocked;
 
   // Fetch BASTP details

@@ -174,7 +174,7 @@ function PlanPages() {
 }
 
 function AppRoutes() {
-  const { user, loading, signOut, profile } = useAuth();
+  const { user, loading, signOut } = useAuth();
 
   const handleLogout = async () => {
     await signOut();
@@ -192,32 +192,6 @@ function AppRoutes() {
           <Route path="*" element={<RedirectToLogin />} />
         </Routes>
       </Suspense>
-    );
-  }
-
-  // The Shipping team only works in Docking plans (and sees its own activity
-  // log). Everything else sends them to the plans list.
-  if (profile?.role === "SHIPPING") {
-    return (
-      <DashboardDataProvider>
-        <Layout onLogout={handleLogout}>
-          <Suspense fallback={<LoadingState />}>
-            <Routes>
-              <Route path="/login" element={<AfterLoginRedirect />} />
-              <Route path="/plans/*" element={<PlanPages />} />
-              <Route path="/guide" element={<GuideHome />} />
-              <Route path="/guide/:topicId" element={<GuideTopicPage />} />
-              {/* The readiness form of a project made from one of its plans */}
-              <Route
-                path="/projects/:projectId/readiness"
-                element={<ReadinessForm />}
-              />
-              <Route path="/activity-logs" element={<ActivityLogPage />} />
-              <Route path="*" element={<Navigate to="/plans" replace />} />
-            </Routes>
-          </Suspense>
-        </Layout>
-      </DashboardDataProvider>
     );
   }
 

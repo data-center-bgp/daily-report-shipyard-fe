@@ -860,22 +860,25 @@ function StatusPanel({
       body = (
         <>
           This plan is now a live project.{" "}
-          {plan.converted_project_id &&
-            (isShipping ? (
-              <>
-                Its readiness form still needs to be filled in and approved by HSSE.{" "}
-                <Link
-                  to={`/projects/${plan.converted_project_id}/readiness`}
-                  className="font-semibold underline"
-                >
-                  Open the readiness form
-                </Link>
-              </>
-            ) : (
+          {plan.converted_project_id && (
+            <>
               <Link to={`/projects/${plan.converted_project_id}`} className="font-semibold underline">
                 Open the project
               </Link>
-            ))}
+              {isShipping && (
+                <>
+                  {". "}
+                  Its readiness form still needs to be filled in and approved by HSSE.{" "}
+                  <Link
+                    to={`/projects/${plan.converted_project_id}/readiness`}
+                    className="font-semibold underline"
+                  >
+                    Open the readiness form
+                  </Link>
+                </>
+              )}
+            </>
+          )}
         </>
       );
       break;

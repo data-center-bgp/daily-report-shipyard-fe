@@ -100,7 +100,7 @@ export default function CreateBASTP() {
   const { isBastpReadOnly, profile } = useAuth();
   // FINANCE consumes BASTPs to create invoices — it shouldn't create/edit
   // their composition. Kept only for the message text below; the actual gate
-  // is isBastpReadOnly (MANAGER + FINANCE + OP_HEAD).
+  // is isBastpReadOnly (MANAGER + FINANCE + SHIPPING).
   const isFinanceReadOnly = profile?.role === "FINANCE";
   const canEditBastp = !isBastpReadOnly;
 

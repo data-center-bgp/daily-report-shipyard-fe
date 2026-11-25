@@ -109,6 +109,25 @@ export default function GuideTopicPage() {
               <div className="min-w-0">
                 <h3 className="text-base font-semibold text-slate-900">{step.title}</h3>
                 {step.detail && <p className="mt-1 text-sm text-slate-700">{step.detail}</p>}
+                {step.image && (
+                  <figure className="mt-3">
+                    <a
+                      href={step.image.src}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block overflow-hidden rounded-md border border-slate-300"
+                    >
+                      <img
+                        src={step.image.src}
+                        alt={step.image.alt}
+                        loading="lazy"
+                        decoding="async"
+                        className="block h-auto w-full"
+                      />
+                      <span className="sr-only">Buka gambar ukuran penuh di tab baru</span>
+                    </a>
+                  </figure>
+                )}
               </div>
             </li>
           ))}

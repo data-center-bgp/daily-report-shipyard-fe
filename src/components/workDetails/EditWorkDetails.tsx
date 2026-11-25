@@ -113,7 +113,7 @@ export default function EditWorkDetails() {
   const isMaster = profile?.role === "MASTER";
   const canEditPpicPrice = isPPIC || isMaster;
 
-  // HSSE/MANAGER/OP_HEAD can view Work Details in the list, and
+  // HSSE/MANAGER/SHIPPING can view Work Details in the list, and
   // ADMIN_SHIPPING can create one, but none of them may ever reach this edit
   // form by URL — everyone else falls into the "full access" branch below,
   // which none of these roles must get.

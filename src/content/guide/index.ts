@@ -33,7 +33,7 @@ export const GUIDE_ROLE_PATHS: GuideRolePath[] = [
     role: "SHIPPING",
     title: "Shipping",
     intro:
-      "Anda merencanakan docking lebih awal. PPIC memeriksa plan Anda, lalu mengubahnya menjadi project. Anda juga bisa mengisi form kesiapan dari project yang berasal dari plan Anda.",
+      "Anda merencanakan docking lebih awal: PPIC memeriksa plan Anda, lalu mengubahnya menjadi project. Anda juga memverifikasi pekerjaan yang selesai dan memutuskan permintaan additional work order. Di tempat lain Anda hanya bisa melihat, tidak bisa mengubah, kecuali form kesiapan dari project yang berasal dari plan Anda.",
     topics: [
       "sign-in-and-menu",
       "plan-create",
@@ -41,6 +41,10 @@ export const GUIDE_ROLE_PATHS: GuideRolePath[] = [
       "plan-submit-fix",
       "plan-follow",
       "readiness-fill",
+      "verify-work",
+      "wo-additional-approve",
+      "alerts-and-dashboard",
+      "export-data",
       "activity-log",
     ],
   },
@@ -92,19 +96,6 @@ export const GUIDE_ROLE_PATHS: GuideRolePath[] = [
       "bastp-materials",
       "export-data",
       "alerts-and-dashboard",
-    ],
-  },
-  {
-    role: "OP_HEAD",
-    title: "Operation Head",
-    intro:
-      "Anda memverifikasi pekerjaan yang selesai dan memutuskan permintaan additional work order. Di tempat lain Anda hanya bisa melihat, tidak bisa mengubah.",
-    topics: [
-      "sign-in-and-menu",
-      "verify-work",
-      "wo-additional-approve",
-      "alerts-and-dashboard",
-      "export-data",
     ],
   },
   {

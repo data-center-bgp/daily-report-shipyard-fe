@@ -10,7 +10,6 @@ export type GuideRole =
   | "MASTER"
   | "PPIC"
   | "PRODUCTION"
-  | "OP_HEAD"
   | "ADMIN"
   | "FINANCE"
   | "MANAGER"
@@ -27,10 +26,19 @@ export type GuideGroupId =
   | "data"
   | "admin";
 
+export interface GuideImage {
+  // File under public/guide/, written as "/guide/<name>.png".
+  src: string;
+  // Says what the picture shows, for people who cannot see it.
+  alt: string;
+}
+
 export interface GuideStep {
   title: string;
   // One or two sentences saying how, or what to expect. Plain text.
   detail?: string;
+  // A screenshot of this step. Optional: steps without one read fine.
+  image?: GuideImage;
 }
 
 export interface GuideProblem {
@@ -81,7 +89,6 @@ export const GUIDE_ROLE_LABEL: Record<GuideRole, string> = {
   MASTER: "Master",
   PPIC: "PPIC",
   PRODUCTION: "Production",
-  OP_HEAD: "Operation Head",
   ADMIN: "Admin",
   FINANCE: "Finance",
   MANAGER: "Manager",

@@ -60,7 +60,7 @@ export const workTopics: GuideTopic[] = [
   {
     id: "wo-additional-request",
     title: "Menambah additional work order",
-    summary: "Pekerjaan tambahan setelah original work order, dengan persetujuan Operation Head.",
+    summary: "Pekerjaan tambahan setelah original work order, dengan persetujuan Operation Head (dikerjakan oleh Shipping).",
     group: "work",
     roles: ["MASTER", "PPIC", "PRODUCTION", "ADMIN", "ADMIN_SHIPPING"],
     before: "Project sudah punya original work order.",
@@ -95,7 +95,7 @@ export const workTopics: GuideTopic[] = [
     title: "Menyetujui atau menolak permintaan additional work order",
     summary: "Putuskan apakah pekerjaan tambahan boleh ditambahkan ke sebuah project.",
     group: "work",
-    roles: ["OP_HEAD", "MASTER"],
+    roles: ["SHIPPING", "MASTER"],
     steps: [
       {
         title: "Buka Additional WO Approvals",
@@ -197,7 +197,7 @@ export const workTopics: GuideTopic[] = [
     tips: [
       "Cancel mengeluarkan work detail dari progres dan verifikasi. Work detail itu tetap bisa masuk BASTP dengan harga nol. Uncancel mengembalikannya.",
       "Delete adalah soft delete dan meminta konfirmasi.",
-      "Manager, HSSE, dan Operation Head tidak bisa mengedit.",
+      "Manager, HSSE, dan Shipping tidak bisa mengedit.",
     ],
     problems: [
       {
@@ -240,7 +240,7 @@ export const workTopics: GuideTopic[] = [
       },
       {
         title: "Simpan",
-        detail: "Pada 100%, work detail masuk ke Operation Head untuk diverifikasi.",
+        detail: "Pada 100%, work detail masuk ke Shipping untuk diverifikasi (tugas Operation Head).",
       },
     ],
     tips: [
@@ -267,7 +267,7 @@ export const workTopics: GuideTopic[] = [
     title: "Memverifikasi pekerjaan yang selesai",
     summary: "Setujui pekerjaan yang mencapai 100%, atau kembalikan untuk dikerjakan ulang.",
     group: "work",
-    roles: ["OP_HEAD", "MASTER"],
+    roles: ["SHIPPING", "MASTER"],
     before: "Work detail yang mencapai 100% muncul di Pending Review.",
     steps: [
       {

@@ -78,17 +78,18 @@ export default function ReadinessForm() {
   // Opened from the Readiness Queue: Back/Cancel return there. Otherwise
   // (from the project page, or a direct link) they go to the project.
   const from = returnTargetFrom(location.state);
-  // SHIPPING has no Projects pages, so it comes from and returns to the
-  // docking plan that became this project.
+  // SHIPPING that comes to a project made from one of its docking plans goes
+  // back to that plan.
   const isShippingRole = profile?.role === "SHIPPING";
   const [sourcePlanId, setSourcePlanId] = useState<number | null>(null);
+  const backToPlan = isShippingRole && sourcePlanId !== null;
   const goBack = () =>
-    isShippingRole
-      ? navigate(sourcePlanId ? `/plans/${sourcePlanId}` : "/plans")
+    backToPlan
+      ? navigate(`/plans/${sourcePlanId}`)
       : from
         ? navigate(from.path, { state: from.state })
         : navigate(`/projects/${projectId}`);
-  const backLabel = isShippingRole
+  const backLabel = backToPlan
     ? "Back to Plan"
     : from?.path === "/readiness-queue"
       ? "Back to Readiness Queue"
@@ -102,7 +103,7 @@ export default function ReadinessForm() {
     profile?.role === "PPIC" ||
     profile?.role === "MASTER" ||
     profile?.role === "ADMIN_SHIPPING" ||
-    isShippingRole;
+    backToPlan;
   const canReviewAsHsse = profile?.role === "HSSE" || profile?.role === "MASTER";
 
   const [project, setProject] = useState<ProjectInfo | null>(null);
@@ -177,7 +178,8 @@ export default function ReadinessForm() {
 
       if (projectError) throw projectError;
 
-      // SHIPPING only fills in the form for projects made from its own plans.
+      // SHIPPING fills in the form only for projects made from its own docking
+      // plans. For any other project it can open the form to read it.
       if (isShippingRole) {
         const { data: sourcePlan } = await supabase
           .from("docking_plans")
@@ -185,12 +187,7 @@ export default function ReadinessForm() {
           .eq("converted_project_id", projectId)
           .is("deleted_at", null)
           .maybeSingle();
-        if (!sourcePlan) {
-          throw new Error(
-            "Shipping can only open the readiness form of a project that came from a docking plan.",
-          );
-        }
-        setSourcePlanId(sourcePlan.id);
+        setSourcePlanId(sourcePlan ? sourcePlan.id : null);
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

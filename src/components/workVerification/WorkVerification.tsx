@@ -554,7 +554,7 @@ export default function WorkVerification() {
   // Auto-approve completed work details the Operation Head hasn't reviewed
   // within 2 days, so they don't block BASTP/invoicing indefinitely. There's
   // no backend job runner in this app, so this only runs while an
-  // OP_HEAD/MASTER session has this queue open — same limitation as the
+  // SHIPPING/MASTER session has this queue open — same limitation as the
   // BASTP DRAFT->VERIFIED auto-promotion elsewhere in the app.
   const autoVerifyStaleWorkDetails = useCallback(
     async (staleItems: WorkDetailsWithProgress[]) => {

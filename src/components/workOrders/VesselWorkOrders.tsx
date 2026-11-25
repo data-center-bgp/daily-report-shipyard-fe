@@ -1624,7 +1624,7 @@ export default function VesselWorkOrders() {
                             )}
                           </button>
 
-                          {/* Hide Delete button for MANAGER/HSSE/OP_HEAD/ADMIN_SHIPPING */}
+                          {/* Hide Delete button for MANAGER/HSSE/SHIPPING/ADMIN_SHIPPING */}
                           {canEditHere && (
                             <button
                               onClick={() => handleDeleteWorkOrder(wo)}

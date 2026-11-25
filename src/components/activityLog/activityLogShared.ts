@@ -4,7 +4,7 @@
 // Roles this feature tracks as "employees" for the User Aktif / User Tanpa
 // Aksi counts, the Per User grid rows, and the Dashboard recap table.
 // Deliberately excludes MASTER/MANAGER (oversight/admin accounts, not
-// day-to-day data entry) and OP_HEAD/ADMIN.
+// day-to-day data entry) and ADMIN.
 export const TRACKED_ROLES = [
   "PPIC",
   "PRODUCTION",

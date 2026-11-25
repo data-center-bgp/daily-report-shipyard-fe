@@ -62,7 +62,7 @@ export const dataTopics: GuideTopic[] = [
     title: "Ekspor data",
     summary: "Unduh data kapal sebagai file yang bisa dibuka di Excel.",
     group: "data",
-    roles: ["MASTER", "PPIC", "PRODUCTION", "OP_HEAD", "ADMIN", "MANAGER"],
+    roles: ["MASTER", "PPIC", "PRODUCTION", "SHIPPING", "ADMIN", "MANAGER"],
     steps: [
       {
         title: "Buka Export Data",

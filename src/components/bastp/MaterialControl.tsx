@@ -99,7 +99,7 @@ export default function MaterialControl({
   locked,
 }: MaterialControlProps) {
   const { isBastpReadOnly, profile } = useAuth();
-  // FINANCE and OP_HEAD consume/monitor BASTP materials but shouldn't edit
+  // FINANCE and SHIPPING consume/monitor BASTP materials but shouldn't edit
   // them (isBastpReadOnly), and a BASTP already financially committed
   // (locked) can't be touched by anyone regardless of role.
   const isLockedForEdit = isBastpReadOnly || !!locked;

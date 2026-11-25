@@ -15,7 +15,6 @@ const ROLE_OPTIONS: UserProfile["role"][] = [
   "MASTER",
   "PPIC",
   "PRODUCTION",
-  "OP_HEAD",
   "ADMIN",
   "FINANCE",
   "MANAGER",

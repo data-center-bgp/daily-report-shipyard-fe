@@ -36,7 +36,7 @@ export default function EditWorkOrder() {
     useAuth();
   // ADMIN_SHIPPING can create work orders but never edit one — folds into
   // the same view-only rendering this page already uses for MANAGER/HSSE/
-  // OP_HEAD.
+  // SHIPPING.
   const isOperationsReadOnly = isOpsReadOnlyRole || isShippingCreateOnly;
 
   const [workOrder, setWorkOrder] = useState<WorkOrderWithVessel | null>(null);

@@ -40,7 +40,7 @@ export const projectTopics: GuideTopic[] = [
     problems: [
       {
         problem: "Saya tidak melihat tombol New project.",
-        fix: "Manager, HSSE, dan Operation Head hanya bisa melihat project.",
+        fix: "Manager, HSSE, dan Shipping hanya bisa melihat project (Shipping hanya mengerjakan docking plan).",
       },
       {
         problem: "Rename menyebut nama sudah dipakai.",
@@ -99,8 +99,8 @@ export const projectTopics: GuideTopic[] = [
     ],
     problems: [
       {
-        problem: "Shipping hanya bisa membuka form kesiapan project yang berasal dari docking plan.",
-        fix: "Itu aturan untuk Shipping. Minta PPIC mengisi form untuk project lainnya.",
+        problem: "Saya Shipping dan tidak bisa mengisi form kesiapan sebuah project.",
+        fix: "Shipping hanya bisa mengisi form untuk project yang berasal dari docking plan miliknya. Untuk project lain Anda bisa membuka form dan membacanya saja. Minta PPIC mengisinya.",
       },
     ],
     openIn: { label: "Buka Projects", href: "/projects" },

@@ -67,12 +67,12 @@ export const startTopics: GuideTopic[] = [
       "MASTER",
       "PPIC",
       "PRODUCTION",
-      "OP_HEAD",
       "ADMIN",
       "FINANCE",
       "MANAGER",
       "HSSE",
       "ADMIN_SHIPPING",
+      "SHIPPING",
     ],
     steps: [
       {
