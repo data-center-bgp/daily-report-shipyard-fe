@@ -1,6 +1,6 @@
 import { useId, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, ChevronRight, Search, X } from "lucide-react";
+import { BookOpen, ChevronRight, Presentation, Search, X } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import {
   GUIDE_GROUPS,
@@ -82,6 +82,11 @@ export default function GuideHome() {
           Bantuan langkah demi langkah untuk setiap tugas. Mulailah dari jalur untuk role Anda, atau
           cari apa yang ingin Anda lakukan.
         </p>
+        <div className="pt-1">
+          <Link to="/guide/present" className={secondaryButton}>
+            <Presentation className="h-4 w-4" aria-hidden="true" /> Mode presentasi
+          </Link>
+        </div>
       </header>
 
       <section aria-label="Cari dan pilih tampilan" className="space-y-3">

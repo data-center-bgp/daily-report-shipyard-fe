@@ -22,6 +22,8 @@ const Login = lazy(() => import("./components/auth/Login"));
 const Dashboard = lazy(() => import("./components/dashboard/Dashboard"));
 const GuideHome = lazy(() => import("./components/guide/GuideHome"));
 const GuideTopicPage = lazy(() => import("./components/guide/GuideTopicPage"));
+const GuidePresentHome = lazy(() => import("./components/guide/GuidePresentHome"));
+const GuidePresenter = lazy(() => import("./components/guide/GuidePresenter"));
 const Alerts = lazy(() => import("./components/dashboard/Alerts"));
 
 const ProjectsList = lazy(() => import("./components/projects/ProjectsList"));
@@ -389,6 +391,8 @@ function AppRoutes() {
 
           {/* The user guide: open to every role */}
           <Route path="/guide" element={<GuideHome />} />
+          <Route path="/guide/present" element={<GuidePresentHome />} />
+          <Route path="/guide/present/:deckId" element={<GuidePresenter />} />
           <Route path="/guide/:topicId" element={<GuideTopicPage />} />
 
           {/* Fallback: say so, instead of quietly opening the Dashboard */}
