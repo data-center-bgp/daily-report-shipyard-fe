@@ -63,15 +63,27 @@ export const projectTopics: GuideTopic[] = [
         title: "Buka project lalu tekan Start readiness form",
         detail:
           "Shipping membukanya dari plan yang sudah dikonversi dengan tautan Open the readiness form.",
+        image: {
+          src: "/guide/plan-converted.png",
+          alt: "Halaman plan yang sudah dikonversi. Tulisan 'This plan is now a live project' berisi tautan Open the project dan Open the readiness form.",
+        },
       },
       {
         title: "Isi informasi kapal",
         detail: "Tanggal docking atau sandar, dan nama pemilik (owner).",
+        image: {
+          src: "/guide/readiness-form-empty.png",
+          alt: "Form kesiapan kapal yang masih kosong, dimulai dengan bagian Vessel Information, lalu bagian checklist dengan tombol Ya dan Tidak.",
+        },
       },
       {
         title: "Jawab setiap item checklist dengan Ya atau Tidak",
         detail:
           "Ada 11 item dalam empat bagian: kondisi gas, tangki, status kapal, dan tangki bahan bakar dan oli pelumas. Jika Anda memilih Tidak, jelaskan alasannya pada kotak yang muncul.",
+        image: {
+          src: "/guide/readiness-form-filled.png",
+          alt: "Form kesiapan yang sudah terisi: setiap item checklist dijawab Ya (hijau), dan tombol biru Submit for HSSE Review di bagian bawah.",
+        },
       },
       {
         title: "Tulis muatan terakhir kapal",
@@ -86,6 +98,10 @@ export const projectTopics: GuideTopic[] = [
         title: "Submit",
         detail:
           "Bila setiap item terjawab, form menjadi Awaiting HSSE review. Jika tidak, tetap Draft.",
+        image: {
+          src: "/guide/readiness-form-submitted.png",
+          alt: "Form kesiapan setelah di-submit, dengan tulisan Status: Awaiting HSSE Review dan pesan bahwa form menunggu tinjauan HSSE.",
+        },
       },
       {
         title: "Jika HSSE mengembalikannya, perbarui lalu submit lagi",

@@ -26,8 +26,8 @@ to the [Changelog](#13-changelog).
 - Steps in the in-app guide can show a picture. The files are in `public/guide/`, and a step names its picture in `src/content/guide/` (`image: { src, alt }`). The `alt` text must say what the picture shows.
 - They are taken with Playwright against the local dev server, signed in as the role the topic is for (the Shipping topics use a Shipping account).
 - Use only test data: plans named "[TEST] ...". Real plans, projects, vessels, prices and people must not appear. Where a real list cannot be avoided, blur the rows before the shot (for example the Work Verification table). Hide the top bar when taking a page-only picture so the account name does not show.
-- Retake a picture whenever its screen changes visibly. Current pictures: menu, plans list, new plan form, plan page, import dialog (empty and with a file), sent-back plan, Work Verification (blurred rows), Additional WO Approvals, sign-in page (taken signed out, fields empty).
-- Still missing: the readiness form, and every topic for PPIC, HSSE, Production, Finance and Admin.
+- Retake a picture whenever its screen changes visibly. Current pictures: menu, plans list, new plan form, plan page, import dialog (empty and with a file), sent-back plan, Work Verification (blurred rows), Additional WO Approvals, sign-in page (taken signed out, fields empty), converted plan, readiness form (empty, filled, submitted). The readiness pictures come from the test project "[TEST] HT SAMALAJU JAYA - Docking - Apr 2027" (project 110, plan 58); its form is now Awaiting HSSE review.
+- Still missing: HSSE's review of the form (needs an HSSE sign-in), and every topic for PPIC, HSSE, Production, Finance and Admin.
 
 Tags used below:
 
@@ -685,7 +685,7 @@ This source file is detailed on purpose. The guideline people read should be sho
 |---|---|---|
 | 2026-11-25 | Docking Plans list: added a "Checked by" column next to Status with PPIC and HSSE tags for every plan; the same tags show on the plan page. | 6.1 |
 | 2026-11-24 | The in-app guide is written in Indonesian; the menu item is now "Panduan Pengguna" under "Bantuan". This file stays in English. | 1, 4.2, 10, 12 |
-| 2026-11-25 | Guide screenshots retaken as a Shipping account (menu, plans, import, Work Verification, Additional WO Approvals) and added the sign-in page picture; added a screenshots section to the maintenance rules. | 1 |
+| 2026-11-25 | Guide screenshots retaken as a Shipping account (menu, plans, import, Work Verification, Additional WO Approvals) and added the sign-in page, converted plan and readiness form pictures; added a screenshots section to the maintenance rules. | 1 |
 | 2026-11-25 | OP_HEAD role retired: its users are SHIPPING, and SHIPPING now has everything OP_HEAD had (Dashboard, alerts, Work Verification, Additional WO Approvals, view access to operations and BASTP, Export Data) on top of Docking Plans. SHIPPING is no longer limited to the plan pages. The guide has no Operation Head path any more; its topics moved to the Shipping path. | 3, 4, 5, 6.1, 6.3, 6.5, 6.8, 6.11, 12 |
 | 2026-11-24 | In-app User Guide added (menu Help, User Guide; `/guide`): 26 step-by-step topics from this file, a start-here path for each of the 10 roles, search. Open to every role, including Shipping. | 1, 4.2, 10, 12 |
 | 2026-11-24 | First version, compiled from the code at commit `56eb1ff`. Covers every module. Docking plans: Shipping drafts plans, all roles view them, only MASTER and SHIPPING change them, PPIC alone approves, HSSE's approval stays on the readiness form, Shipping can fill the readiness form of plan projects, Excel import for plans, and PPIC and HSSE check tags on projects and converted plans. | All |
