@@ -100,6 +100,10 @@ export const workTopics: GuideTopic[] = [
       {
         title: "Buka Additional WO Approvals",
         detail: "Menu ini ada di bawah Approvals & Review. Tampilan bawaannya adalah Pending.",
+        image: {
+          src: "/guide/additional-approvals.png",
+          alt: "Halaman Additional Work Order Requests dengan filter Pending, Approved, Rejected, dan All, serta pesan No pending requests ketika tidak ada permintaan.",
+        },
       },
       {
         title: "Baca permintaannya",
@@ -278,6 +282,10 @@ export const workTopics: GuideTopic[] = [
         title: "Pilih tab",
         detail:
           "Pending Review, Pending Review with BASTP, Needs Rework, atau Verified. Filter berdasarkan kapal, project, atau work order.",
+        image: {
+          src: "/guide/verify-queue.png",
+          alt: "Halaman Work Verification: empat kotak ringkasan, filter kapal, project, dan work order, tab Pending Review, Pending Review with BASTP, Needs Rework, dan Verified, lalu tabel work detail. Isi tabel sengaja diburamkan di gambar ini.",
+        },
       },
       {
         title: "Buka sebuah item dan baca riwayatnya",

@@ -12,6 +12,10 @@ export const startTopics: GuideTopic[] = [
         title: "Buka website lalu masuk",
         detail:
           "Ketik email dan password Anda. Ikon mata menampilkan atau menyembunyikan password. Tidak ada pendaftaran sendiri dan tidak ada tautan lupa password, jadi minta bantuan administrator jika Anda belum punya akun atau lupa password.",
+        image: {
+          src: "/guide/sign-in.png",
+          alt: "Halaman masuk: kolom Email Address dan Password di sisi kanan, dengan tombol biru Sign In di bawahnya.",
+        },
       },
       {
         title: "Lihat halaman tujuan Anda",
@@ -22,6 +26,10 @@ export const startTopics: GuideTopic[] = [
         title: "Pakai menu di sebelah kiri",
         detail:
           "Menu dikelompokkan: Planning, Operations, Approvals & Review, Finance & Documents, Data Tools, Administration, Bantuan. Anda hanya melihat menu yang boleh dibuka oleh role Anda. Di HP atau jendela sempit, tekan Menu untuk membukanya.",
+        image: {
+          src: "/guide/menu-shipping.png",
+          alt: "Menu di sebelah kiri untuk role Shipping: Dashboard, Docking Plans, Projects, Work Orders, Work Details, Work Progress, Additional WO Approvals, Work Verification, BASTP, Export Data, dan Import Data.",
+        },
       },
       {
         title: "Ciutkan sidebar jika ingin ruang lebih luas",
