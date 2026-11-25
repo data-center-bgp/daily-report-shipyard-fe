@@ -43,6 +43,7 @@ import {
   secondaryButton,
 } from "./planStatus";
 import { PlanImportDialog } from "./PlanImportDialog";
+import { PlanCheckTags } from "../projects/ApprovalTags";
 import {
   PlanReopenDialog,
   PlanReviewDialog,
@@ -367,6 +368,12 @@ export default function PlanDetails() {
               {plan.vessel?.company && <span>{plan.vessel.company}</span>}
               {plan.docking_type && <span>{plan.docking_type}</span>}
             </p>
+            <PlanCheckTags
+              className="mt-2"
+              status={plan.status}
+              approvedAt={plan.approved_at}
+              readinessStatus={plan.converted_project?.readiness_form?.status}
+            />
             <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:flex sm:flex-wrap">
               <div>
                 <dt className="text-slate-600">Target docking</dt>

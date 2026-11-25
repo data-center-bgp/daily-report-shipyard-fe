@@ -14,7 +14,8 @@ const PLAN_SELECT = `
   status, revision_no, submitted_at, approved_at, reopened_reason, reopened_at,
   converted_project_id, converted_at, user_id,
   vessel:vessel_id ( id, name, type, company ),
-  author:user_id ( name )
+  author:user_id ( name ),
+  converted_project:converted_project_id ( readiness_form:readiness_form_id ( status ) )
 `;
 
 const bySort = <T extends { sort_order: number; id: number }>(a: T, b: T) =>

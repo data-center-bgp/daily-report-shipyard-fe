@@ -34,6 +34,7 @@ export interface PlanRow {
   user_id: number;
   vessel: PlanVessel | null;
   author: { name: string | null } | null;
+  converted_project: { readiness_form: { status: string } | null } | null;
 }
 
 export interface PlanWorkDetail {

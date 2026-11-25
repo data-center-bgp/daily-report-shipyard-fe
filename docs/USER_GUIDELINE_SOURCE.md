@@ -242,7 +242,7 @@ If your account is deactivated, or has no profile, you are signed straight out w
 - The plan, its work orders, work details and review history stay as a locked record. Each plan line records which live row it became, and the plan records the project, date and person.
 - Editing or deleting the live project never changes the plan, and the plan can never change the live rows.
 - Shipping gets a link to the project's readiness form from the converted plan. Everyone else gets a link to the project.
-- The Plans list shows two tags on converted plans: PPIC plan approved, and the HSSE readiness status.
+- The Plans list has a **Status** column and a **Checked by** column. Checked by shows, for every plan, a PPIC tag (Not submitted yet, Awaiting review, Sent back, Approved) and an HSSE tag. The HSSE tag reads "After conversion" until the plan is converted, then shows the project's readiness form status. The same two tags show under the title on the plan's page.
 
 **Where plans do not appear:** dashboard, alerts, exports and the work order pages read only the live tables.
 
@@ -676,6 +676,7 @@ This source file is detailed on purpose. The guideline people read should be sho
 
 | Date | Change | Sections |
 |---|---|---|
+| 2026-11-25 | Docking Plans list: added a "Checked by" column next to Status with PPIC and HSSE tags for every plan; the same tags show on the plan page. | 6.1 |
 | 2026-11-24 | The in-app guide is written in Indonesian; the menu item is now "Panduan Pengguna" under "Bantuan". This file stays in English. | 1, 4.2, 10, 12 |
 | 2026-11-24 | In-app User Guide added (menu Help, User Guide; `/guide`): 26 step-by-step topics from this file, a start-here path for each of the 10 roles, search. Open to every role, including Shipping. | 1, 4.2, 10, 12 |
 | 2026-11-24 | First version, compiled from the code at commit `56eb1ff`. Covers every module. Docking plans: Shipping drafts plans, all roles view them, only MASTER and SHIPPING change them, PPIC alone approves, HSSE's approval stays on the readiness form, Shipping can fill the readiness form of plan projects, Excel import for plans, and PPIC and HSSE check tags on projects and converted plans. | All |

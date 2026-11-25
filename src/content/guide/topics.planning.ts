@@ -273,6 +273,11 @@ export const planningTopics: GuideTopic[] = [
           "Anda melihat work order, work detail, catatan yang ditulis PPIC, serta setiap pengajuan dan keputusan.",
       },
       {
+        title: "Baca kolom Status dan Checked by",
+        detail:
+          "Status menunjukkan tahap plan. Checked by menunjukkan dua pemeriksaan: PPIC (Not submitted yet, Awaiting review, Sent back, atau Approved) dan HSSE. HSSE baru punya status setelah plan dikonversi, karena HSSE menyetujui form kesiapan project; sebelum itu tertulis After conversion.",
+      },
+      {
         title: "Buka Projects dan baca kolom Checked by",
         detail:
           "PPIC: Plan approved berarti project berasal dari plan yang sudah disetujui. Not required berarti project dibuat tanpa plan. HSSE menunjukkan status form kesiapan.",

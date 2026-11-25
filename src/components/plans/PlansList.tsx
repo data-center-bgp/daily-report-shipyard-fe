@@ -4,7 +4,7 @@ import { CheckCircle2, ClipboardList, Plus, RefreshCw, Search, X } from "lucide-
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import { PageSkeleton } from "../common/Skeleton";
-import { ApprovalTags } from "../projects/ApprovalTags";
+import { PlanCheckTags } from "../projects/ApprovalTags";
 import Pagination from "../common/Pagination";
 import { describeLead, formatPlanDate } from "../../utils/dockingPlans";
 import type { PlanStatus, PlanVessel } from "../../types/dockingPlan.types";
@@ -31,19 +31,6 @@ interface PlanListRow {
   docking_plan_work_orders:
     | { id: number; docking_plan_work_details: { id: number }[] }[]
     | null;
-  docking_plan_reviews:
-    | { revision_no: number; reviewer_role: string; decision: string }[]
-    | null;
-}
-
-// "PPIC approved, HSSE pending" for a plan that is waiting on the shipyard.
-function signOffSummary(plan: PlanListRow): string | null {
-  if (plan.status !== "SUBMITTED") return null;
-  const current = (plan.docking_plan_reviews || []).filter(
-    (r) => r.revision_no === plan.revision_no,
-  );
-  const review = current.find((r) => r.reviewer_role === "PPIC");
-  return `PPIC ${review ? review.decision.toLowerCase() : "pending"}`;
 }
 
 export default function PlansList() {
@@ -74,8 +61,7 @@ export default function PlansList() {
           converted_project:converted_project_id ( readiness_form:readiness_form_id ( status ) ),
           vessel:vessel_id ( id, name, type, company ),
           author:user_id ( name ),
-          docking_plan_work_orders ( id, docking_plan_work_details ( id ) ),
-          docking_plan_reviews ( revision_no, reviewer_role, decision )
+          docking_plan_work_orders ( id, docking_plan_work_details ( id ) )
         `,
         )
         .is("deleted_at", null)
@@ -347,7 +333,7 @@ export default function PlansList() {
               <caption className="sr-only">Docking plans, earliest docking first</caption>
               <thead className="bg-slate-50">
                 <tr>
-                  {["Plan", "Vessel", "Target docking", "Scope", "Status"].map((heading) => (
+                  {["Plan", "Vessel", "Target docking", "Scope", "Status", "Checked by"].map((heading) => (
                     <th
                       key={heading}
                       scope="col"
@@ -366,7 +352,6 @@ export default function PlansList() {
                     (sum, wo) => sum + wo.docking_plan_work_details.length,
                     0,
                   );
-                  const signOff = signOffSummary(plan);
                   return (
                     <tr
                       key={plan.id}
@@ -414,16 +399,13 @@ export default function PlansList() {
                           <badge.Icon className="h-3.5 w-3.5" aria-hidden="true" />
                           {badge.label}
                         </span>
-                        {signOff && (
-                          <div className="mt-1 text-sm text-slate-600">{signOff}</div>
-                        )}
-                        {plan.status === "CONVERTED" && (
-                          <ApprovalTags
-                            className="mt-2"
-                            plan={{ id: plan.id, approved_at: plan.approved_at }}
-                            readinessStatus={plan.converted_project?.readiness_form?.status}
-                          />
-                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <PlanCheckTags
+                          status={plan.status}
+                          approvedAt={plan.approved_at}
+                          readinessStatus={plan.converted_project?.readiness_form?.status}
+                        />
                       </td>
                     </tr>
                   );
