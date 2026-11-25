@@ -26,8 +26,8 @@ to the [Changelog](#13-changelog).
 - Steps in the in-app guide can show a picture. The files are in `public/guide/`, and a step names its picture in `src/content/guide/` (`image: { src, alt }`). The `alt` text must say what the picture shows.
 - They are taken with Playwright against the local dev server, signed in as the role the topic is for (the Shipping topics use a Shipping account).
 - Use only test data: plans named "[TEST] ...". Real plans, projects, vessels, prices and people must not appear. Where a real list cannot be avoided, blur the rows before the shot (for example the Work Verification table). Hide the top bar when taking a page-only picture so the account name does not show.
-- Retake a picture whenever its screen changes visibly. Current pictures: menu, plans list, new plan form, plan page, import dialog (empty and with a file), sent-back plan, Work Verification (blurred rows), Additional WO Approvals, sign-in page (taken signed out, fields empty), converted plan, readiness form (empty, filled, submitted). The readiness pictures come from the test project "[TEST] HT SAMALAJU JAYA - Docking - Apr 2027" (project 110, plan 58); its form is now Awaiting HSSE review.
-- Still missing: HSSE's review of the form (needs an HSSE sign-in), and every topic for PPIC, HSSE, Production, Finance and Admin.
+- Retake a picture whenever its screen changes visibly. Current pictures: menu, plans list, new plan form, plan page, import dialog (empty and with a file), sent-back plan, Work Verification (blurred rows), Additional WO Approvals, sign-in page (taken signed out, fields empty), converted plan, readiness form (empty, filled, submitted). The readiness pictures come from the test project "[TEST] HT SAMALAJU JAYA - Docking - Apr 2027" (project 110, plan 58); its form was then approved by HSSE (signed off as "Test HSSE") for the review pictures: Readiness Queue, review, sign-off, approved.
+- Still missing: the other topics of PPIC, HSSE, Production, Finance, Admin and Manager.
 
 Tags used below:
 

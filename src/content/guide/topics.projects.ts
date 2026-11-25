@@ -134,6 +134,10 @@ export const projectTopics: GuideTopic[] = [
         title: "Buka Readiness Queue",
         detail:
           "Menu ini ada di bawah Approvals & Review. Filter bawaannya, Awaiting your review, menampilkan yang menunggu.",
+        image: {
+          src: "/guide/readiness-queue.png",
+          alt: "Halaman Readiness Review Queue dengan filter Awaiting your review dan satu kartu form berisi tombol biru Review.",
+        },
       },
       {
         title: "Buka sebuah form lalu tekan Review",
@@ -144,6 +148,10 @@ export const projectTopics: GuideTopic[] = [
         title: "Approve atau Reject setiap item",
         detail:
           "Setiap item butuh keputusan. Item yang ditolak butuh catatan yang menjelaskan apa yang perlu diklarifikasi.",
+        image: {
+          src: "/guide/readiness-review.png",
+          alt: "Form kesiapan yang sedang ditinjau HSSE. Di bawah setiap jawaban ada kotak HSSE Review dengan tombol Approve dan Reject.",
+        },
       },
       {
         title: "Jika ada yang ditolak, tekan Send Back for Clarification",
@@ -154,6 +162,19 @@ export const projectTopics: GuideTopic[] = [
         title: "Jika semuanya disetujui, tanda tangani",
         detail:
           "Isi nama dan tanggal Anda (tidak boleh di masa depan) lalu tekan Approve & Sign Off. Form menjadi Approved.",
+        image: {
+          src: "/guide/readiness-review-signoff.png",
+          alt: "Form kesiapan dengan semua item disetujui. Di bagian HSSE Sign-off sudah ada nama dan tanggal, dan tombol Approve & Sign Off berwarna biru di bagian bawah.",
+        },
+      },
+      {
+        title: "Periksa hasilnya",
+        detail:
+          "Form menampilkan Status: Approved dan tulisan bahwa project boleh melanjutkan ke work order.",
+        image: {
+          src: "/guide/readiness-approved.png",
+          alt: "Form kesiapan dengan tulisan Status: Approved, pesan bahwa form sudah disetujui penuh oleh HSSE, dan setiap item bertanda Approved.",
+        },
       },
     ],
     tips: [
