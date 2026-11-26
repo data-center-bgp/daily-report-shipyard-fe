@@ -185,7 +185,7 @@ export async function buildBastpWorkbook(
       // Day services show their date range, ton services their supply date;
       // Kali / Ls lines have no dates at all.
       const date =
-        uom === "ton"
+        uom === "ton" || uom === "date"
           ? formatDate(service.start_date)
           : uom === "day" && service.start_date && service.close_date
             ? `${formatDate(service.start_date)} — ${formatDate(service.close_date)}`
@@ -194,14 +194,16 @@ export async function buildBastpWorkbook(
         index + 1,
         `${service.service_type?.service_name || "-"}${date ? `
 ${date}` : ""}`,
-        uom === "day"
-          ? Number(service.total_days) || 0
-          : Number(service.quantity) || 0,
-        UOM_LABEL[uom],
+        uom === "date"
+          ? ""
+          : uom === "day"
+            ? Number(service.total_days) || 0
+            : Number(service.quantity) || 0,
+        uom === "date" ? "" : UOM_LABEL[uom],
         service.remarks || "",
       ]);
       bordered(row);
-      if (uom !== "day") row.getCell(3).numFmt = "#,##0.##";
+      if (uom !== "day" && uom !== "date") row.getCell(3).numFmt = "#,##0.##";
     });
     blank();
   }

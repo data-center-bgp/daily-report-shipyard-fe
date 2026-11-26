@@ -8,7 +8,9 @@ interface ServiceLike {
 
 export const serviceUom = (s: ServiceLike): GeneralServiceUom => {
   const uom = s.service_type?.uom;
-  return uom === "ton" || uom === "kali" || uom === "ls" ? uom : "day";
+  return uom === "ton" || uom === "kali" || uom === "ls" || uom === "date"
+    ? uom
+    : "day";
 };
 
 export const isTonService = (s: ServiceLike): boolean =>
@@ -22,6 +24,14 @@ export const isFixedQuantityUom = (uom: string | null | undefined): boolean =>
 export const isFixedQuantityService = (s: ServiceLike): boolean =>
   isFixedQuantityUom(serviceUom(s));
 
+// Date-only (Keel Laying, Launching): one date, stored as both start_date and
+// close_date. No days, no quantity, and no price, so never on an invoice.
+export const isDateOnlyUom = (uom: string | null | undefined): boolean =>
+  uom === "date";
+
+export const isDateOnlyService = (s: ServiceLike): boolean =>
+  isDateOnlyUom(serviceUom(s));
+
 // What a service is priced by: its days for day-based services, its quantity
 // (tons, times, lump sums) for everything else.
 export const billableQuantity = (s: ServiceLike): number =>
@@ -32,6 +42,7 @@ export const UOM_LABEL: Record<GeneralServiceUom, string> = {
   ton: "Ton",
   kali: "Kali",
   ls: "Ls",
+  date: "Tanggal",
 };
 
 export const FRESH_WATER_SERVICE_CODE = "FRESH_WATER_SUPPLY";
@@ -52,6 +63,7 @@ export const formatTons =(value: number | string | null | undefined): string =>
 // e.g. "12,5 ton", "1 kali", "1 Ls" or "3 days"
 export const formatServiceQuantity = (s: ServiceLike): string => {
   const uom = serviceUom(s);
+  if (uom === "date") return "-";
   if (uom === "ton") return `${formatTons(s.quantity)} ton`;
   if (uom === "kali") return `${formatTons(s.quantity)} kali`;
   if (uom === "ls") return `${formatTons(s.quantity)} Ls`;
@@ -101,6 +113,8 @@ export function groupServicesForInvoice<T extends InvoiceServiceRow>(
   const tonLines = new Map<number, InvoiceServiceLine<T>>();
 
   for (const s of sortServices(services)) {
+    // Date-only services carry nothing to price.
+    if (isDateOnlyService(s)) continue;
     if (!isTonService(s)) {
       lines.push({
         key: `row-${s.id}`,

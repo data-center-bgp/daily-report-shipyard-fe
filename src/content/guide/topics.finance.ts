@@ -32,7 +32,7 @@ export const financeTopics: GuideTopic[] = [
       {
         title: "Tambahkan general services jika ada",
         detail:
-          "Layanan harian butuh tanggal mulai dan selesai. Layanan ton seperti Fresh Water Supply butuh satu atau lebih pengiriman dengan tanggal dan kuantitas. Layanan Kali dan Ls butuh kuantitas. Harga diisi nanti di invoice.",
+          "Layanan harian butuh tanggal mulai dan selesai. Layanan ton seperti Fresh Water Supply butuh satu atau lebih pengiriman dengan tanggal dan kuantitas. Layanan Kali dan Ls butuh kuantitas. Keel Laying dan Launching hanya butuh satu tanggal: tidak ada hari, kuantitas, atau harga, dan keduanya tidak muncul di invoice. Harga layanan lain diisi nanti di invoice.",
       },
       {
         title: "Pindahkan work detail yang diinginkan dari Available ke Selected",

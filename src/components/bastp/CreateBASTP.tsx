@@ -25,6 +25,7 @@ import { ActivityLogService } from "../../services/activityLogService";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import {
   UOM_LABEL,
+  isDateOnlyUom,
   isFixedQuantityUom,
   isFreshWaterOnly,
   sortServices,
@@ -348,7 +349,9 @@ export default function CreateBASTP() {
             : gs.start_date || new Date().toISOString().split("T")[0],
           close_date: isFixedQuantityUom(gs.service_type?.uom)
             ? ""
-            : gs.close_date || new Date().toISOString().split("T")[0],
+            : isDateOnlyUom(gs.service_type?.uom)
+              ? gs.start_date || new Date().toISOString().split("T")[0]
+              : gs.close_date || new Date().toISOString().split("T")[0],
           total_days: gs.total_days,
           quantity: gs.quantity ?? null,
           remarks: gs.remarks || "",
@@ -600,13 +603,15 @@ export default function CreateBASTP() {
             },
           ];
         }
+        // Date-only lines (Keel Laying, Launching): one date, no days.
+        const isDateOnly = isDateOnlyServiceType(serviceTypeId);
         return [
           ...prev,
           {
             service_type_id: serviceTypeId,
             start_date: today,
             close_date: today,
-            total_days: isTon ? 0 : 1,
+            total_days: isTon || isDateOnly ? 0 : 1,
             quantity: isTon ? 0 : null,
             remarks: "",
           },
@@ -618,6 +623,9 @@ export default function CreateBASTP() {
   const isTonServiceType = (serviceTypeId: number) =>
     serviceTypes.find((t) => t.id === serviceTypeId)?.uom === "ton";
 
+  const isDateOnlyServiceType = (serviceTypeId: number) =>
+    isDateOnlyUom(serviceTypes.find((t) => t.id === serviceTypeId)?.uom);
+
   const isFixedQuantityServiceType = (serviceTypeId: number) =>
     isFixedQuantityUom(serviceTypes.find((t) => t.id === serviceTypeId)?.uom);
 
@@ -627,6 +635,17 @@ export default function CreateBASTP() {
     (s) =>
       serviceTypes.find((t) => t.id === s.service_type_id)?.uom === "day",
   );
+
+  // A date-only service has one date, kept as both start and close date.
+  const handleSingleDateChange = (serviceTypeId: number, value: string) => {
+    setSelectedServices((prev) =>
+      prev.map((service) =>
+        service.service_type_id === serviceTypeId
+          ? { ...service, start_date: value, close_date: value, total_days: 0 }
+          : service,
+      ),
+    );
+  };
 
   const handleFixedQuantityChange = (serviceTypeId: number, value: string) => {
     const q = value === "" ? 0 : Number(value);
@@ -981,6 +1000,17 @@ export default function CreateBASTP() {
       setError(
         `Every ${name} delivery needs a supply date and a quantity above 0 ton`,
       );
+      return;
+    }
+
+    const dateMissing = selectedServices.find(
+      (s) => isDateOnlyServiceType(s.service_type_id) && !s.start_date,
+    );
+    if (dateMissing) {
+      const name =
+        serviceTypes.find((t) => t.id === dateMissing.service_type_id)
+          ?.service_name || "This service";
+      setError(`${name} needs a date`);
       return;
     }
 
@@ -1707,6 +1737,7 @@ export default function CreateBASTP() {
               selectedServices={selectedServices}
               onToggle={handleToggleService}
               onStartDateChange={handleServiceStartDateChange}
+              onSingleDateChange={handleSingleDateChange}
               onCloseDateChange={handleServiceCloseDateChange}
               onRemarksChange={handleServiceRemarksChange}
               onFixedQuantityChange={handleFixedQuantityChange}

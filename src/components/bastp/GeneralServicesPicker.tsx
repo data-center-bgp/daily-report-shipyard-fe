@@ -6,6 +6,7 @@ import type {
 import {
   UOM_LABEL,
   formatTons,
+  isDateOnlyUom,
   isFixedQuantityUom,
 } from "../../utils/generalServices";
 
@@ -63,6 +64,8 @@ export interface GeneralServicesPickerProps {
   selectedServices: GeneralServiceInput[];
   onToggle: (serviceTypeId: number) => void;
   onStartDateChange: (serviceTypeId: number, value: string) => void;
+  // Date-only services (Keel Laying, Launching): the one date.
+  onSingleDateChange: (serviceTypeId: number, value: string) => void;
   onCloseDateChange: (serviceTypeId: number, value: string) => void;
   onRemarksChange: (serviceTypeId: number, value: string) => void;
   onFixedQuantityChange: (serviceTypeId: number, value: string) => void;
@@ -79,6 +82,7 @@ export default function GeneralServicesPicker({
   selectedServices,
   onToggle,
   onStartDateChange,
+  onSingleDateChange,
   onCloseDateChange,
   onRemarksChange,
   onFixedQuantityChange,
@@ -206,6 +210,42 @@ export default function GeneralServicesPicker({
       );
     }
 
+    if (isDateOnlyUom(serviceType.uom)) {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Date <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date"
+              value={serviceData?.start_date || ""}
+              onChange={(e) =>
+                onSingleDateChange(serviceType.id, e.target.value)
+              }
+              className={inputClass}
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              One date only, no days or price
+            </p>
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Remarks (Optional)
+            </label>
+            <input
+              type="text"
+              value={serviceData?.remarks || ""}
+              onChange={(e) => onRemarksChange(serviceType.id, e.target.value)}
+              className={inputClass}
+              placeholder="Add notes..."
+            />
+          </div>
+        </div>
+      );
+    }
+
     if (isFixedQuantityUom(serviceType.uom)) {
       return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -324,7 +364,9 @@ export default function GeneralServicesPicker({
     const isSelected = selectedServices.some(
       (s) => s.service_type_id === serviceType.id,
     );
-    const fixed = isFixedQuantityUom(serviceType.uom);
+    // Grey when the line does not depend on days: a fixed quantity, or one date.
+    const fixed =
+      isFixedQuantityUom(serviceType.uom) || isDateOnlyUom(serviceType.uom);
     return (
       <div
         key={serviceType.id}

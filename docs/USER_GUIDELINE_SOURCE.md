@@ -424,6 +424,7 @@ A sent-back item waits for a new progress report, then returns to Pending Review
 - Day services need a start and close date. Total days = close minus start plus 1.
 - Ton services (Fresh Water Supply) need one or more deliveries, each with a date and a quantity above 0.
 - Kali and Ls services need a quantity above 0 only.
+- Date-only services (Keel Laying, Launching) need one date and nothing else: no days, quantity or price. The date is printed under the service name on the BASTP, they never appear on the invoice, and they do not stretch the docking period shown in the BASTP list. They show under "Other services" and last in the print and Excel export. They are not offered in a work order's Docking Planning, which stays day-based.
 - Prices start at 0 and are set on the invoice.
 - A BASTP with only fresh-water services and no work details is allowed.
 
@@ -620,7 +621,7 @@ Dates typed or imported are always `YYYY-MM-DD`.
 | Import and export | `src/utils/importHandler.ts`, `src/utils/exportHandler.ts` |
 | Database changes | `supabase/migrations/` (schema `daily_report_shipyard`) |
 | In-app user guide (written in Indonesian) | `src/content/guide/` (topics and role paths), `src/components/guide/` (pages), menu item "Panduan Pengguna" in `Layout.tsx`, routes `/guide` and `/guide/:topicId` in `App.tsx` |
-| Presentation mode of the guide (slides, Indonesian) | `src/content/guide/deck.ts` (decks and slides, cut from the topics; only the overview deck is hand-written), `src/components/guide/GuidePresentHome.tsx` (choose a deck), `GuidePresenter.tsx` (the slide viewer); routes `/guide/present` and `/guide/present/:deckId?slide=N` in `App.tsx` |
+| Presentation mode of the guide (slides, Indonesian) | `src/content/guide/deck.ts` (decks and slides, cut from the topics; only the overview deck is hand-written), `src/components/guide/GuidePresentHome.tsx` (choose a deck), `GuidePresenter.tsx` (the slide viewer, keys, lists), `GuideSlides.tsx` (how each kind of slide looks), `ShipScene.tsx` (the ship and water from the sign-in page); routes `/guide/present` and `/guide/present/:deckId?slide=N` in `App.tsx` |
 | Deploying | Push, then run the deploy command on the VPS (see the team's deployment notes) |
 
 ---
@@ -678,7 +679,7 @@ This source file is detailed on purpose. The guideline people read should be sho
 
 **Format:** a page inside the app, built on 24 November 2026 (menu item Panduan Pengguna, under Bantuan, written in Indonesian). It has a path per role, a search box, and a step-by-step topic for each task. A PDF handbook is still possible later. Whatever is chosen, this file stays the source.
 
-**Presentation mode** (built on 25 November 2026): the guide page has a "Mode presentasi" button. It offers decks of slides that open full screen, so anyone can learn on their own or present to a group. Decks: an overview (what the system is for, the journey of one docking, who does what, the sign-in topic), one deck per role (the same topics as that role's path), and an all-topics deck for Master. Slides are cut from the guide topics (a section slide, then the steps, then tips and problems), so changing a topic changes its slides; nothing is written twice except the overview. Keys: arrows, Space, Home and End to move, G for the slide list, F for full screen, Esc to leave. The address keeps the slide number (`?slide=12`), so a slide can be shared or reloaded. Screenshots can be enlarged.
+**Presentation mode** (built on 25 November 2026): the guide page has a "Mode presentasi" button. It offers decks of slides that open full screen, so anyone can learn on their own or present to a group. Decks: an overview (what the system is for, the journey of one docking, who does what, the sign-in topic), one deck per role (the same topics as that role's path), and an all-topics deck for Master. Slides are cut from the guide topics (a section slide, then the steps, then tips and problems), so changing a topic changes its slides; nothing is written twice except the overview. Keys: arrows, Space, Home and End to move, G for the slide list, F for full screen, Esc to leave. The address keeps the slide number (`?slide=12`), so a slide can be shared or reloaded. Screenshots can be enlarged. Look: navy from the brand, amber (the crane on the sign-in page) only for who does the task and for tips, the sign-in page's ship and water on the title, closing and section slides, a big topic number on section slides, and a slide that comes in from the side you move towards (no motion when the visitor asks for less).
 
 ---
 
@@ -686,6 +687,7 @@ This source file is detailed on purpose. The guideline people read should be sho
 
 | Date | Change | Sections |
 |---|---|---|
+| 2026-11-26 | BASTP general services: two date-only services added, Keel Laying and Launching (one date each, no days, quantity or price, never on the invoice). New unit type `date` in `general_service_types`; migration `20261126100000_add_keel_laying_launching_services.sql`. | 6.9 |
 | 2026-11-25 | Presentation mode added to the guide (Panduan Pengguna, button "Mode presentasi"; `/guide/present`): full-screen slides in Indonesian, one deck per role, an overview deck and an all-topics deck, built from the same topics as the step pages. | 10, 12 |
 | 2026-11-25 | Docking Plans list: added a "Checked by" column next to Status with PPIC and HSSE tags for every plan; the same tags show on the plan page. | 6.1 |
 | 2026-11-24 | The in-app guide is written in Indonesian; the menu item is now "Panduan Pengguna" under "Bantuan". This file stays in English. | 1, 4.2, 10, 12 |

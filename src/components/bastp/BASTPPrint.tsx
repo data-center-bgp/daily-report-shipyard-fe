@@ -7,6 +7,7 @@ import {
 import {
   UOM_LABEL,
   formatTons,
+  isDateOnlyService,
   isTonService,
   serviceUom,
   sortServices,
@@ -391,7 +392,7 @@ const BASTPPrint = forwardRef<HTMLDivElement, BASTPPrintProps>(
                             </td>
                             <td className="border border-gray-400 px-2 py-1">
                               {service.service_type?.service_name || "-"}
-                              {isTonService(service) ? (
+                              {isTonService(service) || isDateOnlyService(service) ? (
                                 service.start_date && (
                                   <div className="text-gray-500">
                                     {formatDate(service.start_date)}
@@ -408,9 +409,11 @@ const BASTPPrint = forwardRef<HTMLDivElement, BASTPPrintProps>(
                               )}
                             </td>
                             <td className="border border-gray-400 px-2 py-1 text-center">
-                              {serviceUom(service) === "day"
-                                ? `${service.total_days ?? 0} Hari`
-                                : `${formatTons(service.quantity)} ${UOM_LABEL[serviceUom(service)]}`}
+                              {isDateOnlyService(service)
+                                ? "-"
+                                : serviceUom(service) === "day"
+                                  ? `${service.total_days ?? 0} Hari`
+                                  : `${formatTons(service.quantity)} ${UOM_LABEL[serviceUom(service)]}`}
                             </td>
                             <td className="border border-gray-400 px-2 py-1">
                               {service.remarks || ""}

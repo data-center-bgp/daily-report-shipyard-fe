@@ -9,6 +9,7 @@ import { useAuth } from "../../hooks/useAuth";
 import BASTPPrint from "./BASTPPrint";
 import {
   formatServiceQuantity,
+  isDateOnlyService,
   isFixedQuantityService,
   isTonService,
   sortServices,
@@ -1242,9 +1243,10 @@ export default function BASTPDetails() {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
                               {isTonService(service) ||
+                              isDateOnlyService(service) ||
                               isFixedQuantityService(service) ? (
-                                // Ton: single supply date, already shown as
-                                // Start Date. Kali / Ls: no dates at all.
+                                // Ton and date-only: a single date, already
+                                // shown as Start Date. Kali / Ls: no dates.
                                 <span className="text-gray-400">—</span>
                               ) : service.close_date ? (
                                 formatDate(service.close_date)
@@ -1256,9 +1258,13 @@ export default function BASTPDetails() {
                             </div>
                           </td>
                           <td className="px-6 py-4 text-center">
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                              {formatServiceQuantity(service)}
-                            </span>
+                            {isDateOnlyService(service) ? (
+                              <span className="text-gray-400">—</span>
+                            ) : (
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                                {formatServiceQuantity(service)}
+                              </span>
+                            )}
                           </td>
                           <td className="px-6 py-4">
                             <div className="text-sm text-gray-600">
