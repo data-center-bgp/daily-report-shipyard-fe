@@ -33,7 +33,11 @@ export type Slide = SlideBase &
         eyebrow: string;
         title: string;
         summary: string;
-        facts: { label: string; value: string }[];
+        // The roles that do this task, shown as chips.
+        who: string[];
+        before?: string;
+        // Which topic of the deck this is, shown as a large number.
+        position?: { no: number; total: number };
       }
     | { kind: "agenda"; title: string; items: { label: string; topicId?: string }[] }
     | {
@@ -42,7 +46,13 @@ export type Slide = SlideBase &
         lead?: string;
         stages: { name: string; who: string; what: string }[];
       }
-    | { kind: "cards"; title: string; lead?: string; cards: { title: string; body: string }[] }
+    | {
+        kind: "cards";
+        title: string;
+        lead?: string;
+        // A card with an icon shows it; one without shows the first letter of its title.
+        cards: { title: string; body: string; icon?: "ship" | "users" | "history" }[];
+      }
     | {
         kind: "steps";
         eyebrow: string;
@@ -107,16 +117,23 @@ function chunk<T>(items: T[], maxItems: number, maxChars: number, size: (item: T
   return out;
 }
 
-function topicSlides(topic: GuideTopic): Slide[] {
+function topicSlides(topic: GuideTopic, position?: { no: number; total: number }): Slide[] {
   const topicId = topic.id;
   const group = GUIDE_GROUPS.find((g) => g.id === topic.group)?.title ?? "";
   const who =
-    topic.roles === "all" ? "Semua role" : topic.roles.map((r) => GUIDE_ROLE_LABEL[r]).join(", ");
-  const facts = [{ label: "Dikerjakan oleh", value: who }];
-  if (topic.before) facts.push({ label: "Sebelum mulai", value: topic.before });
+    topic.roles === "all" ? ["Semua role"] : topic.roles.map((r) => GUIDE_ROLE_LABEL[r]);
 
   const slides: Slide[] = [
-    { kind: "section", topicId, eyebrow: group, title: topic.title, summary: topic.summary, facts },
+    {
+      kind: "section",
+      topicId,
+      eyebrow: group,
+      title: topic.title,
+      summary: topic.summary,
+      who,
+      before: topic.before,
+      position,
+    },
   ];
 
   // A step with a screenshot gets a slide of its own. Steps without one are
@@ -193,14 +210,17 @@ function overviewDeck(): GuideDeck {
         {
           title: "Satu tempat untuk satu docking",
           body: "Rencana, project, work order, progres, BASTP, dan invoice sebuah kapal ada di sistem yang sama. Semua orang melihat data yang sama.",
+          icon: "ship",
         },
         {
           title: "Setiap tugas ada pemiliknya",
           body: "Anda hanya melihat menu dan tombol yang boleh dipakai oleh role Anda. Role lain tetap bisa melihat hasilnya.",
+          icon: "users",
         },
         {
           title: "Semua tercatat",
           body: "Activity log menyimpan siapa melakukan apa, dan kapan.",
+          icon: "history",
         },
       ],
     },
@@ -315,7 +335,7 @@ function topicDeck(opts: {
       title: "Yang akan kita bahas",
       items: topics.map((t) => ({ label: t.title, topicId: t.id })),
     },
-    ...topics.flatMap(topicSlides),
+    ...topics.flatMap((t, i) => topicSlides(t, { no: i + 1, total: topics.length })),
     closing("Semua topik ini bisa dibaca lagi kapan saja di Panduan Pengguna."),
   ];
   return {

@@ -1,30 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Lightbulb,
-  List,
-  Maximize,
-  Minimize,
-  X,
-  ZoomIn,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, List, Maximize, Minimize, X } from "lucide-react";
 import { deckById, slideLabel, type GuideDeck, type Slide } from "../../content/guide/deck";
 import { topicById, type GuideImage } from "../../content/guide";
+import SlideView from "./GuideSlides";
 
 // One slide is sized in `em`, and the em follows the smaller of the stage's width
 // and height, so the whole slide grows and shrinks together: readable from the back
 // of a room on a projector, and still usable on a phone.
-const stageFont = "clamp(13px, min(1.4cqw, 2.35cqh), 30px)";
+const stageFont = "clamp(13px, min(1.55cqw, 2.9cqh), 30px)";
 
 const barButton =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium text-white transition-colors hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
 const navButton =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-white px-4 text-sm font-semibold text-blue-950 transition-colors hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white";
-
-const numberDot =
-  "flex h-[1.9em] w-[1.9em] flex-shrink-0 items-center justify-center rounded-full bg-blue-950 text-[0.9em] font-semibold text-white";
 
 // Closes a native modal dialog when the press lands on its backdrop. Browsers
 // that know `closedby="any"` do this themselves; this covers the rest.
@@ -39,239 +28,6 @@ function closeOnBackdrop(e: React.MouseEvent<HTMLDialogElement>) {
 
 const dialogBase =
   "m-0 overscroll-contain p-0 text-slate-900 backdrop:overflow-hidden backdrop:overscroll-contain backdrop:bg-slate-950/70";
-
-// --- the slides ------------------------------------------------------------
-
-function ShotImage({ image, onZoom }: { image: GuideImage; onZoom: (image: GuideImage) => void }) {
-  // A tall page (the readiness form) cannot be read when squeezed to the height of
-  // the slide, so it fills the width and scrolls. Everything else is shown whole.
-  const [tall, setTall] = useState(false);
-  return (
-    <div className="relative min-h-[40%] flex-1 overflow-hidden rounded-lg border border-slate-300 bg-slate-100 @3xl:min-h-0">
-      <div
-        className="absolute inset-0 overflow-auto"
-        {...(tall ? { tabIndex: 0, role: "region", "aria-label": "Gambar langkah, bisa digulir" } : {})}
-      >
-        <img
-          src={image.src}
-          alt={image.alt}
-          decoding="async"
-          onLoad={(e) => {
-            const img = e.currentTarget;
-            setTall(img.naturalWidth >= 600 && img.naturalHeight / img.naturalWidth > 1.4);
-          }}
-          className={tall ? "block h-auto w-full" : "mx-auto block h-full w-full object-contain"}
-        />
-      </div>
-      <button
-        type="button"
-        onClick={() => onZoom(image)}
-        className="absolute bottom-[0.8em] right-[1.4em] inline-flex min-h-11 items-center gap-[0.4em] rounded-md bg-slate-900 px-[0.9em] text-[0.8em] font-medium text-white shadow-md transition-colors hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
-      >
-        <ZoomIn className="h-[1.2em] w-[1.2em]" aria-hidden="true" />
-        {tall ? "Gulir, atau perbesar" : "Perbesar gambar"}
-      </button>
-    </div>
-  );
-}
-
-function SlideView({
-  slide,
-  onZoom,
-  onJumpTopic,
-}: {
-  slide: Slide;
-  onZoom: (image: GuideImage) => void;
-  onJumpTopic: (topicId: string) => void;
-}) {
-  switch (slide.kind) {
-    case "title":
-      return (
-        <div className="flex h-full flex-col justify-center overflow-y-auto bg-blue-950 p-[3em] text-white">
-          <p className="text-[0.95em] font-medium text-blue-200">Daily Report Shipyard</p>
-          <h1 className="mt-[0.6em] max-w-[22em] text-[3em] font-bold leading-[1.1]">{slide.title}</h1>
-          {slide.subtitle && (
-            <p className="mt-[0.8em] max-w-[34em] text-[1.4em] text-blue-100">{slide.subtitle}</p>
-          )}
-          {slide.note && <p className="mt-[1.6em] max-w-[44em] text-[1em] text-blue-200">{slide.note}</p>}
-        </div>
-      );
-
-    case "section":
-      return (
-        <div className="flex h-full flex-col justify-center gap-[1.2em] overflow-y-auto bg-blue-950 p-[3em] text-white">
-          <p className="text-[1em] font-medium text-blue-200">{slide.eyebrow}</p>
-          <h1 className="max-w-[20em] text-[2.6em] font-bold leading-[1.1]">{slide.title}</h1>
-          <p className="max-w-[34em] text-[1.3em] text-blue-100">{slide.summary}</p>
-          <dl className="mt-[0.4em] grid max-w-[46em] gap-[0.9em] border-t border-white/25 pt-[1em] @2xl:grid-cols-2">
-            {slide.facts.map((f) => (
-              <div key={f.label}>
-                <dt className="text-[0.85em] text-blue-200">{f.label}</dt>
-                <dd className="mt-[0.2em] text-[1.05em]">{f.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      );
-
-    case "agenda":
-      return (
-        <div className="flex h-full flex-col gap-[1em] overflow-y-auto p-[2em]">
-          <h1 className="text-[2em] font-bold text-blue-950">{slide.title}</h1>
-          <ol
-            className={`grid gap-x-[1.5em] gap-y-[0.2em] ${
-              slide.items.length > 18
-                ? "@3xl:grid-cols-2 @5xl:grid-cols-3"
-                : slide.items.length > 8
-                  ? "@3xl:grid-cols-2"
-                  : ""
-            }`}
-          >
-            {slide.items.map((item, i) => (
-              <li key={`${item.topicId}-${i}`}>
-                <button
-                  type="button"
-                  onClick={() => item.topicId && onJumpTopic(item.topicId)}
-                  className={`flex min-h-11 w-full items-start gap-[0.7em] rounded-md px-[0.6em] text-left text-slate-900 transition-colors hover:bg-slate-100 ${
-                    slide.items.length > 18 ? "py-[0.15em] text-[0.9em]" : "py-[0.35em] text-[1.05em]"
-                  }`}
-                >
-                  <span className={numberDot}>{i + 1}</span>
-                  <span className="pt-[0.15em]">{item.label}</span>
-                </button>
-              </li>
-            ))}
-          </ol>
-        </div>
-      );
-
-    case "flow":
-      return (
-        <div className="flex h-full flex-col gap-[1em] overflow-y-auto p-[2em]">
-          <h1 className="text-[2em] font-bold text-blue-950">{slide.title}</h1>
-          {slide.lead && <p className="max-w-[44em] text-[1.1em] text-slate-700">{slide.lead}</p>}
-          <ol className="grid content-start gap-[0.8em] @xl:grid-cols-2 @4xl:grid-cols-4">
-            {slide.stages.map((s, i) => (
-              <li
-                key={s.name}
-                className="flex flex-col gap-[0.4em] rounded-lg border border-slate-200 bg-slate-50 p-[1em]"
-              >
-                <span className={numberDot}>{i + 1}</span>
-                <h2 className="text-[1.15em] font-semibold text-slate-900">{s.name}</h2>
-                <p className="text-[0.85em] font-medium text-blue-800">{s.who}</p>
-                <p className="text-[0.9em] text-slate-700">{s.what}</p>
-              </li>
-            ))}
-          </ol>
-        </div>
-      );
-
-    case "cards":
-      return (
-        <div className="flex h-full flex-col gap-[1em] overflow-y-auto p-[2em]">
-          <h1 className="text-[2em] font-bold text-blue-950">{slide.title}</h1>
-          {slide.lead && <p className="max-w-[44em] text-[1.1em] text-slate-700">{slide.lead}</p>}
-          <ul
-            className={`grid content-start gap-[0.9em] ${
-              slide.cards.length > 4 ? "@xl:grid-cols-2 @3xl:grid-cols-3" : "@3xl:grid-cols-3"
-            }`}
-          >
-            {slide.cards.map((c) => (
-              <li key={c.title} className="rounded-lg border border-slate-200 bg-slate-50 p-[1em]">
-                <h2 className="text-[1.15em] font-semibold text-slate-900">{c.title}</h2>
-                <p className="mt-[0.3em] text-[0.95em] text-slate-700">{c.body}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      );
-
-    case "steps":
-      return (
-        <div className="flex h-full flex-col gap-[1em] overflow-y-auto p-[2em]">
-          <p className="text-[0.95em] font-medium text-slate-600">{slide.eyebrow}</p>
-          <h1 className="text-[2em] font-bold leading-[1.15] text-blue-950">{slide.title}</h1>
-          <ol className="grid gap-[0.8em]">
-            {slide.items.map((s) => (
-              <li key={s.no} className="flex gap-[0.9em] rounded-lg border border-slate-200 bg-white p-[1em]">
-                <span className={numberDot}>{s.no}</span>
-                <div className="min-w-0">
-                  <h2 className="text-[1.25em] font-semibold text-slate-900">{s.title}</h2>
-                  {s.detail && <p className="mt-[0.3em] text-[1.05em] text-slate-700">{s.detail}</p>}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
-      );
-
-    case "shot":
-      return (
-        <div className="flex h-full flex-col gap-[1.2em] p-[2em] @3xl:flex-row">
-          <div className="flex max-h-[45%] flex-shrink-0 flex-col gap-[0.5em] overflow-y-auto @3xl:max-h-none @3xl:w-[32%]">
-            <p className="text-[0.95em] font-medium text-slate-600">{slide.eyebrow}</p>
-            <p className="text-[0.95em] font-semibold text-blue-800">
-              Langkah {slide.no} dari {slide.total}
-            </p>
-            <h1 className="text-[1.7em] font-bold leading-[1.15] text-blue-950">{slide.title}</h1>
-            {slide.detail && <p className="text-[1.05em] text-slate-700">{slide.detail}</p>}
-          </div>
-          <ShotImage image={slide.image} onZoom={onZoom} />
-        </div>
-      );
-
-    case "tips":
-      return (
-        <div className="flex h-full flex-col gap-[1em] overflow-y-auto bg-amber-50 p-[2em] text-amber-950">
-          <p className="text-[0.95em] font-medium">{slide.eyebrow}</p>
-          <h1 className="flex items-center gap-[0.4em] text-[2em] font-bold">
-            <Lightbulb className="h-[0.9em] w-[0.9em]" aria-hidden="true" /> {slide.title}
-          </h1>
-          <ul className="grid gap-[0.7em]">
-            {slide.items.map((t) => (
-              <li key={t} className="rounded-lg border border-amber-300 bg-white p-[1em] text-[1.15em]">
-                {t}
-              </li>
-            ))}
-          </ul>
-        </div>
-      );
-
-    case "problems":
-      return (
-        <div className="flex h-full flex-col gap-[1em] overflow-y-auto p-[2em]">
-          <p className="text-[0.95em] font-medium text-slate-600">{slide.eyebrow}</p>
-          <h1 className="text-[2em] font-bold text-blue-950">{slide.title}</h1>
-          <ul className="grid gap-[0.8em]">
-            {slide.items.map((p) => (
-              <li key={p.problem} className="rounded-lg border border-slate-200 bg-slate-50 p-[1em]">
-                <h2 className="text-[1.2em] font-semibold text-slate-900">{p.problem}</h2>
-                <p className="mt-[0.4em] text-[1.05em] text-slate-700">{p.fix}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      );
-
-    case "closing":
-      return (
-        <div className="flex h-full flex-col justify-center gap-[1em] overflow-y-auto bg-blue-950 p-[3em] text-white">
-          <h1 className="text-[3em] font-bold leading-[1.1]">{slide.title}</h1>
-          <p className="max-w-[34em] text-[1.3em] text-blue-100">{slide.body}</p>
-          {slide.link && (
-            <p className="mt-[0.6em]">
-              <Link
-                to={slide.link.href}
-                className="inline-flex min-h-11 items-center rounded-md bg-white px-[1.2em] py-[0.5em] text-[1em] font-semibold text-blue-950 hover:bg-blue-50"
-              >
-                {slide.link.label}
-              </Link>
-            </p>
-          )}
-        </div>
-      );
-  }
-}
 
 // --- the presenter ---------------------------------------------------------
 
@@ -296,6 +52,13 @@ function Presenter({ deck }: { deck: GuideDeck }) {
   useEffect(() => {
     indexRef.current = index;
   }, [index]);
+  // Which way the viewer just moved, so the new slide comes in from that side.
+  const [shownIndex, setShownIndex] = useState(index);
+  const [direction, setDirection] = useState<"next" | "prev" | "none">("none");
+  if (index !== shownIndex) {
+    setShownIndex(index);
+    setDirection(index > shownIndex ? "next" : "prev");
+  }
   const modalOpen = listOpen || zoom !== null;
 
   const go = useCallback(
@@ -472,10 +235,17 @@ function Presenter({ deck }: { deck: GuideDeck }) {
           key={index}
           aria-roledescription="slide"
           aria-label={`Slide ${index + 1} dari ${total}: ${slideLabel(slide)}`}
-          className="absolute inset-2 overflow-hidden rounded-lg bg-white text-slate-900 sm:inset-4"
+          className={`absolute inset-2 overflow-hidden rounded-xl bg-white text-slate-900 shadow-2xl sm:inset-4 ${
+            direction === "next" ? "slide-enter-next" : direction === "prev" ? "slide-enter-prev" : ""
+          }`}
           style={{ fontSize: stageFont }}
         >
-          <SlideView slide={slide} onZoom={setZoom} onJumpTopic={jumpToTopic} />
+          <SlideView
+            slide={slide}
+            context={(slide.topicId && topicById(slide.topicId)?.title) || deck.title}
+            onZoom={setZoom}
+            onJumpTopic={jumpToTopic}
+          />
         </section>
       </div>
       <p className="sr-only" aria-live="polite">
