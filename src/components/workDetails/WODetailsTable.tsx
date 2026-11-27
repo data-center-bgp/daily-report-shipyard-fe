@@ -15,6 +15,12 @@ import {
 } from "../../lib/supabase";
 import { openPermitFile } from "../../utils/urlHandler";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  useWorkSection,
+  NEW_BUILDING_WORK_TYPE,
+  STANDARD_WORK_TYPE_FILTER,
+  STANDARD_DOCKING_TYPE_FILTER,
+} from "../../hooks/useWorkSection";
 import { isOpenForRework } from "../../utils/workVerificationStatus";
 import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import { ActivityLogService } from "../../services/activityLogService";
@@ -73,9 +79,11 @@ const EMBEDDED_SORT_FIELDS: Partial<Record<WorkDetailsSortField, string>> = {
   location: "location",
 };
 
+// work_order is an inner join so that the list page can narrow work details to
+// one section (Docking and Repair, or New Building) by the work order's type.
 const WORK_DETAILS_SELECT = `
   *,
-  work_order (
+  work_order!inner (
     id,
     shipyard_wo_number,
     customer_wo_number,
@@ -237,6 +245,9 @@ export default function WODetailsTable({
     profile?.role === "PRODUCTION" ||
     profile?.role === "MASTER";
   const navigate = useNavigate();
+  // Docking and Repair and New Building each list their own work details.
+  // A table fixed to one work order (embedded) is not narrowed.
+  const { isNewBuilding } = useWorkSection();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // State Management
@@ -471,11 +482,16 @@ export default function WODetailsTable({
   const fetchProjects = useCallback(async () => {
     try {
       setLoadingProjects(true);
-      const { data, error } = await supabase
+      let query = supabase
         .from("projects")
         .select("id, project_name, vessel_id")
-        .is("deleted_at", null)
-        .order("project_name", { ascending: true });
+        .is("deleted_at", null);
+      query = isNewBuilding
+        ? query.eq("docking_type", NEW_BUILDING_WORK_TYPE)
+        : query.or(STANDARD_DOCKING_TYPE_FILTER);
+      const { data, error } = await query.order("project_name", {
+        ascending: true,
+      });
 
       if (error) throw error;
       setProjects(data || []);
@@ -484,7 +500,7 @@ export default function WODetailsTable({
     } finally {
       setLoadingProjects(false);
     }
-  }, []);
+  }, [isNewBuilding]);
 
   // Work orders for the dropdown, scoped to whichever of vessel/project
   // filters are active (either alone is enough; both together AND).
@@ -500,6 +516,9 @@ export default function WODetailsTable({
 
         if (vesselIdParam > 0) query = query.eq("vessel_id", vesselIdParam);
         if (projectIdParam > 0) query = query.eq("project_id", projectIdParam);
+        query = isNewBuilding
+          ? query.eq("work_type", NEW_BUILDING_WORK_TYPE)
+          : query.or(STANDARD_WORK_TYPE_FILTER);
 
         const { data, error } = await query;
 
@@ -511,7 +530,7 @@ export default function WODetailsTable({
         setLoadingWorkOrders(false);
       }
     },
-    [],
+    [isNewBuilding],
   );
 
   const fetchWorkOrderDetails = useCallback(async (workOrderId: number) => {
@@ -560,6 +579,14 @@ export default function WODetailsTable({
           .from("work_details")
           .select(WORK_DETAILS_SELECT, { count: "exact" })
           .is("deleted_at", null);
+
+        if (!workOrderId) {
+          baseQuery = isNewBuilding
+            ? baseQuery.eq("work_order.work_type", NEW_BUILDING_WORK_TYPE)
+            : baseQuery.or(STANDARD_WORK_TYPE_FILTER, {
+                referencedTable: "work_order",
+              });
+        }
 
         if (params.additionalWo === "yes") {
           baseQuery = baseQuery.eq("is_additional_wo_details", true);
@@ -690,7 +717,7 @@ export default function WODetailsTable({
         setHasLoadedOnce(true);
       }
     },
-    [workOrderId, updateUrlParams],
+    [workOrderId, updateUrlParams, isNewBuilding],
   );
 
   const fetchWorkDetails = useCallback(

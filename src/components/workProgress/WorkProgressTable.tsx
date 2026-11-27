@@ -7,6 +7,11 @@ import { openProgressEvidence } from "../../utils/progressEvidenceHandler";
 import type { WorkProgressWithDetails } from "../../types/progressTypes";
 import { useAuth } from "../../hooks/useAuth";
 import {
+  useWorkSection,
+  NEW_BUILDING_WORK_TYPE,
+  STANDARD_WORK_TYPE_FILTER,
+} from "../../hooks/useWorkSection";
+import {
   getLatestVerificationByWorkDetails,
   isOpenForRework,
 } from "../../utils/workVerificationStatus";
@@ -94,6 +99,9 @@ export default function WorkProgressTable({
   // The /work-details/:workDetailsId/progress route renders this component
   // with no props, so fall back to the URL param when one isn't passed in.
   const params = useParams<{ workDetailsId?: string }>();
+  // Docking and Repair and New Building each list their own progress
+  // reports. One work detail's reports (workDetailsId) are not narrowed.
+  const { isNewBuilding } = useWorkSection();
   const workDetailsId =
     workDetailsIdProp ??
     (params.workDetailsId ? parseInt(params.workDetailsId) : undefined);
@@ -408,20 +416,33 @@ export default function WorkProgressTable({
       if (kaproError) throw kaproError;
       setAllKapros(kaproData || []);
 
-      // Fetch ALL work orders with all fields
-      const { data: woData, error: woError } = await supabase
+      // Fetch this section's work orders with all fields
+      const woQuery = supabase
         .from("work_order")
         .select(
           "id, vessel_id, project_id, shipyard_wo_number, customer_wo_number, work_type, work_location, is_additional_wo, kapro_id",
         )
         .is("deleted_at", null);
+      const { data: woData, error: woError } = await (isNewBuilding
+        ? woQuery.eq("work_type", NEW_BUILDING_WORK_TYPE)
+        : woQuery.or(STANDARD_WORK_TYPE_FILTER));
 
       if (woError) throw woError;
       setAllWorkOrders(woData || []);
+
+      // The vessel and project pickers list only what this section has.
+      const sectionVessels = new Set((woData || []).map((wo) => wo.vessel_id));
+      const sectionProjects = new Set(
+        (woData || []).map((wo) => wo.project_id),
+      );
+      setAllVessels((vessels) => vessels.filter((v) => sectionVessels.has(v.id)));
+      setAllProjects((projects) =>
+        projects.filter((p) => sectionProjects.has(p.id)),
+      );
     } catch (err) {
       console.error("Error fetching filter options:", err);
     }
-  }, []);
+  }, [isNewBuilding]);
 
   const fetchWorkProgress = useCallback(async () => {
     try {
@@ -484,6 +505,14 @@ export default function WorkProgressTable({
 
       // Scoped to a single work detail (e.g. opened via its "View / Edit
       // Progress" action) takes priority over the dropdown filters below.
+      if (!workDetailsId) {
+        query = isNewBuilding
+          ? query.eq("work_details.work_order.work_type", NEW_BUILDING_WORK_TYPE)
+          : query.or(STANDARD_WORK_TYPE_FILTER, {
+              referencedTable: "work_details.work_order",
+            });
+      }
+
       if (workDetailsId) {
         query = query.eq("work_details_id", workDetailsId);
       } else if (hasActiveFilters) {
@@ -651,6 +680,7 @@ export default function WorkProgressTable({
     workDetailsSearchTerm,
     filteredWorkOrders,
     workDetailsId,
+    isNewBuilding,
   ]);
 
   const calculateMaxProgress = async (
@@ -1979,7 +2009,9 @@ export default function WorkProgressTable({
                 Work Progress Reports
               </h1>
               <p className="text-gray-600">
-                Track detailed progress reports for work activities
+                {workDetailsId
+                  ? "Track detailed progress reports for work activities"
+                  : `Progress reports of ${isNewBuilding ? "new building" : "docking and repair"} work`}
               </p>
             </div>
             {canWriteProgress && (

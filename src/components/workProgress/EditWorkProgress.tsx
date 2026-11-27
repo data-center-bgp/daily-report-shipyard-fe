@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { uploadProgressEvidence } from "../../utils/progressEvidenceHandler";
 import { useAuth } from "../../hooks/useAuth";
+import { useWorkSection } from "../../hooks/useWorkSection";
 import { ActivityLogService } from "../../services/activityLogService";
 import {
   sanitizeProgressPercentageInput,
@@ -57,6 +58,8 @@ interface KaproInfo {
 
 export default function EditWorkProgress() {
   const navigate = useNavigate();
+  // Back and Save return to the list of the section this page was opened from.
+  const { listPath } = useWorkSection();
   const { progressId } = useParams<{ progressId: string }>();
   const { profile } = useAuth();
   const location = useLocation();
@@ -265,9 +268,9 @@ export default function EditWorkProgress() {
 
     const returnFilters = location.state?.returnFilters;
     if (returnFilters) {
-      navigate("/work-progress", { state: { returnFilters } });
+      navigate(listPath("/work-progress"), { state: { returnFilters } });
     } else {
-      navigate("/work-progress");
+      navigate(listPath("/work-progress"));
     }
   };
 
@@ -385,7 +388,7 @@ export default function EditWorkProgress() {
             The requested progress report could not be found.
           </p>
           <button
-            onClick={() => navigate("/work-progress")}
+            onClick={() => navigate(listPath("/work-progress"))}
             className="mt-3 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
           >
             Back to Work Progress

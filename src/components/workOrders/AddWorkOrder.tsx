@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase, type Vessel, type Kapro } from "../../lib/supabase";
 import { ActivityLogService } from "../../services/activityLogService";
 import { useAuth } from "../../hooks/useAuth";
+import { useWorkSection } from "../../hooks/useWorkSection";
 import {
   ArrowLeft,
   FileText,
@@ -28,6 +29,8 @@ interface ProjectOption {
 
 export default function AddWorkOrder() {
   const navigate = useNavigate();
+  // Back and Save return to the list of the section this page was opened from.
+  const { listPath, isNewBuilding } = useWorkSection();
   const location = useLocation();
   const { isOperationsReadOnly } = useAuth();
   const [vessels, setVessels] = useState<Vessel[]>([]);
@@ -97,7 +100,8 @@ export default function AddWorkOrder() {
     is_additional_wo: false,
     kapro_id: "",
     work_location: "",
-    work_type: "",
+    // Opened from the New Building list: the work is new building.
+    work_type: isNewBuilding ? "New Building" : "",
   });
 
   // Whether the Work Location field is showing the free-text fallback
@@ -781,7 +785,7 @@ export default function AddWorkOrder() {
   };
 
   const handleCancel = () => {
-    navigate("/work-orders");
+    navigate(listPath("/work-orders"));
   };
 
   if (loadingVessels || loadingKapros || loadingProjects || !currentUser) {

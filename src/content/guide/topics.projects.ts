@@ -12,7 +12,7 @@ export const projectTopics: GuideTopic[] = [
     steps: [
       {
         title: "Buka Projects lalu tekan New project",
-        detail: "Projects ada di bawah Operations pada menu.",
+        detail: "Projects ada di menu, tepat di bawah Dashboard.",
       },
       {
         title: "Pilih kapal",
@@ -228,6 +228,11 @@ export const projectTopics: GuideTopic[] = [
           "Nama project membuka halaman project. Tombol Work orders membuka daftar work order kapal itu. Work order yang tidak terhubung ke project diberi tanda khusus.",
       },
       {
+        title: "Pakai Work Orders, Work Details, dan Work Progress New Building",
+        detail:
+          "Grup New Building punya Work Orders, Work Details, dan Work Progress sendiri. Isinya hanya pekerjaan berjenis New Building. Pekerjaan Docking dan Repair ada di grup Docking & Repair. Work order baru dari daftar New Building langsung berjenis New Building.",
+      },
+      {
         title: "Mulai project new building baru",
         detail:
           "Tekan New building project. Formulir project terbuka dengan jenis New Building yang sudah terpilih. Tombol ini hanya ada untuk role yang boleh membuat project.",
@@ -235,6 +240,8 @@ export const projectTopics: GuideTopic[] = [
     ],
     tips: [
       "Jika kapal tidak muncul, periksa jenis (Work Type) pada work order dan jenis pada project. Keduanya harus New Building.",
+      "Satu work order hanya muncul di satu grup. Work order berjenis New Building tidak muncul di Docking & Repair, dan sebaliknya.",
+      "Halaman yang dibuka dari daftar (daftar work order kapal, tambah atau ubah work order, work detail, dan progress) dipakai bersama. Menu tetap menyala di grup asal Anda, dan tombol Back atau Save kembali ke daftar grup itu.",
       "Angka di halaman ini memakai aturan yang sama dengan Dashboard, jadi tidak akan berbeda.",
     ],
     problems: [

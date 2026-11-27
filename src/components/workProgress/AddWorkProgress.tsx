@@ -12,6 +12,7 @@ import {
 } from "../../utils/progressPercentage";
 import { isOpenForRework } from "../../utils/workVerificationStatus";
 import { useAuth } from "../../hooks/useAuth";
+import { useWorkSection } from "../../hooks/useWorkSection";
 import {
   FileText,
   Ship,
@@ -93,6 +94,8 @@ export default function AddWorkProgress({
   workDetailsId,
 }: AddWorkProgressProps) {
   const navigate = useNavigate();
+  // Back and Save return to the list of the section this page was opened from.
+  const { listPath } = useWorkSection();
   const params = useParams();
   const location = useLocation();
   const { profile } = useAuth();
@@ -696,7 +699,7 @@ export default function AddWorkProgress({
       } else if (effectiveWorkDetailsId) {
         navigate(`/work-details/${effectiveWorkDetailsId}/progress`);
       } else {
-        navigate("/work-progress");
+        navigate(listPath("/work-progress"));
       }
     } catch (err) {
       console.error("Error creating work progress:", err);
@@ -1308,7 +1311,7 @@ export default function AddWorkProgress({
                     : navigate(
                         effectiveWorkDetailsId
                           ? `/work-details/${effectiveWorkDetailsId}/progress`
-                          : "/work-progress",
+                          : listPath("/work-progress"),
                       )
                 }
                 className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"

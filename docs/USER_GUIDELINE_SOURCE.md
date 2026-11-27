@@ -155,10 +155,10 @@ If your account is deactivated, or has no profile, you are signed straight out w
 
 - The left sidebar can collapse to icons, and the app remembers your choice. On a phone or narrow window it becomes a **Menu** button that opens a drawer.
 - Menu groups, in order:
-  - (no title): Dashboard
+  - (no title): Dashboard, Projects
   - Planning: Docking Plans
-  - Operations: Projects, Work Orders, Work Details, Work Progress
-  - New Building: New Building (the roles that see Work Orders)
+  - Docking & Repair: Work Orders, Work Details, Work Progress
+  - New Building: Overview, Work Orders, Work Details, Work Progress (the roles that see Work Orders)
   - Approvals & Review: Readiness Queue, Additional WO Approvals, Work Verification
   - Finance & Documents: BASTP, Invoices
   - Data Tools: Export Data, Import Data
@@ -259,7 +259,7 @@ If your account is deactivated, or has no profile, you are signed straight out w
 
 **Purpose.** A project groups the work orders of one docking event of one vessel.
 
-**Menu.** Operations, Projects (`/projects`).
+**Menu.** Projects (`/projects`), under Dashboard. It lists projects of every kind of work.
 
 **Projects list.**
 - Columns: Project, Vessel (with company), Planned dates, Work orders (count), Checked by.
@@ -314,7 +314,7 @@ If your account is deactivated, or has no profile, you are signed straight out w
 
 ### 6.4 Work Orders
 
-**Menu.** Operations, Work Orders (`/work-orders`, "Work Order Dashboard"). It has stat cards, a toggle between "By Vessel" and "By Work Order Number", and filters. Each vessel opens an expandable list of its work orders and work details.
+**Menu.** Docking & Repair, Work Orders (`/work-orders`, "Work Order Dashboard"). New building work orders are on the same page under New Building, Work Orders (`/new-building/work-orders`); see 6.18. It has stat cards, a toggle between "By Vessel" and "By Work Order Number", and filters. Each vessel opens an expandable list of its work orders and work details.
 
 **Create a work order** (`/add-work-order`).
 1. Choose the **Project** (required), or create one inline.
@@ -350,7 +350,7 @@ Each approval backs exactly one work order.
 
 ### 6.6 Work Details
 
-**Menu.** Operations, Work Details (`/work-details`, "Work Order Details"). A paged, searchable, sortable table with filters for vessel, project, work order, work scope, location and additional yes/no. Rows expand for full information.
+**Menu.** Docking & Repair, Work Details (`/work-details`, "Work Order Details"); New Building has its own (`/new-building/work-details`, see 6.18). A paged, searchable, sortable table with filters for vessel, project, work order, work scope, location and additional yes/no. Rows expand for full information.
 
 **Add** (PPIC, MASTER, ADMIN_SHIPPING).
 1. Choose the work order (search by WO number, customer WO number or vessel).
@@ -372,7 +372,7 @@ Each approval backs exactly one work order.
 
 ### 6.7 Work Progress
 
-**Menu.** Operations, Work Progress (`/work-progress`). Every progress report is a row. Filters: vessel, project, work order, work type, location, Kapro, additional, and text search.
+**Menu.** Docking & Repair, Work Progress (`/work-progress`); New Building has its own (`/new-building/work-progress`, see 6.18). Every progress report is a row. Filters: vessel, project, work order, work type, location, Kapro, additional, and text search.
 
 **Add** (PRODUCTION, MASTER).
 1. Choose the work order, then the work detail. Work details already at 100% are hidden unless sent back for rework.
@@ -579,6 +579,13 @@ A page for the vessels the shipyard builds: menu group "New Building", item "New
 - **New building project:** the button opens Add Project with the type New Building already chosen. It is hidden for read-only roles.
 - **Vessels with a New Building project but no work order yet** still appear, with an empty project block.
 
+**Work Orders, Work Details and Work Progress for new building.** The group also has its own Work Orders (`/new-building/work-orders`), Work Details (`/new-building/work-details`) and Work Progress (`/new-building/work-progress`). They are the same pages as under Docking & Repair, but each list shows one kind of work, decided by the work order's type: New Building here, everything else (Docking, Repair, or no type) under Docking & Repair. Nothing is copied; a work order is in exactly one of the two.
+
+- **Same pages, narrowed:** the project, vessel and work order pickers, the totals and the filters only offer what is in that section. Work Progress filters the same way, through the work order behind each report. One work detail's progress page (opened from a work detail) is not narrowed.
+- **Pages opened from a list are shared:** a vessel's work orders (`/vessel/:id/work-orders`), Add or Edit Work Order, Add or Edit Work Details and Add or Edit Progress Report are the same for both. They remember which section you came from, so the menu item stays lit and Back and Save return to that section's list. The section is kept per browser tab; opening such a page by a bookmark in a fresh tab shows it under Docking & Repair.
+- **Add Work Order** from the New Building list starts with Work type New Building. Opened from anywhere else it starts blank, as before.
+- **Projects stay in one list** under Dashboard; a project of type New Building shows there like any other.
+
 ## 7. Numbering and naming rules
 
 | Item | Format | How the sequence works |
@@ -635,7 +642,7 @@ Dates typed or imported are always `YYYY-MM-DD`.
 | Import and export | `src/utils/importHandler.ts`, `src/utils/exportHandler.ts` |
 | Database changes | `supabase/migrations/` (schema `daily_report_shipyard`) |
 | In-app user guide (written in Indonesian) | `src/content/guide/` (topics and role paths), `src/components/guide/` (pages), menu item "Panduan Pengguna" in `Layout.tsx`, routes `/guide` and `/guide/:topicId` in `App.tsx` |
-| New Building overview | `src/components/newBuilding/NewBuildingPage.tsx` (page), `src/utils/newBuilding.ts` (grouping and the progress, late and BASTP rules), menu group in `Layout.tsx`, feature `newBuilding` in `useAuth.tsx`, route `/new-building` in `App.tsx` |
+| New Building overview | `src/components/newBuilding/NewBuildingPage.tsx` (page), `src/utils/newBuilding.ts` (grouping and the progress, late and BASTP rules), menu group in `Layout.tsx`, feature `newBuilding` in `useAuth.tsx`, route `/new-building` in `App.tsx`. The per-section lists: `src/hooks/useWorkSection.ts` (which section a page belongs to, the list path to return to, the database filters), routes `/new-building/work-orders`, `/new-building/work-details` and `/new-building/work-progress` in `App.tsx` (the same components as the Docking & Repair lists, filtered in `WorkOrderDashboard.tsx`, `WODetailsTable.tsx` and `WorkProgressTable.tsx`) |
 | Presentation mode of the guide (slides, Indonesian) | `src/content/guide/deck.ts` (decks and slides, cut from the topics; only the overview deck is hand-written), `src/components/guide/GuidePresentHome.tsx` (choose a deck), `GuidePresenter.tsx` (the slide viewer, keys, lists), `GuideSlides.tsx` (how each kind of slide looks), `ShipScene.tsx` (the ship and water from the sign-in page); routes `/guide/present` and `/guide/present/:deckId?slide=N` in `App.tsx` |
 | Deploying | Push, then run the deploy command on the VPS (see the team's deployment notes) |
 
@@ -702,6 +709,7 @@ This source file is detailed on purpose. The guideline people read should be sho
 
 | Date | Change | Sections |
 |---|---|---|
+| 2026-11-27 | New Building has its own Work Orders, Work Details and Work Progress lists; the Operations menu group is now "Docking & Repair" (those three lists, without new building work) and Projects sits under Dashboard. Add, edit and vessel pages stay shared and return to the list they were opened from. | 4.2, 6.2, 6.4, 6.6, 6.7, 6.18, 10 |
 | 2026-11-27 | BASTP list: Category column and chips (Docking, Repair, New Building) worked out from the work orders behind each BASTP, for new and old BASTPs alike. | 6.9 |
 | 2026-11-26 | BASTP general services: New Building Report added (lump sum, like Docking Report / SN, listed right after it); migration `20261126110000_add_new_building_report_service.sql`. | 6.9 |
 | 2026-11-26 | New Building overview page added (menu group New Building, `/new-building`): vessels built at the shipyard with their projects, work orders, progress and billing stage, plus a shortcut to start a New Building project. | 4.2, 6.18, 10 |

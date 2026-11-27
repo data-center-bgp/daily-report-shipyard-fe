@@ -8,6 +8,7 @@ import {
   type WorkDetailsWithProgress,
 } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import { useWorkSection } from "../../hooks/useWorkSection";
 import { ActivityLogService } from "../../services/activityLogService";
 import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import { isWorkOrderFullyCompleted } from "../../utils/workOrderCompletion";
@@ -102,6 +103,8 @@ interface WorkOrderWithProgress extends Omit<
 export default function VesselWorkOrders() {
   const { vesselId } = useParams<{ vesselId: string }>();
   const navigate = useNavigate();
+  // Back and Save return to the list of the section this page was opened from.
+  const { listPath } = useWorkSection();
   const location = useLocation();
   // Opened from a project's work order list: Back returns to that project.
   const from = returnTargetFrom(location.state);
@@ -109,7 +112,7 @@ export default function VesselWorkOrders() {
     ? "Back to Project"
     : "Back to Dashboard";
   const goBack = () =>
-    from ? navigate(from.path, { state: from.state }) : navigate("/work-orders");
+    from ? navigate(from.path, { state: from.state }) : navigate(listPath("/work-orders"));
   const { isOperationsReadOnly, isShippingCreateOnly, profile, isReadOnly } =
     useAuth();
   // ADMIN_SHIPPING can create work orders/details here but never edit/delete

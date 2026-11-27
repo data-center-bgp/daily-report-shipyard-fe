@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase, type Kapro } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import { useWorkSection, workTypeInSection } from "../../hooks/useWorkSection";
 import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import { isWorkOrderFullyCompleted } from "../../utils/workOrderCompletion";
 import {
@@ -96,6 +97,8 @@ export default function WorkOrderDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isOperationsReadOnly } = useAuth();
+  // Docking and Repair and New Building each list their own work orders.
+  const { section } = useWorkSection();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -178,7 +181,8 @@ export default function WorkOrderDashboard() {
 
       // Filter out work orders without vessel data
       const validWorkOrders = workOrdersData.filter(
-        (wo) => wo.vessel?.id != null,
+        (wo) =>
+          wo.vessel?.id != null && workTypeInSection(wo.work_type, section),
       );
 
       // Calculate stats
@@ -295,7 +299,7 @@ export default function WorkOrderDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [section]);
 
   // Filter vessels for search dropdown
   const searchFilteredVessels = vessels.filter((vessel) => {

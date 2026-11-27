@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { supabase, type WorkOrder, type Vessel } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import { useWorkSection } from "../../hooks/useWorkSection";
 import { ActivityLogService } from "../../services/activityLogService";
 import SearchableSelect from "../common/SearchableSelect";
 import {
@@ -71,6 +72,8 @@ const getMonthNameFromDate = (dateStr: string): string => {
 
 export default function AddWorkDetails() {
   const navigate = useNavigate();
+  // Back and Save return to the list of the section this page was opened from.
+  const { listPath } = useWorkSection();
   const { workOrderId } = useParams<{ workOrderId: string }>();
   const { profile } = useAuth();
   const location = useLocation();
@@ -516,13 +519,13 @@ export default function AddWorkDetails() {
     if (returnTo) {
       navigate(returnTo, { state: { highlightWorkOrderId } });
     } else if (returnFilters) {
-      navigate("/work-details", { state: { returnFilters } });
+      navigate(listPath("/work-details"), { state: { returnFilters } });
     } else if (workOrderId && vesselId) {
       navigate(`/vessel/${vesselId}/work-orders`, {
         state: { highlightWorkOrderId },
       });
     } else {
-      navigate("/work-details");
+      navigate(listPath("/work-details"));
     }
   };
 

@@ -1,9 +1,12 @@
 import WorkOrderDashboard from "./WorkOrderDashboard";
 import { useAuth } from "../../hooks/useAuth";
 import { Lock, Info } from "lucide-react";
+import { useWorkSection } from "../../hooks/useWorkSection";
 
 export default function WorkOrders() {
   const { isOperationsReadOnly } = useAuth();
+  const { isNewBuilding } = useWorkSection();
+  const kind = isNewBuilding ? "new building" : "docking and repair";
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -14,8 +17,8 @@ export default function WorkOrders() {
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Work Orders</h1>
             <p className="text-gray-600">
               {isOperationsReadOnly
-                ? "View all work orders (Read-only access)"
-                : "Manage all work orders"}
+                ? `View ${kind} work orders (Read-only access)`
+                : `Manage ${kind} work orders`}
             </p>
           </div>
 

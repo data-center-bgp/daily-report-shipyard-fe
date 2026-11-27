@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
+import { useWorkSection } from "../../hooks/useWorkSection";
 import { useDashboardData } from "../../hooks/useDashboardData";
 import { useStackedTables } from "../../hooks/useStackedTables";
 import MobileNavDrawer from "./MobileNavDrawer";
@@ -190,6 +191,11 @@ export default function Layout({ children, onLogout }: LayoutProps) {
     }
   };
 
+  // Docking and Repair and New Building each have their own Work Orders, Work
+  // Details and Work Progress. The pages opened from those lists are shared,
+  // so the section the user came from decides which menu item is lit.
+  const { isNewBuilding: inNewBuilding } = useWorkSection();
+
   // One work detail's progress reports: /work-details/:id/progress.
   const isWorkDetailProgressPage = /^\/work-details\/[^/]+\/progress$/.test(
     location.pathname,
@@ -207,6 +213,14 @@ export default function Layout({ children, onLogout }: LayoutProps) {
             location.pathname === "/" || location.pathname === "/dashboard",
           show: true,
         },
+        // Projects cover both kinds of work, so they sit above the two sections.
+        {
+          name: "Projects",
+          href: "/projects",
+          icon: FolderKanban,
+          current: location.pathname.startsWith("/projects"),
+          show: canAccess("workOrders"),
+        },
       ],
     },
     {
@@ -222,15 +236,8 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       ],
     },
     {
-      title: "Operations",
+      title: "Docking & Repair",
       items: [
-        {
-          name: "Projects",
-          href: "/projects",
-          icon: FolderKanban,
-          current: location.pathname.startsWith("/projects"),
-          show: canAccess("workOrders"),
-        },
         {
           name: "Work Orders",
           href: "/work-orders",
@@ -238,10 +245,11 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           // /work-order/:id/add-work-details is adding work details, so it
           // belongs to Work Details below, not here.
           current:
-            location.pathname === "/work-orders" ||
-            location.pathname.startsWith("/vessel/") ||
-            location.pathname.startsWith("/add-work-order") ||
-            location.pathname.startsWith("/edit-work-order"),
+            !inNewBuilding &&
+            (location.pathname === "/work-orders" ||
+              location.pathname.startsWith("/vessel/") ||
+              location.pathname.startsWith("/add-work-order") ||
+              location.pathname.startsWith("/edit-work-order")),
           show: canAccess("workOrders"),
         },
         {
@@ -250,6 +258,7 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           icon: Wrench,
           // /work-details/:id/progress is a progress page (Work Progress).
           current:
+            !inNewBuilding &&
             (location.pathname === "/work-details" ||
               location.pathname.startsWith("/work-details/") ||
               location.pathname.includes("/add-work-details") ||
@@ -262,10 +271,11 @@ export default function Layout({ children, onLogout }: LayoutProps) {
           href: "/work-progress",
           icon: TrendingUp,
           current:
-            location.pathname === "/work-progress" ||
-            location.pathname.startsWith("/work-progress/") ||
-            location.pathname.startsWith("/add-work-progress") ||
-            isWorkDetailProgressPage,
+            !inNewBuilding &&
+            (location.pathname === "/work-progress" ||
+              location.pathname.startsWith("/work-progress/") ||
+              location.pathname.startsWith("/add-work-progress") ||
+              isWorkDetailProgressPage),
           show: canAccess("progress"),
         },
       ],
@@ -274,11 +284,48 @@ export default function Layout({ children, onLogout }: LayoutProps) {
       title: "New Building",
       items: [
         {
-          name: "New Building",
+          name: "Overview",
           href: "/new-building",
           icon: Hammer,
           current: location.pathname === "/new-building",
           show: canAccess("newBuilding"),
+        },
+        {
+          name: "Work Orders",
+          href: "/new-building/work-orders",
+          icon: FileText,
+          current:
+            location.pathname === "/new-building/work-orders" ||
+            (inNewBuilding &&
+              (location.pathname.startsWith("/vessel/") ||
+                location.pathname.startsWith("/add-work-order") ||
+                location.pathname.startsWith("/edit-work-order"))),
+          show: canAccess("newBuilding") && canAccess("workOrders"),
+        },
+        {
+          name: "Work Details",
+          href: "/new-building/work-details",
+          icon: Wrench,
+          current:
+            location.pathname === "/new-building/work-details" ||
+            (inNewBuilding &&
+              (location.pathname.startsWith("/work-details/") ||
+                location.pathname.includes("/add-work-details") ||
+                location.pathname.startsWith("/edit-work-details")) &&
+              !isWorkDetailProgressPage),
+          show: canAccess("newBuilding") && canAccess("workDetails"),
+        },
+        {
+          name: "Work Progress",
+          href: "/new-building/work-progress",
+          icon: TrendingUp,
+          current:
+            location.pathname === "/new-building/work-progress" ||
+            (inNewBuilding &&
+              (location.pathname.startsWith("/work-progress/") ||
+                location.pathname.startsWith("/add-work-progress") ||
+                isWorkDetailProgressPage)),
+          show: canAccess("newBuilding") && canAccess("progress"),
         },
       ],
     },

@@ -8,6 +8,7 @@ import {
 } from "../../lib/supabase";
 import { ActivityLogService } from "../../services/activityLogService";
 import { useAuth } from "../../hooks/useAuth";
+import { useWorkSection } from "../../hooks/useWorkSection";
 import {
   ArrowLeft,
   Lock,
@@ -31,6 +32,8 @@ interface WorkOrderWithVessel extends WorkOrder {
 
 export default function EditWorkOrder() {
   const navigate = useNavigate();
+  // Back and Save return to the list of the section this page was opened from.
+  const { listPath } = useWorkSection();
   const { workOrderId } = useParams<{ workOrderId: string }>();
   const { isOperationsReadOnly: isOpsReadOnlyRole, isShippingCreateOnly } =
     useAuth();
@@ -350,7 +353,7 @@ export default function EditWorkOrder() {
           },
         });
       } else {
-        navigate("/work-orders", {
+        navigate(listPath("/work-orders"), {
           state: {
             message: `Work order ${formData.shipyard_wo_number} updated successfully!`,
           },
@@ -368,7 +371,7 @@ export default function EditWorkOrder() {
     if (workOrder?.vessel_id) {
       navigate(`/vessel/${workOrder.vessel_id}/work-orders`);
     } else {
-      navigate("/work-orders");
+      navigate(listPath("/work-orders"));
     }
   };
 

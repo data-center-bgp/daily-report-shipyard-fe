@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import { useWorkSection } from "../../hooks/useWorkSection";
 import { ActivityLogService } from "../../services/activityLogService";
 import {
   uploadWorkPermitFile,
@@ -100,6 +101,8 @@ const getMonthNameFromDate = (dateStr: string): string => {
 
 export default function EditWorkDetails() {
   const navigate = useNavigate();
+  // Back and Save return to the list of the section this page was opened from.
+  const { listPath } = useWorkSection();
   const { workDetailsId } = useParams<{ workDetailsId: string }>();
   const location = useLocation();
   const { profile, isOperationsReadOnly, isShippingCreateOnly } = useAuth();
@@ -660,11 +663,11 @@ export default function EditWorkDetails() {
         navigate(returnTo);
       } else if (returnFilters) {
         // Pass the filters back to the table
-        navigate("/work-details", {
+        navigate(listPath("/work-details"), {
           state: { returnFilters },
         });
       } else {
-        navigate("/work-details");
+        navigate(listPath("/work-details"));
       }
     } catch (err) {
       console.error("Error updating work details:", err);
@@ -684,11 +687,11 @@ export default function EditWorkDetails() {
     if (returnTo) {
       navigate(returnTo);
     } else if (returnFilters) {
-      navigate("/work-details", {
+      navigate(listPath("/work-details"), {
         state: { returnFilters },
       });
     } else {
-      navigate("/work-details");
+      navigate(listPath("/work-details"));
     }
   };
 
@@ -712,7 +715,7 @@ export default function EditWorkDetails() {
               Retry
             </button>
             <button
-              onClick={() => navigate("/work-details")}
+              onClick={() => navigate(listPath("/work-details"))}
               className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
             >
               Back to List
@@ -734,7 +737,7 @@ export default function EditWorkDetails() {
             The work details you're looking for doesn't exist.
           </p>
           <button
-            onClick={() => navigate("/work-details")}
+            onClick={() => navigate(listPath("/work-details"))}
             className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
           >
             Back to List

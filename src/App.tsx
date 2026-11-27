@@ -389,6 +389,21 @@ function AppRoutes() {
 
           {/* Vessels built at the shipyard */}
           <Route path="/new-building" element={<NewBuildingPage />} />
+          {/* The same three lists as Docking and Repair, for new-building work.
+              The key makes React start them fresh instead of reusing the
+              Docking and Repair page that was open. */}
+          <Route
+            path="/new-building/work-orders"
+            element={<WorkOrders key="newBuilding" />}
+          />
+          <Route
+            path="/new-building/work-details"
+            element={<WorkOrderDetails key="newBuilding" />}
+          />
+          <Route
+            path="/new-building/work-progress"
+            element={<WorkProgressTable key="newBuilding" />}
+          />
 
           {/* Shipping's docking plans */}
           <Route path="/plans/*" element={<PlanPages />} />
