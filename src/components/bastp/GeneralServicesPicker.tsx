@@ -35,7 +35,11 @@ const SERVICE_GROUPS: ServiceGroup[] = [
       "UNDOCKING",
     ],
   },
-  { number: "2", title: "Docking Report / SN", codes: ["DOCKING_REPORT"] },
+  {
+    number: "2",
+    title: "Report",
+    codes: ["DOCKING_REPORT", "NEW_BUILDING_REPORT"],
+  },
   {
     number: "3",
     title: "Electrical Supply",
