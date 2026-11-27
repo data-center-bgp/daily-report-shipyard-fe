@@ -158,6 +158,7 @@ If your account is deactivated, or has no profile, you are signed straight out w
   - (no title): Dashboard
   - Planning: Docking Plans
   - Operations: Projects, Work Orders, Work Details, Work Progress
+  - New Building: New Building (the roles that see Work Orders)
   - Approvals & Review: Readiness Queue, Additional WO Approvals, Work Verification
   - Finance & Documents: BASTP, Invoices
   - Data Tools: Export Data, Import Data
@@ -410,7 +411,7 @@ A sent-back item waits for a new progress report, then returns to Pending Review
 
 **Menu.** Finance & Documents, BASTP (`/bastp`, "BASTP Management").
 
-**List.** Two tabs: BASTP Records (counters, search, status filter, a "Form Penawaran missing" badge) and Completed Work Details (All, Not in BASTP, In BASTP, with Excel export).
+**List.** Two tabs: BASTP Records (counters, search, status filter, Category chips, a "Form Penawaran missing" badge) and Completed Work Details (All, Not in BASTP, In BASTP, with Excel export).
 
 **Create** (MASTER, PPIC, PRODUCTION, ADMIN).
 1. Pick the BASTP date first. The number fills in and is locked.
@@ -420,10 +421,11 @@ A sent-back item waits for a new progress report, then returns to Pending Review
 5. Add work details. Only those at 100% (or cancelled) are offered, and none already in another BASTP.
 6. Save. A BASTP needs at least one work detail, unless it has fresh water only.
 
-**General services.** Grouped like the docking quotation: Docking, Docking Report/SN, Electrical, Security, Toilet, Trash, Facilities, Work-equipment assistance, Other.
+**General services.** Grouped like the docking quotation: Docking, Report (Docking Report / SN and New Building Report), Electrical, Security, Toilet, Trash, Facilities, Work-equipment assistance, Other.
 - Day services need a start and close date. Total days = close minus start plus 1.
 - Ton services (Fresh Water Supply) need one or more deliveries, each with a date and a quantity above 0.
-- Kali and Ls services need a quantity above 0 only.
+- Kali and Ls services need a quantity above 0 only. New Building Report is one of them, listed with Docking Report / SN.
+- **Category.** A BASTP has no category of its own. It takes the kinds of work behind its work details (Docking, Repair, New Building, from each work order's type; every "Docking - ..." type is Docking, and a blank or old type counts as Repair). The list shows them as tags in a Category column and as chips (All, Docking, Repair, New Building) that combine with search and the status filter. A BASTP with two kinds of work shows both tags and counts under both chips. A BASTP with no work details (fresh water only) has no category and shows under All only. Nothing is stored, so old BASTPs are categorised the same way.
 - Date-only services (Keel Laying, Launching) need one date and nothing else: no days, quantity or price. The date is printed under the service name on the BASTP, they never appear on the invoice, and they do not stretch the docking period shown in the BASTP list. They show under "Other services" and last in the print and Excel export. They are not offered in a work order's Docking Planning, which stays day-based.
 - Prices start at 0 and are set on the invoice.
 - A BASTP with only fresh-water services and no work details is allowed.
@@ -565,6 +567,18 @@ Menu Developer, API Documentation (`/developer/api`; MASTER only). Documents the
 
 ---
 
+### 6.18 New Building overview
+
+A page for the vessels the shipyard builds: menu group "New Building", item "New Building" (`/new-building`). It is a view over the same data as everything else; nothing is stored separately. Work counts as new building when its work type is "New Building" (set on the project's Docking type and on each work order's Work type).
+
+- **Who sees it:** the roles that see Work Orders (MASTER, PPIC, PRODUCTION, SHIPPING, ADMIN, MANAGER, HSSE, ADMIN_SHIPPING). FINANCE does not.
+- **Top of the page:** vessels (and how many are in progress), work orders, work details done (percent and count), work details past their planned close date, and work details ready to invoice. The progress, late and BASTP rules are the Dashboard's, so the numbers agree.
+- **Search and chips:** search matches vessel, company, type, project name, work order number, customer number and location. Chips: All, In progress, Not started, Completed.
+- **One card per vessel:** overall progress, work orders, work details done, late count, and where the work is in handover and billing (not in a BASTP, draft, verified, ready to invoice, invoiced unpaid, invoiced paid). Under it, one block per project with its work orders (number, location, progress, details done and late). Work orders that belong to no project are listed under "Not linked to a project" so they are easy to spot.
+- **Links:** the vessel's "Work orders" button, and each project's name opens the project page.
+- **New building project:** the button opens Add Project with the type New Building already chosen. It is hidden for read-only roles.
+- **Vessels with a New Building project but no work order yet** still appear, with an empty project block.
+
 ## 7. Numbering and naming rules
 
 | Item | Format | How the sequence works |
@@ -621,6 +635,7 @@ Dates typed or imported are always `YYYY-MM-DD`.
 | Import and export | `src/utils/importHandler.ts`, `src/utils/exportHandler.ts` |
 | Database changes | `supabase/migrations/` (schema `daily_report_shipyard`) |
 | In-app user guide (written in Indonesian) | `src/content/guide/` (topics and role paths), `src/components/guide/` (pages), menu item "Panduan Pengguna" in `Layout.tsx`, routes `/guide` and `/guide/:topicId` in `App.tsx` |
+| New Building overview | `src/components/newBuilding/NewBuildingPage.tsx` (page), `src/utils/newBuilding.ts` (grouping and the progress, late and BASTP rules), menu group in `Layout.tsx`, feature `newBuilding` in `useAuth.tsx`, route `/new-building` in `App.tsx` |
 | Presentation mode of the guide (slides, Indonesian) | `src/content/guide/deck.ts` (decks and slides, cut from the topics; only the overview deck is hand-written), `src/components/guide/GuidePresentHome.tsx` (choose a deck), `GuidePresenter.tsx` (the slide viewer, keys, lists), `GuideSlides.tsx` (how each kind of slide looks), `ShipScene.tsx` (the ship and water from the sign-in page); routes `/guide/present` and `/guide/present/:deckId?slide=N` in `App.tsx` |
 | Deploying | Push, then run the deploy command on the VPS (see the team's deployment notes) |
 
@@ -687,6 +702,9 @@ This source file is detailed on purpose. The guideline people read should be sho
 
 | Date | Change | Sections |
 |---|---|---|
+| 2026-11-27 | BASTP list: Category column and chips (Docking, Repair, New Building) worked out from the work orders behind each BASTP, for new and old BASTPs alike. | 6.9 |
+| 2026-11-26 | BASTP general services: New Building Report added (lump sum, like Docking Report / SN, listed right after it); migration `20261126110000_add_new_building_report_service.sql`. | 6.9 |
+| 2026-11-26 | New Building overview page added (menu group New Building, `/new-building`): vessels built at the shipyard with their projects, work orders, progress and billing stage, plus a shortcut to start a New Building project. | 4.2, 6.18, 10 |
 | 2026-11-26 | BASTP general services: two date-only services added, Keel Laying and Launching (one date each, no days, quantity or price, never on the invoice). New unit type `date` in `general_service_types`; migration `20261126100000_add_keel_laying_launching_services.sql`. | 6.9 |
 | 2026-11-25 | Presentation mode added to the guide (Panduan Pengguna, button "Mode presentasi"; `/guide/present`): full-screen slides in Indonesian, one deck per role, an overview deck and an all-topics deck, built from the same topics as the step pages. | 10, 12 |
 | 2026-11-25 | Docking Plans list: added a "Checked by" column next to Status with PPIC and HSSE tags for every plan; the same tags show on the plan page. | 6.1 |

@@ -1,10 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ReturnTarget } from "../../types/navigation";
 import { supabase } from "../../lib/supabase";
 import type { BASTPWithDetails, BASTPStatus } from "../../types/bastp.types";
 import { useAuth } from "../../hooks/useAuth";
 import { isFreshWaterOnly } from "../../utils/generalServices";
+import {
+  WORK_TYPE_GROUP_STYLE,
+  workTypeGroupsOf,
+  type WorkTypeGroup,
+} from "../../constants/workTypes";
 import {
   getLatestVerificationByWorkDetails,
   isApproved,
@@ -33,7 +38,10 @@ export interface BastpListView {
   pageTab: PageTab;
   searchTerm?: string;
   statusFilter?: BASTPStatus | "ALL";
+  categoryFilter?: WorkTypeGroup | "ALL";
 }
+
+const CATEGORIES: WorkTypeGroup[] = ["Docking", "Repair", "New Building"];
 
 export default function BASTP() {
   const navigate = useNavigate();
@@ -53,11 +61,16 @@ export default function BASTP() {
   const [statusFilter, setStatusFilter] = useState<BASTPStatus | "ALL">(
     restoredView?.statusFilter ?? "ALL",
   );
+  const [categoryFilter, setCategoryFilter] = useState<WorkTypeGroup | "ALL">(
+    restoredView?.categoryFilter ?? "ALL",
+  );
 
   // What a BASTP opened from here should send the user back to.
   const returnToList: ReturnTarget = {
     path: "/bastp",
-    state: { bastpListView: { pageTab, searchTerm, statusFilter } },
+    state: {
+      bastpListView: { pageTab, searchTerm, statusFilter, categoryFilter },
+    },
   };
 
   const fetchBASTPs = useCallback(async () => {
@@ -96,7 +109,8 @@ export default function BASTP() {
         work_order (
           id,
           shipyard_wo_number,
-          customer_wo_number
+          customer_wo_number,
+          work_type
         )
       )
     ),
@@ -343,7 +357,24 @@ export default function BASTP() {
     );
   };
 
-  const filteredBASTPs = bastps.filter((bastp) => {
+  // The kinds of work behind each BASTP, from the work orders of its work
+  // details. Nothing is stored: old BASTPs fall into a category the same way.
+  const categoriesById = useMemo(() => {
+    const map = new Map<number, WorkTypeGroup[]>();
+    bastps.forEach((b) => {
+      map.set(
+        b.id,
+        workTypeGroupsOf(
+          (b.bastp_work_details ?? []).map(
+            (bwd) => bwd.work_details?.work_order?.work_type,
+          ),
+        ),
+      );
+    });
+    return map;
+  }, [bastps]);
+
+  const matchesStatusAndSearch = (bastp: BASTPWithDetails) => {
     const statusMatch = statusFilter === "ALL" || bastp.status === statusFilter;
     if (!statusMatch) return false;
 
@@ -355,7 +386,27 @@ export default function BASTP() {
       bastp.vessel?.name?.toLowerCase().includes(searchLower) ||
       bastp.vessel?.company?.toLowerCase().includes(searchLower)
     );
-  });
+  };
+
+  const hasCategory = (bastp: BASTPWithDetails, category: WorkTypeGroup) =>
+    (categoriesById.get(bastp.id) ?? []).includes(category);
+
+  const filteredBASTPs = bastps.filter(
+    (bastp) =>
+      matchesStatusAndSearch(bastp) &&
+      (categoryFilter === "ALL" || hasCategory(bastp, categoryFilter)),
+  );
+
+  // The number on a category chip is the number of rows it will show, with the
+  // status and search filters applied.
+  const searched = bastps.filter(matchesStatusAndSearch);
+  const categoryCounts: Record<WorkTypeGroup | "ALL", number> = {
+    ALL: searched.length,
+    Docking: searched.filter((b) => hasCategory(b, "Docking")).length,
+    Repair: searched.filter((b) => hasCategory(b, "Repair")).length,
+    "New Building": searched.filter((b) => hasCategory(b, "New Building")).length,
+  };
+  const hasMixed = bastps.some((b) => (categoriesById.get(b.id) ?? []).length > 1);
 
   const statusCounts = {
     ALL: bastps.length,
@@ -501,6 +552,53 @@ export default function BASTP() {
             </select>
           </div>
         </div>
+
+        <div className="mt-4">
+          <p
+            id="bastp-category-label"
+            className="text-sm font-medium text-gray-700 mb-2"
+          >
+            Category
+          </p>
+          <div
+            role="group"
+            aria-labelledby="bastp-category-label"
+            className="flex flex-wrap gap-2"
+          >
+            {(
+              [
+                { key: "ALL", label: "All" },
+                ...CATEGORIES.map((c) => ({ key: c, label: c })),
+              ] as { key: WorkTypeGroup | "ALL"; label: string }[]
+            ).map((chip) => (
+              <button
+                key={chip.key}
+                type="button"
+                aria-pressed={categoryFilter === chip.key}
+                onClick={() => setCategoryFilter(chip.key)}
+                className={`inline-flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors sm:min-h-10 ${
+                  categoryFilter === chip.key
+                    ? "border-blue-950 bg-blue-950 text-white"
+                    : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+                }`}
+              >
+                {chip.label}
+                <span
+                  className={`tabular-nums ${
+                    categoryFilter === chip.key ? "text-blue-100" : "text-slate-600"
+                  }`}
+                >
+                  {categoryCounts[chip.key]}
+                </span>
+              </button>
+            ))}
+          </div>
+          {hasMixed && (
+            <p className="mt-2 text-xs text-gray-600">
+              A BASTP with work of two kinds is counted under both.
+            </p>
+          )}
+        </div>
       </div>
 
       {/* BASTP Table */}
@@ -515,6 +613,9 @@ export default function BASTP() {
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Vessel
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Category
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date
@@ -548,6 +649,22 @@ export default function BASTP() {
                       <div className="text-sm text-gray-500">
                         {bastp.vessel?.type} • {bastp.vessel?.company}
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {(categoriesById.get(bastp.id) ?? []).length === 0 ? (
+                        <span className="text-sm text-gray-400">-</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {(categoriesById.get(bastp.id) ?? []).map((c) => (
+                            <span
+                              key={c}
+                              className={`px-2 py-1 text-xs font-medium rounded ${WORK_TYPE_GROUP_STYLE[c]}`}
+                            >
+                              {c}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatDate(bastp.date)}
