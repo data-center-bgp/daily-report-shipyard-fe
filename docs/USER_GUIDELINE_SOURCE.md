@@ -350,7 +350,7 @@ Each approval backs exactly one work order.
 
 ### 6.6 Work Details
 
-**Menu.** Docking & Repair, Work Details (`/work-details`, "Work Order Details"); New Building has its own (`/new-building/work-details`, see 6.18). A paged, searchable, sortable table with filters for vessel, project, work order, work scope, location and additional yes/no. Rows expand for full information.
+**Menu.** Docking & Repair, Work Details (`/work-details`, "Work Order Details"); New Building has its own (`/new-building/work-details`, see 6.18). A paged ledger table, laid out like Projects: a search box, filters for project, vessel, work order, work scope, location and additional yes/no (the project, vessel and work order boxes suggest matches as you type; arrow keys and Enter pick one; the work order box waits for a project or vessel), a "Clear filters" button, and a count line ("N work details"). Column headings sort (on a phone a "Sort by" menu does). Each row shows the description with tags (PIC, Additional work, Needs rework, Cancelled), scope, location, SPK / SPKK, quantity, schedule and a progress bar that also says Done or Not started. The arrow at the start of a row expands it to the full description, work order, document numbers, schedule and progress, with the actions (view permit, view progress, add progress, cancel). Edit and Delete sit at the end of the row; Delete and Cancel open a dialog (Escape closes it).
 
 **Add** (PPIC, MASTER, ADMIN_SHIPPING).
 1. Choose the work order (search by WO number, customer WO number or vessel).
@@ -372,7 +372,7 @@ Each approval backs exactly one work order.
 
 ### 6.7 Work Progress
 
-**Menu.** Docking & Repair, Work Progress (`/work-progress`); New Building has its own (`/new-building/work-progress`, see 6.18). Every progress report is a row. Filters: vessel, project, work order, work type, location, Kapro, additional, and text search.
+**Menu.** Docking & Repair, Work Progress (`/work-progress`); New Building has its own (`/new-building/work-progress`, see 6.18). Every progress report is a row, newest first, in the same ledger style: a search box (description, PIC, notes) always visible, and a "More filters" button that opens vessel, project, shipyard WO, customer WO, work type, work location, Kapro and additional. Active filters show as chips that can be removed one by one. Each row shows the percent as a bar, the work detail with tags (Complete, Needs rework, location), vessel and work order, report date, notes ("Read all" opens long ones in a dialog), who reported it and when, evidence, and Edit. "Add report" under the bar starts the next report for that work detail.
 
 **Add** (PRODUCTION, MASTER).
 1. Choose the work order, then the work detail. Work details already at 100% are hidden unless sent back for rework.
@@ -642,7 +642,7 @@ Dates typed or imported are always `YYYY-MM-DD`.
 | Import and export | `src/utils/importHandler.ts`, `src/utils/exportHandler.ts` |
 | Database changes | `supabase/migrations/` (schema `daily_report_shipyard`) |
 | In-app user guide (written in Indonesian) | `src/content/guide/` (topics and role paths), `src/components/guide/` (pages), menu item "Panduan Pengguna" in `Layout.tsx`, routes `/guide` and `/guide/:topicId` in `App.tsx` |
-| New Building overview | `src/components/newBuilding/NewBuildingPage.tsx` (page), `src/utils/newBuilding.ts` (grouping and the progress, late and BASTP rules), menu group in `Layout.tsx`, feature `newBuilding` in `useAuth.tsx`, route `/new-building` in `App.tsx`. The per-section lists: `src/hooks/useWorkSection.ts` (which section a page belongs to, the list path to return to, the database filters), routes `/new-building/work-orders`, `/new-building/work-details` and `/new-building/work-progress` in `App.tsx` (the same components as the Docking & Repair lists, filtered in `WorkOrderDashboard.tsx`, `WODetailsTable.tsx` and `WorkProgressTable.tsx`) |
+| New Building overview | `src/components/newBuilding/NewBuildingPage.tsx` (page), `src/utils/newBuilding.ts` (grouping and the progress, late and BASTP rules), menu group in `Layout.tsx`, feature `newBuilding` in `useAuth.tsx`, route `/new-building` in `App.tsx`. The shared look of the redesigned list pages (buttons, fields, dialog, suggesting dropdown, progress bar): `src/components/common/ledgerUi.tsx`, used by `WODetailsTable.tsx` and `WorkProgressTable.tsx`. The per-section lists: `src/hooks/useWorkSection.ts` (which section a page belongs to, the list path to return to, the database filters), routes `/new-building/work-orders`, `/new-building/work-details` and `/new-building/work-progress` in `App.tsx` (the same components as the Docking & Repair lists, filtered in `WorkOrderDashboard.tsx`, `WODetailsTable.tsx` and `WorkProgressTable.tsx`) |
 | Presentation mode of the guide (slides, Indonesian) | `src/content/guide/deck.ts` (decks and slides, cut from the topics; only the overview deck is hand-written), `src/components/guide/GuidePresentHome.tsx` (choose a deck), `GuidePresenter.tsx` (the slide viewer, keys, lists), `GuideSlides.tsx` (how each kind of slide looks), `ShipScene.tsx` (the ship and water from the sign-in page); routes `/guide/present` and `/guide/present/:deckId?slide=N` in `App.tsx` |
 | Deploying | Push, then run the deploy command on the VPS (see the team's deployment notes) |
 
@@ -709,6 +709,7 @@ This source file is detailed on purpose. The guideline people read should be sho
 
 | Date | Change | Sections |
 |---|---|---|
+| 2026-11-27 | Work Details and Work Progress pages redesigned in the Projects style: page header with Refresh and Add, search and filters panel (suggesting dropdowns, clear filters, count line, filter chips), ledger tables that turn into cards on a phone, tags and a progress bar with words, native dialogs for delete, cancel and long notes, shared pagination. Same data and rules. | 6.6, 6.7, 10 |
 | 2026-11-27 | New Building has its own Work Orders, Work Details and Work Progress lists; the Operations menu group is now "Docking & Repair" (those three lists, without new building work) and Projects sits under Dashboard. Add, edit and vessel pages stay shared and return to the list they were opened from. | 4.2, 6.2, 6.4, 6.6, 6.7, 6.18, 10 |
 | 2026-11-27 | BASTP list: Category column and chips (Docking, Repair, New Building) worked out from the work orders behind each BASTP, for new and old BASTPs alike. | 6.9 |
 | 2026-11-26 | BASTP general services: New Building Report added (lump sum, like Docking Report / SN, listed right after it); migration `20261126110000_add_new_building_report_service.sql`. | 6.9 |

@@ -28,32 +28,40 @@ import {
   Ship,
   FileText,
   User,
-  MapPin,
   Edit,
   Trash2,
   ChevronRight,
-  CheckCircle2,
-  Circle,
   AlertTriangle,
-  X,
   RefreshCw,
   Plus,
   Wrench,
-  HardHat,
   BarChart3,
   Calendar,
   ClipboardList,
-  ArrowLeft,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
   Search,
   FileCheck,
-  FolderKanban,
   Undo2,
   Ban,
+  Loader2,
 } from "lucide-react";
 import { TableSkeleton } from "../common/Skeleton";
+import Pagination from "../common/Pagination";
+import {
+  Dialog,
+  FilterCombo,
+  ProgressMeter,
+  dangerButton,
+  dangerOutlineButton,
+  fieldClass,
+  iconButton,
+  labelClass,
+  primaryButton,
+  secondaryButton,
+  tagBase,
+} from "../common/ledgerUi";
 
 interface ProjectOption {
   id: number;
@@ -368,8 +376,6 @@ export default function WODetailsTable({
 
   // Pagination calculations. Filtering, sorting and slicing all happen in the
   // query now, so workDetails already *is* the current page.
-  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const currentWorkDetails = workDetails;
 
   // Filter vessels for search dropdown
@@ -793,8 +799,8 @@ export default function WODetailsTable({
     });
   };
 
-  const handleVesselSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setVesselSearchTerm(e.target.value);
+  const handleVesselSearch = (value: string) => {
+    setVesselSearchTerm(value);
     setShowVesselDropdown(true);
     if (selectedVesselId) {
       setSelectedVesselId(0);
@@ -848,8 +854,8 @@ export default function WODetailsTable({
     }
   };
 
-  const handleProjectSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setProjectSearchTerm(e.target.value);
+  const handleProjectSearch = (value: string) => {
+    setProjectSearchTerm(value);
     setShowProjectDropdown(true);
     if (selectedProjectId) {
       setSelectedProjectId(0);
@@ -901,8 +907,8 @@ export default function WODetailsTable({
     }
   };
 
-  const handleWorkOrderSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setWorkOrderSearchTerm(e.target.value);
+  const handleWorkOrderSearch = (value: string) => {
+    setWorkOrderSearchTerm(value);
     setShowWorkOrderDropdown(true);
     if (selectedWorkOrderId) {
       setSelectedWorkOrderId(0);
@@ -1240,33 +1246,13 @@ export default function WODetailsTable({
     });
   };
 
-  const getProgressColor = (progress: number) => {
-    if (progress >= 100) return "bg-green-500";
-    if (progress >= 75) return "bg-blue-500";
-    if (progress >= 50) return "bg-yellow-500";
-    if (progress >= 25) return "bg-orange-500";
-    return "bg-red-500";
-  };
-
-  const getProgressIcon = (progress: number) => {
-    if (progress >= 100)
-      return <CheckCircle2 className="w-4 h-4 text-green-600" />;
-    if (progress >= 75)
-      return <Circle className="w-4 h-4 text-blue-600 fill-blue-600" />;
-    if (progress >= 50)
-      return <Circle className="w-4 h-4 text-yellow-600 fill-yellow-600" />;
-    if (progress >= 25)
-      return <Circle className="w-4 h-4 text-orange-600 fill-orange-600" />;
-    return <Circle className="w-4 h-4 text-red-600 fill-red-600" />;
-  };
-
   const getSortIcon = (field: string) => {
     if (sortField !== field)
-      return <ArrowUpDown className="w-4 h-4 inline ml-1" />;
+      return <ArrowUpDown className="h-4 w-4" aria-hidden="true" />;
     return sortDirection === "asc" ? (
-      <ArrowUp className="w-4 h-4 inline ml-1" />
+      <ArrowUp className="h-4 w-4" aria-hidden="true" />
     ) : (
-      <ArrowDown className="w-4 h-4 inline ml-1" />
+      <ArrowDown className="h-4 w-4" aria-hidden="true" />
     );
   };
 
@@ -1511,229 +1497,242 @@ export default function WODetailsTable({
 
   // ==================== RENDER COMPONENTS ====================
 
+  const hasActiveFilters =
+    selectedVesselId > 0 ||
+    selectedProjectId > 0 ||
+    selectedWorkOrderId > 0 ||
+    selectedWorkScopeId > 0 ||
+    selectedLocationId > 0 ||
+    additionalWoFilter !== "" ||
+    workDetailsSearchTerm.trim() !== "";
+
+  const clearAllFilters = () => {
+    setSelectedVesselId(0);
+    setVesselSearchTerm("");
+    setSelectedProjectId(0);
+    setProjectSearchTerm("");
+    setSelectedWorkOrderId(0);
+    setWorkOrderSearchTerm("");
+    setSelectedWorkScopeId(0);
+    setSelectedLocationId(0);
+    setAdditionalWoFilter("");
+    setWorkDetailsSearchTerm("");
+    setSelectedWorkOrderDetails(null);
+    setWorkOrders([]);
+    setCurrentPage(1);
+    updateUrlParams({
+      vesselId: null,
+      vesselSearch: null,
+      projectId: null,
+      projectSearch: null,
+      workOrderId: null,
+      woSearch: null,
+      workScopeId: null,
+      locationId: null,
+      additionalWo: null,
+      search: null,
+      page: 1,
+    });
+  };
+
+  // A sortable column heading: a real button, with the sort state announced.
+  const sortableHeading = (label: string, field: WorkDetailsSortField) => (
+    <th
+      scope="col"
+      aria-sort={
+        sortField === field
+          ? sortDirection === "asc"
+            ? "ascending"
+            : "descending"
+          : undefined
+      }
+      className="px-4 py-1 text-left text-sm font-semibold text-slate-700"
+    >
+      <button
+        type="button"
+        onClick={() => handleSort(field)}
+        className="-ml-2 inline-flex min-h-10 items-center gap-1 whitespace-nowrap rounded-md px-2 font-semibold hover:bg-slate-100"
+      >
+        {label} {getSortIcon(field)}
+      </button>
+    </th>
+  );
+
+  const plainHeading = (label: string) => (
+    <th
+      scope="col"
+      className="whitespace-nowrap px-4 py-3 text-left text-sm font-semibold text-slate-700"
+    >
+      {label}
+    </th>
+  );
+
   const renderTableHeader = () => (
-    <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+    <thead className="bg-slate-50">
       <tr>
-        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-          Details
-        </th>
-        <th
-          onClick={() => handleSort("work_scope")}
-          className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
-        >
-          Work Scope {getSortIcon("work_scope")}
-        </th>
-        <th
-          onClick={() => handleSort("location")}
-          className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
-        >
-          Location {getSortIcon("location")}
-        </th>
-        <th
-          onClick={() => handleSort("description")}
-          className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
-        >
-          Description {getSortIcon("description")}
-        </th>
-        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-          SPK & SPKK
-        </th>
-        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-          Quantity
-        </th>
-        <th
-          onClick={() => handleSort("target_close_date")}
-          className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
-        >
-          Start / Target {getSortIcon("target_close_date")}
-        </th>
-        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-          Progress
-        </th>
-        {canEditWorkDetails && (
-          <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
-            Actions
-          </th>
-        )}
+        {sortableHeading("Work detail", "description")}
+        {sortableHeading("Work scope", "work_scope")}
+        {sortableHeading("Location", "location")}
+        {plainHeading("SPK / SPKK")}
+        {plainHeading("Quantity")}
+        {sortableHeading("Schedule", "target_close_date")}
+        {plainHeading("Progress")}
+        {canEditWorkDetails && plainHeading("Actions")}
       </tr>
     </thead>
   );
 
+  const detailTerm = "text-sm text-slate-600";
+  const detailValue = "text-sm font-medium text-slate-900";
+
   const renderTableRow = (detail: WorkDetailsWithWorkOrder) => {
     const isExpanded = expandedRows.has(detail.id);
+    const panelId = `wd-detail-${detail.id}`;
+    const columnCount = canEditWorkDetails ? 8 : 7;
 
     return (
       // Two sibling rows (main + expandable), so the list key has to sit on
-      // the fragment itself — a key on the inner <tr> doesn't count.
+      // the fragment itself; a key on the inner <tr> doesn't count.
       <Fragment key={detail.id}>
-        <tr className="hover:bg-gray-50 transition-colors">
-          <td className="px-6 py-4">
-            <button
-              onClick={() => toggleRowExpansion(detail.id)}
-              className="flex items-center gap-2 text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
-              aria-label={isExpanded ? "Hide details" : "Show details"}
-            >
-              <ChevronRight
-                className={`w-5 h-5 transform transition-transform duration-200 ${
-                  isExpanded ? "rotate-90" : ""
-                }`}
-              />
-              <span className="text-xs text-gray-500">
-                {isExpanded ? "Hide" : "Show"}
-              </span>
-            </button>
-          </td>
-
-          <td className="px-6 py-4 whitespace-nowrap">
-            <div className="text-sm">
-              <div className="font-medium text-gray-900">
-                {detail.work_scope?.work_scope || "N/A"}
-              </div>
-            </div>
-          </td>
-
-          <td className="px-6 py-4 whitespace-nowrap">
-            <div className="text-sm text-gray-900">
-              {detail.location?.location || (
-                <span className="text-gray-400">N/A</span>
-              )}
-            </div>
-          </td>
-
-          <td className="px-6 py-4">
-            <div className="max-w-md">
-              <div className="text-sm text-gray-900" title={detail.description}>
-                {detail.description.length > 80
-                  ? `${detail.description.substring(0, 80)}...`
-                  : detail.description}
-              </div>
-              <div className="flex flex-wrap gap-1 mt-1">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                  <User className="w-3 h-3" /> {detail.pic || "Not assigned"}
-                </span>
-                {detail.is_additional_wo_details && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
-                    <AlertTriangle className="w-3 h-3" /> Additional Work
+        <tr
+          className={`align-top transition-colors hover:bg-slate-50 ${
+            detail.cancelled_at ? "bg-slate-50" : ""
+          }`}
+        >
+          <td className="px-4 py-3">
+            <div className="flex items-start gap-1">
+              <button
+                type="button"
+                onClick={() => toggleRowExpansion(detail.id)}
+                aria-expanded={isExpanded}
+                aria-controls={panelId}
+                aria-label={`${isExpanded ? "Hide" : "Show"} details of ${detail.description}`}
+                className={`${iconButton} -ml-2 flex-shrink-0`}
+              >
+                <ChevronRight
+                  className={`h-5 w-5 transition-transform ${
+                    isExpanded ? "rotate-90" : ""
+                  }`}
+                  aria-hidden="true"
+                />
+              </button>
+              <div className="min-w-0 pt-2">
+                <p
+                  className="line-clamp-2 text-sm font-medium text-slate-900"
+                  title={detail.description}
+                >
+                  {detail.description}
+                </p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  <span className={`${tagBase} bg-slate-100 text-slate-800`}>
+                    <User className="h-3.5 w-3.5" aria-hidden="true" />
+                    {detail.pic || "No PIC"}
                   </span>
-                )}
-                {detail.isOpenForRework && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">
-                    <Undo2 className="w-3 h-3" /> Needs Rework
-                  </span>
-                )}
-                {detail.cancelled_at && (
-                  <span
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-600"
-                    title={
-                      detail.cancellation_reason
-                        ? `Reason: ${detail.cancellation_reason}`
-                        : undefined
-                    }
-                  >
-                    <Ban className="w-3 h-3" /> Cancelled
-                  </span>
-                )}
-              </div>
-            </div>
-          </td>
-
-          <td className="px-6 py-4">
-            <div className="text-sm space-y-1">
-              {detail.spk_number && (
-                <div className="flex items-baseline gap-1">
-                  <span className="text-xs text-gray-500 min-w-[40px]">
-                    SPK:
-                  </span>
-                  <span className="font-medium text-gray-900">
-                    {detail.spk_number}
-                  </span>
-                </div>
-              )}
-              {detail.spkk_number && (
-                <div className="flex items-baseline gap-1">
-                  <span className="text-xs text-gray-500 min-w-[40px]">
-                    SPKK:
-                  </span>
-                  <span className="font-medium text-gray-900">
-                    {detail.spkk_number}
-                  </span>
-                </div>
-              )}
-              {!detail.spk_number && !detail.spkk_number && (
-                <span className="text-gray-400 text-xs">Not set</span>
-              )}
-            </div>
-          </td>
-
-          <td className="px-6 py-4 whitespace-nowrap">
-            <div className="text-sm">
-              <div className="font-bold text-blue-900 text-base">
-                {detail.quantity || 0}
-              </div>
-              <div className="text-xs text-blue-700 font-medium">
-                {detail.uom || "N/A"}
-              </div>
-            </div>
-          </td>
-
-          <td className="px-6 py-4 whitespace-nowrap">
-            <div className="text-sm space-y-1">
-              <div className="flex items-center gap-1 text-gray-900">
-                <span className="text-xs text-gray-500">Start:</span>
-                <span className="font-medium">
-                  {formatDate(detail.planned_start_date)}
-                </span>
-              </div>
-              <div className="flex items-center gap-1 text-gray-900">
-                <span className="text-xs text-gray-500">Target:</span>
-                <span className="font-medium">
-                  {formatDate(detail.target_close_date)}
-                </span>
-              </div>
-            </div>
-          </td>
-
-          <td className="px-6 py-4 whitespace-nowrap">
-            <div className="flex items-center gap-2">
-              <div className="flex-1 min-w-[80px]">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-gray-700">
-                    {detail.current_progress || 0}%
-                  </span>
-                  <span className="text-xs">
-                    {getProgressIcon(detail.current_progress || 0)}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(
-                      detail.current_progress || 0,
-                    )}`}
-                    style={{ width: `${detail.current_progress || 0}%` }}
-                  ></div>
+                  {detail.is_additional_wo_details && (
+                    <span className={`${tagBase} bg-orange-50 text-orange-900`}>
+                      <AlertTriangle
+                        className="h-3.5 w-3.5"
+                        aria-hidden="true"
+                      />
+                      Additional work
+                    </span>
+                  )}
+                  {detail.isOpenForRework && (
+                    <span className={`${tagBase} bg-red-50 text-red-800`}>
+                      <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      Needs rework
+                    </span>
+                  )}
+                  {detail.cancelled_at && (
+                    <span
+                      className={`${tagBase} bg-slate-200 text-slate-800`}
+                      title={
+                        detail.cancellation_reason
+                          ? `Reason: ${detail.cancellation_reason}`
+                          : undefined
+                      }
+                    >
+                      <Ban className="h-3.5 w-3.5" aria-hidden="true" />
+                      Cancelled
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
+          </td>
+
+          <td data-label="Work scope" className="px-4 py-3 pt-5 text-sm text-slate-900">
+            {detail.work_scope?.work_scope || (
+              <span className="text-slate-600">None</span>
+            )}
+          </td>
+
+          <td data-label="Location" className="px-4 py-3 pt-5 text-sm text-slate-900">
+            {detail.location?.location || (
+              <span className="text-slate-600">None</span>
+            )}
+          </td>
+
+          <td data-label="SPK / SPKK" className="px-4 py-3 pt-5 text-sm">
+            {detail.spk_number || detail.spkk_number ? (
+              <div className="space-y-0.5 text-slate-900">
+                {detail.spk_number && <div>SPK {detail.spk_number}</div>}
+                {detail.spkk_number && <div>SPKK {detail.spkk_number}</div>}
+              </div>
+            ) : (
+              <span className="text-slate-600">Not set</span>
+            )}
+          </td>
+
+          <td
+            data-label="Quantity"
+            className="whitespace-nowrap px-4 py-3 pt-5 text-sm tabular-nums text-slate-900"
+          >
+            {detail.quantity || 0}{" "}
+            <span className="text-slate-600">{detail.uom || ""}</span>
+          </td>
+
+          <td
+            data-label="Schedule"
+            className="whitespace-nowrap px-4 py-3 pt-5 text-sm text-slate-900"
+          >
+            <div>
+              <span className="text-slate-600">Start </span>
+              {formatDate(detail.planned_start_date)}
+            </div>
+            <div>
+              <span className="text-slate-600">Target </span>
+              {formatDate(detail.target_close_date)}
+            </div>
+          </td>
+
+          <td data-label="Progress" className="px-4 py-3 pt-5">
+            <ProgressMeter
+              value={detail.current_progress || 0}
+              label={`Progress of ${detail.description}`}
+            />
           </td>
 
           {canEditWorkDetails && (
-            <td className="px-6 py-4 whitespace-nowrap text-center">
-              <div className="flex justify-center gap-2">
+            <td className="whitespace-nowrap px-4 py-3">
+              <div className="flex justify-end gap-1 md:justify-start">
                 <button
+                  type="button"
                   onClick={() => handleEditWorkDetails(detail.id)}
-                  className="text-blue-600 hover:text-blue-900 transition-colors p-1 rounded hover:bg-blue-50"
                   title="Edit"
                   aria-label={`Edit ${detail.description}`}
+                  className={`${iconButton} text-blue-800`}
                 >
-                  <Edit className="w-4 h-4" />
+                  <Edit className="h-4 w-4" aria-hidden="true" />
                 </button>
                 <button
+                  type="button"
                   onClick={() => handleDeleteWorkDetails(detail)}
-                  className="text-red-600 hover:text-red-900 transition-colors p-1 rounded hover:bg-red-50"
                   title="Delete"
                   aria-label={`Delete ${detail.description}`}
+                  className={`${iconButton} text-red-800 hover:bg-red-50`}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
             </td>
@@ -1741,207 +1740,200 @@ export default function WODetailsTable({
         </tr>
 
         {isExpanded && (
-          <tr className="bg-gray-50 animate-in fade-in slide-in-from-top-2 duration-300">
-            <td colSpan={canEditWorkDetails ? 9 : 8} className="px-0 py-0">
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-t border-b border-blue-200">
-                <div className="px-6 py-4 transition-all duration-300 ease-in-out">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {/* Full Description */}
-                    <div className="lg:col-span-2">
-                      <label className="flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase mb-2">
-                        <ClipboardList className="w-4 h-4" /> Full Description
-                      </label>
-                      <p className="text-sm text-gray-900 bg-white p-3 rounded-lg border border-gray-200">
-                        {detail.description}
-                      </p>
-                    </div>
+          <tr>
+            <td colSpan={columnCount} id={panelId} className="p-0">
+              <div className="border-t border-slate-200 bg-slate-50 px-4 py-4 sm:px-6">
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  <section className="lg:col-span-3">
+                    <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <ClipboardList className="h-4 w-4" aria-hidden="true" />
+                      Full description
+                    </h3>
+                    <p className="max-w-4xl whitespace-pre-line text-sm text-slate-900">
+                      {detail.description}
+                    </p>
+                  </section>
 
-                    {/* Work Order Info */}
-                    <div>
-                      <label className="flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase mb-2">
-                        <FileText className="w-4 h-4" /> Work Order
-                      </label>
-                      <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-1">
-                        <div className="text-sm font-medium text-gray-900">
-                          {detail.work_order?.shipyard_wo_number || "N/A"}
-                        </div>
-                        {detail.work_order?.customer_wo_number && (
-                          <div className="text-xs text-gray-600">
-                            Customer: {detail.work_order.customer_wo_number}
-                          </div>
-                        )}
-                        {detail.work_order?.vessel && (
-                          <div className="flex items-center gap-1 text-xs text-gray-600">
-                            <Ship className="w-3 h-3" />{" "}
-                            {detail.work_order.vessel.name}
-                          </div>
-                        )}
+                  <section>
+                    <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <FileText className="h-4 w-4" aria-hidden="true" />
+                      Work order
+                    </h3>
+                    <dl className="space-y-1">
+                      <div>
+                        <dt className={detailTerm}>Shipyard WO</dt>
+                        <dd className={detailValue}>
+                          {detail.work_order?.shipyard_wo_number || "None"}
+                        </dd>
                       </div>
-                    </div>
+                      {detail.work_order?.customer_wo_number && (
+                        <div>
+                          <dt className={detailTerm}>Customer WO</dt>
+                          <dd className={detailValue}>
+                            {detail.work_order.customer_wo_number}
+                          </dd>
+                        </div>
+                      )}
+                      {detail.work_order?.vessel && (
+                        <div>
+                          <dt className={detailTerm}>Vessel</dt>
+                          <dd className={detailValue}>
+                            {detail.work_order.vessel.name}
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                  </section>
 
-                    {/* Document Numbers */}
-                    <div>
-                      <label className="flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase mb-2">
-                        <FileCheck className="w-4 h-4" /> Document Numbers
-                      </label>
-                      <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-2">
+                  <section>
+                    <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <FileCheck className="h-4 w-4" aria-hidden="true" />
+                      Document numbers
+                    </h3>
+                    {detail.spk_number ||
+                    detail.spkk_number ||
+                    detail.ptw_number ? (
+                      <dl className="space-y-1">
                         {detail.spk_number && (
-                          <div className="text-sm">
-                            <span className="text-xs text-gray-500">SPK:</span>{" "}
-                            <span className="font-medium text-gray-900">
-                              {detail.spk_number}
-                            </span>
+                          <div>
+                            <dt className={detailTerm}>SPK</dt>
+                            <dd className={detailValue}>{detail.spk_number}</dd>
                           </div>
                         )}
                         {detail.spkk_number && (
-                          <div className="text-sm">
-                            <span className="text-xs text-gray-500">SPKK:</span>{" "}
-                            <span className="font-medium text-gray-900">
-                              {detail.spkk_number}
-                            </span>
+                          <div>
+                            <dt className={detailTerm}>SPKK</dt>
+                            <dd className={detailValue}>{detail.spkk_number}</dd>
                           </div>
                         )}
                         {detail.ptw_number && (
-                          <div className="text-sm">
-                            <span className="text-xs text-gray-500">PTW:</span>{" "}
-                            <span className="font-medium text-gray-900">
-                              {detail.ptw_number}
-                            </span>
+                          <div>
+                            <dt className={detailTerm}>PTW</dt>
+                            <dd className={detailValue}>{detail.ptw_number}</dd>
                           </div>
                         )}
-                        {!detail.spk_number &&
-                          !detail.spkk_number &&
-                          !detail.ptw_number && (
-                            <div className="text-sm text-gray-500">
-                              No documents
-                            </div>
-                          )}
-                      </div>
-                    </div>
-
-                    {/* Dates */}
-                    <div>
-                      <label className="flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase mb-2">
-                        <Calendar className="w-4 h-4" /> Schedule
-                      </label>
-                      <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-2">
-                        <div className="text-sm">
-                          <span className="text-xs text-gray-500">
-                            Planned Start:
-                          </span>{" "}
-                          <span className="font-medium text-gray-900">
-                            {formatDate(detail.planned_start_date)}
-                          </span>
-                        </div>
-                        <div className="text-sm">
-                          <span className="text-xs text-gray-500">
-                            Target Close:
-                          </span>{" "}
-                          <span className="font-medium text-gray-900">
-                            {formatDate(detail.target_close_date)}
-                          </span>
-                        </div>
-                        {detail.actual_start_date && (
-                          <div className="text-sm">
-                            <span className="text-xs text-gray-500">
-                              Actual Start:
-                            </span>{" "}
-                            <span className="font-medium text-green-700">
-                              {formatDate(detail.actual_start_date)}
-                            </span>
-                          </div>
-                        )}
-                        {detail.actual_close_date && (
-                          <div className="text-sm">
-                            <span className="text-xs text-gray-500">
-                              Actual Close:
-                            </span>{" "}
-                            <span className="font-medium text-green-700">
-                              {formatDate(detail.actual_close_date)}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Progress Info */}
-                    <div>
-                      <label className="flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase mb-2">
-                        <BarChart3 className="w-4 h-4" /> Progress Status
-                      </label>
-                      <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-2">
-                        <div className="text-sm">
-                          <span className="text-xs text-gray-500">
-                            Current:
-                          </span>{" "}
-                          <span className="font-bold text-blue-700">
-                            {detail.current_progress || 0}%
-                          </span>
-                        </div>
-                        {detail.latest_progress_date && (
-                          <div className="text-sm">
-                            <span className="text-xs text-gray-500">
-                              Last Update:
-                            </span>{" "}
-                            <span className="font-medium text-gray-900">
-                              {formatDate(detail.latest_progress_date)}
-                            </span>
-                          </div>
-                        )}
-                        <div className="text-sm">
-                          <span className="text-xs text-gray-500">
-                            Reports:
-                          </span>{" "}
-                          <span className="font-medium text-gray-900">
-                            {detail.progress_count || 0} entries
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="mt-6 pt-4 border-t border-blue-200 flex flex-wrap gap-2">
-                    {detail.storage_path && (
-                      <button
-                        onClick={() => handleViewPermit(detail)}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm"
-                      >
-                        <FileCheck className="w-4 h-4" /> View Work Permit
-                      </button>
+                      </dl>
+                    ) : (
+                      <p className={detailTerm}>No documents</p>
                     )}
+                  </section>
+
+                  <section>
+                    <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <Calendar className="h-4 w-4" aria-hidden="true" />
+                      Schedule
+                    </h3>
+                    <dl className="space-y-1">
+                      <div>
+                        <dt className={detailTerm}>Planned start</dt>
+                        <dd className={detailValue}>
+                          {formatDate(detail.planned_start_date)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className={detailTerm}>Target close</dt>
+                        <dd className={detailValue}>
+                          {formatDate(detail.target_close_date)}
+                        </dd>
+                      </div>
+                      {detail.actual_start_date && (
+                        <div>
+                          <dt className={detailTerm}>Actual start</dt>
+                          <dd className={detailValue}>
+                            {formatDate(detail.actual_start_date)}
+                          </dd>
+                        </div>
+                      )}
+                      {detail.actual_close_date && (
+                        <div>
+                          <dt className={detailTerm}>Actual close</dt>
+                          <dd className={detailValue}>
+                            {formatDate(detail.actual_close_date)}
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                  </section>
+
+                  <section>
+                    <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <BarChart3 className="h-4 w-4" aria-hidden="true" />
+                      Progress
+                    </h3>
+                    <dl className="space-y-1">
+                      <div>
+                        <dt className={detailTerm}>Current</dt>
+                        <dd className={`${detailValue} tabular-nums`}>
+                          {detail.current_progress || 0}%
+                        </dd>
+                      </div>
+                      {detail.latest_progress_date && (
+                        <div>
+                          <dt className={detailTerm}>Last update</dt>
+                          <dd className={detailValue}>
+                            {formatDate(detail.latest_progress_date)}
+                          </dd>
+                        </div>
+                      )}
+                      <div>
+                        <dt className={detailTerm}>Reports</dt>
+                        <dd className={`${detailValue} tabular-nums`}>
+                          {detail.progress_count || 0}
+                        </dd>
+                      </div>
+                    </dl>
+                  </section>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-200 pt-4">
+                  {detail.storage_path && (
                     <button
-                      onClick={() => handleViewProgress(detail.id)}
-                      className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 text-sm"
+                      type="button"
+                      onClick={() => handleViewPermit(detail)}
+                      className={secondaryButton}
                     >
-                      <BarChart3 className="w-4 h-4" /> View Progress (
-                      {detail.progress_count || 0})
+                      <FileCheck className="h-4 w-4" aria-hidden="true" /> View
+                      work permit
                     </button>
-                    {canWriteProgress && !detail.cancelled_at && (
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleViewProgress(detail.id)}
+                    className={secondaryButton}
+                  >
+                    <BarChart3 className="h-4 w-4" aria-hidden="true" /> View
+                    progress ({detail.progress_count || 0})
+                  </button>
+                  {canWriteProgress && !detail.cancelled_at && (
+                    <button
+                      type="button"
+                      onClick={() => handleAddProgress(detail.id)}
+                      className={primaryButton}
+                    >
+                      <Plus className="h-4 w-4" aria-hidden="true" /> Add
+                      progress
+                    </button>
+                  )}
+                  {canCancelWorkDetail &&
+                    (detail.cancelled_at ? (
                       <button
-                        onClick={() => handleAddProgress(detail.id)}
-                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm"
+                        type="button"
+                        onClick={() => handleUncancelWorkDetail(detail)}
+                        className={secondaryButton}
                       >
-                        <Plus className="w-4 h-4" /> Add Progress
+                        <Undo2 className="h-4 w-4" aria-hidden="true" />{" "}
+                        Uncancel
                       </button>
-                    )}
-                    {canCancelWorkDetail &&
-                      (detail.cancelled_at ? (
-                        <button
-                          onClick={() => handleUncancelWorkDetail(detail)}
-                          className="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm"
-                        >
-                          <Undo2 className="w-4 h-4" /> Uncancel
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleCancelWorkDetail(detail)}
-                          className="bg-white text-red-700 border border-red-300 px-4 py-2 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-2 text-sm"
-                        >
-                          <Ban className="w-4 h-4" /> Cancel Work Detail
-                        </button>
-                      ))}
-                  </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleCancelWorkDetail(detail)}
+                        className={dangerOutlineButton}
+                      >
+                        <Ban className="h-4 w-4" aria-hidden="true" /> Cancel
+                        work detail
+                      </button>
+                    ))}
                 </div>
               </div>
             </td>
@@ -1951,545 +1943,339 @@ export default function WODetailsTable({
     );
   };
 
-  const renderPagination = () => {
-    if (totalPages <= 1) return null;
-
-    const pages = [];
-    const maxVisiblePages = 5;
-    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-    const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-
-    if (endPage - startPage + 1 < maxVisiblePages) {
-      startPage = Math.max(1, endPage - maxVisiblePages + 1);
-    }
-
-    for (let i = startPage; i <= endPage; i++) {
-      pages.push(i);
-    }
-
-    return (
-      <div className="flex items-center justify-between px-6 py-3 bg-white border-t border-gray-200">
-        <div className="flex-1 flex justify-between sm:hidden">
-          <button
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
-            className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Previous
-          </button>
-          <button
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
-            className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
-        </div>
-
-        <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm text-gray-700">
-              Showing{" "}
-              <span className="font-medium">
-                {totalItems === 0 ? 0 : startIndex + 1}
-              </span>{" "}
-              to{" "}
-              <span className="font-medium">
-                {startIndex + currentWorkDetails.length}
-              </span>{" "}
-              of <span className="font-medium">{totalItems}</span> results
-              {workDetailsSearchTerm && (
-                <span className="ml-2 text-blue-600 font-medium">
-                  (matching "{workDetailsSearchTerm}")
-                </span>
-              )}
-            </p>
-          </div>
-
-          <div>
-            <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-
-              {startPage > 1 && (
-                <>
-                  <button
-                    onClick={() => handlePageChange(1)}
-                    className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    1
-                  </button>
-                  {startPage > 2 && (
-                    <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
-                      ...
-                    </span>
-                  )}
-                </>
-              )}
-
-              {pages.map((page) => (
-                <button
-                  key={page}
-                  onClick={() => handlePageChange(page)}
-                  className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                    page === currentPage
-                      ? "z-10 bg-blue-50 border-blue-500 text-blue-600"
-                      : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
-
-              {endPage < totalPages && (
-                <>
-                  {endPage < totalPages - 1 && (
-                    <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
-                      ...
-                    </span>
-                  )}
-                  <button
-                    onClick={() => handlePageChange(totalPages)}
-                    className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    {totalPages}
-                  </button>
-                </>
-              )}
-
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </nav>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderDeleteModal = () => {
+  const renderDeleteDialog = () => {
     if (!showDeleteModal || !detailToDelete) return null;
 
     return (
-      <div className="fixed inset-0 z-50 overflow-y-auto">
-        <div
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm transition-opacity"
-          onClick={cancelDelete}
-        ></div>
-
-        <div className="flex min-h-full items-center justify-center p-4">
-          <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full transform transition-all">
-            <div className="bg-red-600 px-6 py-4 rounded-t-lg">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="w-8 h-8 text-white" />
-                <h3 className="text-xl font-bold text-white">Confirm Delete</h3>
-              </div>
-            </div>
-
-            <div className="px-6 py-6">
-              <p className="text-gray-700 text-base">
-                Are you sure you want to delete this work detail?
-              </p>
-              <div className="mt-4 p-3 bg-gray-50 rounded border border-gray-200">
-                <p className="text-sm font-medium text-gray-900 line-clamp-2">
-                  {detailToDelete.description}
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 px-6 py-4 rounded-b-lg flex gap-3 justify-end">
-              <button
-                onClick={cancelDelete}
-                disabled={isDeleting}
-                className="px-5 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                disabled={isDeleting}
-                className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isDeleting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Deleting...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4" /> Delete
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <Dialog
+        title="Delete work detail"
+        icon={Trash2}
+        onClose={cancelDelete}
+        busy={isDeleting}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={cancelDelete}
+              disabled={isDeleting}
+              className={secondaryButton}
+            >
+              Keep it
+            </button>
+            <button
+              type="button"
+              onClick={confirmDelete}
+              disabled={isDeleting}
+              className={dangerButton}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2
+                    className="h-4 w-4 animate-spin"
+                    aria-hidden="true"
+                  />
+                  Deleting
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" aria-hidden="true" /> Delete
+                </>
+              )}
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-slate-700">
+          Delete this work detail? It leaves every list.
+        </p>
+        <p className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm font-medium text-slate-900">
+          {detailToDelete.description}
+        </p>
+      </Dialog>
     );
   };
 
-  const renderCancelModal = () => {
+  const renderCancelDialog = () => {
     if (!detailToCancel) return null;
 
     return (
-      <div className="fixed inset-0 z-50 overflow-y-auto">
-        <div
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm transition-opacity"
-          onClick={closeCancelModal}
-        ></div>
-
-        <div className="flex min-h-full items-center justify-center p-4">
-          <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full transform transition-all">
-            <div className="bg-red-600 px-6 py-4 rounded-t-lg">
-              <div className="flex items-center gap-3">
-                <Ban className="w-8 h-8 text-white" />
-                <h3 className="text-xl font-bold text-white">
-                  Cancel Work Detail
-                </h3>
-              </div>
-            </div>
-
-            <div className="px-6 py-6">
-              <p className="text-gray-700 text-base">
-                This removes it from the work order's progress average and
-                lets it be added to a BASTP at zero price. It can be
-                uncancelled later if needed.
-              </p>
-              <div className="mt-4 p-3 bg-gray-50 rounded border border-gray-200">
-                <p className="text-sm font-medium text-gray-900 line-clamp-2">
-                  {detailToCancel.description}
-                </p>
-              </div>
-              <label className="block text-sm font-medium text-gray-700 mt-4 mb-2">
-                Reason (optional)
-              </label>
-              <textarea
-                value={cancellationReason}
-                onChange={(e) => setCancellationReason(e.target.value)}
-                rows={3}
-                placeholder="Why is this work detail being cancelled?"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-              />
-            </div>
-
-            <div className="bg-gray-50 px-6 py-4 rounded-b-lg flex gap-3 justify-end">
-              <button
-                onClick={closeCancelModal}
-                disabled={isCancelling}
-                className="px-5 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Back
-              </button>
-              <button
-                onClick={confirmCancelWorkDetail}
-                disabled={isCancelling}
-                className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isCancelling ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Cancelling...
-                  </>
-                ) : (
-                  <>
-                    <Ban className="w-4 h-4" /> Confirm Cancel
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <Dialog
+        title="Cancel work detail"
+        icon={Ban}
+        onClose={closeCancelModal}
+        busy={isCancelling}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={closeCancelModal}
+              disabled={isCancelling}
+              className={secondaryButton}
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={confirmCancelWorkDetail}
+              disabled={isCancelling}
+              className={dangerButton}
+            >
+              {isCancelling ? (
+                <>
+                  <Loader2
+                    className="h-4 w-4 animate-spin"
+                    aria-hidden="true"
+                  />
+                  Cancelling
+                </>
+              ) : (
+                <>
+                  <Ban className="h-4 w-4" aria-hidden="true" /> Confirm cancel
+                </>
+              )}
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-slate-700">
+          This removes it from the work order's progress average and lets it be
+          added to a BASTP at zero price. It can be uncancelled later if needed.
+        </p>
+        <p className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm font-medium text-slate-900">
+          {detailToCancel.description}
+        </p>
+        <label htmlFor="wd-cancel-reason" className={`${labelClass} mt-4`}>
+          Reason (optional)
+        </label>
+        <textarea
+          id="wd-cancel-reason"
+          value={cancellationReason}
+          onChange={(e) => setCancellationReason(e.target.value)}
+          rows={3}
+          placeholder="Why is this work detail being cancelled?"
+          className={fieldClass}
+        />
+      </Dialog>
     );
   };
 
   const renderFilters = () => {
     if (workOrderId) return null;
 
+    const workOrderLocked = selectedVesselId === 0 && selectedProjectId === 0;
+
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div className="space-y-4">
-          <p className="text-xs text-gray-500">
-            Filter by project and/or vessel — either one is enough to narrow
-            down the work order list below.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4">
-            {/* Project Filter */}
-            <div className="flex-1 relative" ref={projectDropdownRef}>
-              <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
-                <FolderKanban className="w-4 h-4" /> Project
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={projectSearchTerm}
-                  onChange={handleProjectSearch}
-                  onFocus={() => setShowProjectDropdown(true)}
-                  placeholder="Search project..."
-                  disabled={loadingProjects}
-                  className="w-full px-3 py-2 pr-8 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
-                />
-                {projectSearchTerm && (
-                  <button
-                    onClick={handleClearProjectSearch}
-                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-
-              {showProjectDropdown && filteredProjectsForSearch.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {filteredProjectsForSearch.map((project) => (
-                    <div
-                      key={project.id}
-                      onClick={() => handleProjectSelectFromDropdown(project)}
-                      className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                        selectedProjectId === project.id ? "bg-blue-100" : ""
-                      }`}
-                    >
-                      <div className="font-medium text-gray-900 text-sm">
-                        {project.project_name}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Vessel Filter */}
-            <div className="flex-1 relative" ref={vesselDropdownRef}>
-              <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
-                <Ship className="w-4 h-4" /> Vessel
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={vesselSearchTerm}
-                  onChange={handleVesselSearch}
-                  onFocus={() => setShowVesselDropdown(true)}
-                  placeholder="Search vessel..."
-                  disabled={loadingVessels}
-                  className="w-full px-3 py-2 pr-8 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
-                />
-                {vesselSearchTerm && (
-                  <button
-                    onClick={handleClearVesselSearch}
-                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-
-              {showVesselDropdown && filteredVesselsForSearch.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {filteredVesselsForSearch.map((vessel) => (
-                    <div
-                      key={vessel.id}
-                      onClick={() => handleVesselSelectFromDropdown(vessel)}
-                      className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                        selectedVesselId === vessel.id ? "bg-blue-100" : ""
-                      }`}
-                    >
-                      <div className="font-medium text-gray-900 text-sm">
-                        {vessel.name}
-                      </div>
-                      <div className="text-xs text-gray-600">
-                        {vessel.type} • {vessel.company}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Work Order Filter */}
-            <div className="flex-1 relative" ref={workOrderDropdownRef}>
-              <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
-                <FileText className="w-4 h-4" /> Work Order
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={workOrderSearchTerm}
-                  onChange={handleWorkOrderSearch}
-                  onFocus={() => setShowWorkOrderDropdown(true)}
-                  placeholder={
-                    selectedVesselId === 0 && selectedProjectId === 0
-                      ? "Select project or vessel first"
-                      : "Search work order..."
-                  }
-                  disabled={
-                    loadingWorkOrders ||
-                    (selectedVesselId === 0 && selectedProjectId === 0)
-                  }
-                  className="w-full px-3 py-2 pr-8 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                />
-                {workOrderSearchTerm && (
-                  <button
-                    onClick={handleClearWorkOrderSearch}
-                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-
-              {showWorkOrderDropdown &&
-                (selectedVesselId > 0 || selectedProjectId > 0) &&
-                filteredWorkOrdersForSearch.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {filteredWorkOrdersForSearch.map((workOrder) => (
-                      <div
-                        key={workOrder.id}
-                        onClick={() =>
-                          handleWorkOrderSelectFromDropdown(workOrder)
-                        }
-                        className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                          selectedWorkOrderId === workOrder.id
-                            ? "bg-blue-100"
-                            : ""
-                        }`}
-                      >
-                        <div className="font-medium text-gray-900 text-sm">
-                          {workOrder.shipyard_wo_number}
-                        </div>
-                        {workOrder.customer_wo_number && (
-                          <div className="text-xs text-gray-600">
-                            Customer: {workOrder.customer_wo_number}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-            </div>
-
-            {/* Additional Work Filter */}
-            <div className="flex-1">
-              <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
-                <AlertTriangle className="w-4 h-4" /> Additional Work
-              </label>
-              <select
-                value={additionalWoFilter}
-                onChange={(e) => handleAdditionalWoFilterChange(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-              >
-                <option value="">All</option>
-                <option value="yes">Additional only</option>
-                <option value="no">Original only</option>
-              </select>
-            </div>
+      <section
+        aria-label="Find work details"
+        className="space-y-4 rounded-lg border border-slate-200 bg-white p-4"
+      >
+        <form role="search" onSubmit={(e) => e.preventDefault()}>
+          <label htmlFor="wd-search" className={labelClass}>
+            Search work details
+          </label>
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600"
+              aria-hidden="true"
+            />
+            <input
+              id="wd-search"
+              type="search"
+              placeholder="Description, PIC, WO number, SPK, SPKK, PTW or work scope"
+              value={workDetailsSearchTerm}
+              onChange={(e) => handleWorkDetailsSearchChange(e.target.value)}
+              className={`${fieldClass} pl-9`}
+            />
           </div>
+        </form>
 
-          <div className="flex flex-col sm:flex-row gap-4">
-            {/* Work Scope Filter */}
-            <div className="flex-1">
-              <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
-                <Wrench className="w-4 h-4" /> Work Scope
-              </label>
-              <select
-                value={selectedWorkScopeId || ""}
-                onChange={(e) => handleWorkScopeFilterChange(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-              >
-                <option value="">All Work Scopes</option>
-                {workScopes.map((ws) => (
-                  <option key={ws.id} value={ws.id}>
-                    {ws.work_scope}
-                  </option>
-                ))}
-              </select>
-            </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <FilterCombo
+            label="Project"
+            placeholder="Search project"
+            value={projectSearchTerm}
+            onInputChange={handleProjectSearch}
+            onClear={handleClearProjectSearch}
+            options={filteredProjectsForSearch.map((project) => ({
+              key: project.id,
+              label: project.project_name,
+              selected: selectedProjectId === project.id,
+            }))}
+            onSelect={(key) => {
+              const project = projects.find((p) => p.id === key);
+              if (project) handleProjectSelectFromDropdown(project);
+            }}
+            open={showProjectDropdown}
+            onOpenChange={setShowProjectDropdown}
+            disabled={loadingProjects}
+            containerRef={projectDropdownRef}
+          />
 
-            {/* Location Filter */}
-            <div className="flex-1">
-              <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
-                <MapPin className="w-4 h-4" /> Location
-              </label>
-              <select
-                value={selectedLocationId || ""}
-                onChange={(e) => handleLocationFilterChange(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-              >
-                <option value="">All Locations</option>
-                {locations.map((loc) => (
-                  <option key={loc.id} value={loc.id}>
-                    {loc.location}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+          <FilterCombo
+            label="Vessel"
+            placeholder="Search vessel"
+            value={vesselSearchTerm}
+            onInputChange={handleVesselSearch}
+            onClear={handleClearVesselSearch}
+            options={filteredVesselsForSearch.map((vessel) => ({
+              key: vessel.id,
+              label: vessel.name,
+              detail: `${vessel.type} · ${vessel.company}`,
+              selected: selectedVesselId === vessel.id,
+            }))}
+            onSelect={(key) => {
+              const vessel = vessels.find((v) => v.id === key);
+              if (vessel) handleVesselSelectFromDropdown(vessel);
+            }}
+            open={showVesselDropdown}
+            onOpenChange={setShowVesselDropdown}
+            disabled={loadingVessels}
+            containerRef={vesselDropdownRef}
+          />
 
-          {/* Work Details Search */}
+          <FilterCombo
+            label="Work order"
+            placeholder={
+              workOrderLocked
+                ? "Pick a project or vessel first"
+                : "Search work order"
+            }
+            value={workOrderSearchTerm}
+            onInputChange={handleWorkOrderSearch}
+            onClear={handleClearWorkOrderSearch}
+            options={
+              workOrderLocked
+                ? []
+                : filteredWorkOrdersForSearch.map((workOrder) => ({
+                    key: workOrder.id,
+                    label: workOrder.shipyard_wo_number,
+                    detail: workOrder.customer_wo_number
+                      ? `Customer ${workOrder.customer_wo_number}`
+                      : undefined,
+                    selected: selectedWorkOrderId === workOrder.id,
+                  }))
+            }
+            onSelect={(key) => {
+              const workOrder = workOrders.find((w) => w.id === key);
+              if (workOrder) handleWorkOrderSelectFromDropdown(workOrder);
+            }}
+            open={showWorkOrderDropdown}
+            onOpenChange={setShowWorkOrderDropdown}
+            disabled={loadingWorkOrders || workOrderLocked}
+            containerRef={workOrderDropdownRef}
+          />
+
           <div>
-            <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
-              <Search className="w-4 h-4" /> Search Work Details
+            <label htmlFor="wd-scope" className={labelClass}>
+              Work scope
             </label>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search by description, location, PIC, WO number, SPK, SPKK, PTW, work scope..."
-                value={workDetailsSearchTerm}
-                onChange={(e) => handleWorkDetailsSearchChange(e.target.value)}
-                className="w-full px-3 py-2 pr-8 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              {workDetailsSearchTerm && (
-                <button
-                  onClick={() => handleWorkDetailsSearchChange("")}
-                  className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-            {workDetailsSearchTerm && (
-              <p className="text-xs text-blue-600 mt-1">
-                Found {totalItems} work detail(s)
-              </p>
-            )}
+            <select
+              id="wd-scope"
+              value={selectedWorkScopeId || ""}
+              onChange={(e) => handleWorkScopeFilterChange(e.target.value)}
+              className={fieldClass}
+            >
+              <option value="">All work scopes</option>
+              {workScopes.map((ws) => (
+                <option key={ws.id} value={ws.id}>
+                  {ws.work_scope}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="wd-location" className={labelClass}>
+              Location
+            </label>
+            <select
+              id="wd-location"
+              value={selectedLocationId || ""}
+              onChange={(e) => handleLocationFilterChange(e.target.value)}
+              className={fieldClass}
+            >
+              <option value="">All locations</option>
+              {locations.map((loc) => (
+                <option key={loc.id} value={loc.id}>
+                  {loc.location}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="wd-additional" className={labelClass}>
+              Additional work
+            </label>
+            <select
+              id="wd-additional"
+              value={additionalWoFilter}
+              onChange={(e) => handleAdditionalWoFilterChange(e.target.value)}
+              className={fieldClass}
+            >
+              <option value="">All</option>
+              <option value="yes">Additional only</option>
+              <option value="no">Original only</option>
+            </select>
           </div>
         </div>
-      </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p role="status" className="text-sm text-slate-600">
+            {totalItems} work detail{totalItems === 1 ? "" : "s"}
+            {workDetailsSearchTerm.trim() &&
+              ` matching "${workDetailsSearchTerm.trim()}"`}
+          </p>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className={secondaryButton}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      </section>
     );
   };
 
   const renderEmptyState = () => (
-    <div className="text-center py-16">
-      <Wrench className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-      <h3 className="text-xl font-semibold text-gray-900 mb-2">
+    <div className="px-4 py-12 text-center">
+      <Wrench className="mx-auto h-8 w-8 text-slate-500" aria-hidden="true" />
+      <p className="mt-2 text-sm font-medium text-slate-900">
         No work details found
-      </h3>
-      <p className="text-gray-500 text-sm mb-6 max-w-md mx-auto leading-relaxed">
-        {workDetailsSearchTerm
-          ? `No work details match your search "${workDetailsSearchTerm}"`
-          : workOrderId
-            ? "Add work details to break down this work order into manageable tasks."
-            : selectedWorkOrderId > 0
-              ? "No work details found for the selected work order."
-              : selectedVesselId > 0 || selectedProjectId > 0
-                ? "No work details found for the selected project/vessel."
-                : "Create work details to track and manage work tasks."}
       </p>
-      {!workDetailsSearchTerm && !isOperationsReadOnly && (
+      <p className="mx-auto mt-1 max-w-md text-sm text-slate-600">
+        {workDetailsSearchTerm
+          ? `No work details match "${workDetailsSearchTerm}".`
+          : workOrderId
+            ? "Add work details to break this work order into tasks."
+            : selectedWorkOrderId > 0
+              ? "This work order has no work details yet."
+              : selectedVesselId > 0 || selectedProjectId > 0
+                ? "No work details for the selected project or vessel."
+                : "Work details are the tasks inside a work order."}
+      </p>
+      {hasActiveFilters && !workOrderId ? (
         <button
-          onClick={handleAddWorkDetails}
-          className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 inline-flex items-center gap-2 shadow-md"
+          type="button"
+          onClick={clearAllFilters}
+          className={`mt-4 ${secondaryButton}`}
         >
-          <Plus className="w-5 h-5" /> Add Work Details
+          Show all work details
         </button>
+      ) : (
+        !workDetailsSearchTerm &&
+        !isOperationsReadOnly && (
+          <button
+            type="button"
+            onClick={handleAddWorkDetails}
+            className={`mt-4 ${primaryButton}`}
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" /> Add work details
+          </button>
+        )
       )}
     </div>
   );
@@ -2502,71 +2288,111 @@ export default function WODetailsTable({
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-        <h3 className="text-red-800 font-medium">Error Loading Work Details</h3>
-        <p className="text-red-600 mt-1">{error}</p>
+      <div
+        role="alert"
+        className="flex flex-col gap-3 rounded-lg border border-red-300 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <p className="text-sm text-red-900">
+          <span className="font-semibold">Work details could not load.</span>{" "}
+          {error}
+        </p>
         <button
+          type="button"
           onClick={fetchWorkDetails}
-          className="mt-3 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+          className="inline-flex min-h-11 items-center justify-center rounded-md border border-red-700 bg-white px-4 text-sm font-medium text-red-800 hover:bg-red-100"
         >
-          Retry
+          Try again
         </button>
       </div>
     );
   }
 
-  return (
-    <div className={embedded ? "space-y-4" : "space-y-6"}>
-      {renderDeleteModal()}
-      {renderCancelModal()}
+  const canAddWorkDetails =
+    !isOperationsReadOnly &&
+    (profile?.role === "PPIC" ||
+      profile?.role === "MASTER" ||
+      profile?.role === "ADMIN_SHIPPING");
 
-      {/* Header */}
+  return (
+    <div className="space-y-6">
+      {renderDeleteDialog()}
+      {renderCancelDialog()}
+
       {!embedded && (
-        <div className="flex justify-between items-center">
-          <div className="flex gap-3">
-            <button
-              onClick={fetchWorkDetails}
-              className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-all duration-200 flex items-center gap-2 shadow-sm"
-            >
-              <RefreshCw className="w-4 h-4" /> Refresh
-            </button>
-            {!isOperationsReadOnly &&
-              (profile?.role === "PPIC" ||
-                profile?.role === "MASTER" ||
-                profile?.role === "ADMIN_SHIPPING") && (
-                <button
-                  onClick={handleAddWorkDetails}
-                  className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-2 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center gap-2 shadow-md"
-                >
-                  <Plus className="w-4 h-4" /> Add Work Details
-                </button>
-              )}
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">
+              Work Details
+            </h1>
+            <p className="mt-1 text-sm text-slate-600 sm:text-base">
+              The tasks inside{" "}
+              {isNewBuilding ? "new building" : "docking and repair"} work
+              orders: scope, location, schedule and progress.
+            </p>
           </div>
-        </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={fetchWorkDetails}
+              className={secondaryButton}
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" /> Refresh
+            </button>
+            {canAddWorkDetails && (
+              <button
+                type="button"
+                onClick={handleAddWorkDetails}
+                className={primaryButton}
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" /> Add work details
+              </button>
+            )}
+          </div>
+        </header>
       )}
 
-      {/* Filters */}
       {renderFilters()}
 
-      {/* Work Order Details Card */}
       {(selectedWorkOrderId > 0 || workOrderId) && selectedWorkOrderDetails && (
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-sm border border-blue-200 p-6">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-600 text-white rounded-full w-12 h-12 flex items-center justify-center">
-                <HardHat className="w-6 h-6" />
+        <section
+          aria-label="Selected work order"
+          className="rounded-lg border border-slate-200 bg-white p-4"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+              <div>
+                <dt className={`${detailTerm} flex items-center gap-1.5`}>
+                  <Ship className="h-4 w-4" aria-hidden="true" /> Vessel
+                </dt>
+                <dd className="text-base font-semibold text-slate-900">
+                  {selectedWorkOrderDetails.vessel?.name || "No vessel"}
+                </dd>
+                <dd className="text-sm text-slate-600">
+                  {[
+                    selectedWorkOrderDetails.vessel?.type,
+                    selectedWorkOrderDetails.vessel?.company,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </dd>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Work Order Details
-                </h3>
-                <p className="text-sm text-gray-600">
-                  Selected work order information
-                </p>
+                <dt className={`${detailTerm} flex items-center gap-1.5`}>
+                  <FileText className="h-4 w-4" aria-hidden="true" /> Work order
+                </dt>
+                <dd className="text-base font-semibold text-slate-900">
+                  {selectedWorkOrderDetails.shipyard_wo_number}
+                </dd>
+                {selectedWorkOrderDetails.customer_wo_number && (
+                  <dd className="text-sm text-slate-600">
+                    Customer {selectedWorkOrderDetails.customer_wo_number}
+                  </dd>
+                )}
               </div>
-            </div>
+            </dl>
             {!workOrderId && (
               <button
+                type="button"
                 onClick={() =>
                   navigate(
                     `/vessel/${selectedWorkOrderDetails.vessel_id}/work-orders`,
@@ -2577,154 +2403,93 @@ export default function WODetailsTable({
                     },
                   )
                 }
-                className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
+                className={secondaryButton}
               >
-                View Full Details →
+                Open work order
               </button>
             )}
           </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-gray-200">
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Ship className="w-5 h-5 text-blue-600" />
-                  <span className="text-xs font-semibold text-gray-500 uppercase">
-                    Vessel
-                  </span>
-                </div>
-                <div className="font-bold text-gray-900 text-base">
-                  {selectedWorkOrderDetails.vessel?.name || "N/A"}
-                </div>
-                <div className="text-sm text-gray-600">
-                  {selectedWorkOrderDetails.vessel?.type || "N/A"}
-                </div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {selectedWorkOrderDetails.vessel?.company || "N/A"}
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <FileText className="w-5 h-5 text-blue-600" />
-                  <span className="text-xs font-semibold text-gray-500 uppercase">
-                    Work Order Numbers
-                  </span>
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-xs text-gray-500 min-w-[80px]">
-                      Shipyard WO:
-                    </span>
-                    <span className="font-bold text-gray-900">
-                      {selectedWorkOrderDetails.shipyard_wo_number}
-                    </span>
-                  </div>
-                  {selectedWorkOrderDetails.customer_wo_number && (
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-xs text-gray-500 min-w-[80px]">
-                        Customer WO:
-                      </span>
-                      <span className="font-medium text-gray-700">
-                        {selectedWorkOrderDetails.customer_wo_number}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 pt-4 border-t border-blue-200">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">
-                Total Work Details:{" "}
-                <span className="font-bold text-gray-900">{totalItems}</span>
-              </span>
-              {totalItems > 0 && (
-                <span className="text-gray-600">
-                  Showing page{" "}
-                  <span className="font-bold text-gray-900">{currentPage}</span>{" "}
-                  of{" "}
-                  <span className="font-bold text-gray-900">{totalPages}</span>
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
+        </section>
       )}
 
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <select
-                value={`${sortField}-${sortDirection}`}
-                onChange={(e) => {
-                  const [field, direction] = e.target.value.split("-");
-                  setSortField(field as typeof sortField);
-                  setSortDirection(direction as "asc" | "desc");
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
-              >
-                <option value="planned_start_date-asc">
-                  Start Date (Earliest)
-                </option>
-                <option value="planned_start_date-desc">
-                  Start Date (Latest)
-                </option>
-                <option value="target_close_date-asc">
-                  Target Date (Earliest)
-                </option>
-                <option value="target_close_date-desc">
-                  Target Date (Latest)
-                </option>
-                <option value="description-asc">Description (A-Z)</option>
-                <option value="description-desc">Description (Z-A)</option>
-                <option value="created_at-desc">Recently Added</option>
-                <option value="created_at-asc">Oldest First</option>
-              </select>
-
-              {embedded &&
-                !isOperationsReadOnly &&
-                (profile?.role === "PPIC" ||
-                  profile?.role === "MASTER" ||
-                  profile?.role === "ADMIN_SHIPPING") && (
-                  <button
-                    onClick={handleAddWorkDetails}
-                    className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center gap-2 shadow-sm text-sm"
-                  >
-                    <Plus className="w-4 h-4" /> Add Work Details
-                  </button>
-                )}
-            </div>
+      <section aria-label="Work details table">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          {/* Wide screens sort from the column headings. */}
+          <div className="sm:w-64 md:hidden">
+            <label htmlFor="wd-sort" className={labelClass}>
+              Sort by
+            </label>
+            <select
+              id="wd-sort"
+              value={`${sortField}-${sortDirection}`}
+              onChange={(e) => {
+                const [field, direction] = e.target.value.split("-");
+                setSortField(field as typeof sortField);
+                setSortDirection(direction as "asc" | "desc");
+              }}
+              className={fieldClass}
+            >
+              <option value="planned_start_date-asc">Start date, earliest</option>
+              <option value="planned_start_date-desc">Start date, latest</option>
+              <option value="target_close_date-asc">Target date, earliest</option>
+              <option value="target_close_date-desc">Target date, latest</option>
+              <option value="description-asc">Description, A to Z</option>
+              <option value="description-desc">Description, Z to A</option>
+              <option value="work_scope-asc">Work scope, A to Z</option>
+              <option value="work_scope-desc">Work scope, Z to A</option>
+              <option value="location-asc">Location, A to Z</option>
+              <option value="location-desc">Location, Z to A</option>
+              <option value="created_at-desc">Recently added</option>
+              <option value="created_at-asc">Oldest first</option>
+            </select>
           </div>
+          {embedded && canAddWorkDetails && (
+            <button
+              type="button"
+              onClick={handleAddWorkDetails}
+              className={primaryButton}
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" /> Add work details
+            </button>
+          )}
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <span className="ml-3 text-sm text-gray-600">
-                Loading work details...
-              </span>
+            <div
+              role="status"
+              className="flex items-center justify-center py-16 text-sm text-slate-600"
+            >
+              <Loader2
+                className="mr-2 h-5 w-5 animate-spin"
+                aria-hidden="true"
+              />
+              Loading work details
             </div>
           ) : currentWorkDetails.length > 0 ? (
-            <>
-              <table className="table-stack min-w-full divide-y divide-gray-200">
+            <div className="overflow-x-auto">
+              <table className="table-stack min-w-full divide-y divide-slate-200">
+                <caption className="sr-only">
+                  Work details, {totalItems} in total
+                </caption>
                 {renderTableHeader()}
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-slate-200 bg-white">
                   {currentWorkDetails.map((detail) => renderTableRow(detail))}
                 </tbody>
               </table>
-              {renderPagination()}
-            </>
+            </div>
           ) : (
             renderEmptyState()
           )}
         </div>
-      </div>
+
+        <Pagination
+          page={currentPage}
+          totalItems={totalItems}
+          pageSize={ITEMS_PER_PAGE}
+          onPageChange={handlePageChange}
+        />
+      </section>
     </div>
   );
 }

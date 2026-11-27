@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { fetchAllRows } from "../../utils/fetchAllRows";
-import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { openProgressEvidence } from "../../utils/progressEvidenceHandler";
@@ -19,28 +19,31 @@ import { getLatestProgressRecord } from "../../utils/progressPercentage";
 import {
   Search,
   RefreshCw,
-  Ship,
-  FileText,
-  File,
-  Wrench,
   MapPin,
-  HardHat,
-  AlertTriangle,
   X,
   Plus,
   BarChart3,
-  ArrowLeft,
-  ArrowRight,
   CheckCircle2,
-  Circle,
-  Calendar,
   Edit,
   Camera,
   Pin,
-  FolderKanban,
+  SlidersHorizontal,
   Undo2,
 } from "lucide-react";
 import { TableSkeleton } from "../common/Skeleton";
+import Pagination from "../common/Pagination";
+import {
+  Dialog,
+  FilterCombo,
+  ProgressMeter,
+  fieldClass,
+  iconButton,
+  labelClass,
+  pageShell,
+  primaryButton,
+  secondaryButton,
+  tagBase,
+} from "../common/ledgerUi";
 
 // ==================== INTERFACES ====================
 
@@ -157,9 +160,6 @@ export default function WorkProgressTable({
 
   // ==================== CONSTANTS ====================
   const itemsPerPage = 10;
-  const totalPages = Math.ceil(totalCount / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage + 1;
-  const endIndex = Math.min(currentPage * itemsPerPage, totalCount);
 
   // ==================== COMPUTED VALUES ====================
   const hasActiveFilters = !!(
@@ -805,8 +805,8 @@ export default function WorkProgressTable({
     setCurrentPage(1);
   };
 
-  const handleVesselSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setVesselSearchTerm(e.target.value);
+  const handleVesselSearch = (value: string) => {
+    setVesselSearchTerm(value);
     setShowVesselDropdown(true);
     if (vesselFilter) {
       setVesselFilter("");
@@ -827,8 +827,8 @@ export default function WorkProgressTable({
     setCurrentPage(1);
   };
 
-  const handleProjectSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setProjectSearchTerm(e.target.value);
+  const handleProjectSearch = (value: string) => {
+    setProjectSearchTerm(value);
     setShowProjectDropdown(true);
     if (projectFilter) {
       setProjectFilter("");
@@ -849,8 +849,8 @@ export default function WorkProgressTable({
     setCurrentPage(1);
   };
 
-  const handleShipyardWoSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setShipyardWoSearchTerm(e.target.value);
+  const handleShipyardWoSearch = (value: string) => {
+    setShipyardWoSearchTerm(value);
     setShowShipyardWoDropdown(true);
     if (shipyardWoFilter) {
       setShipyardWoFilter("");
@@ -871,8 +871,8 @@ export default function WorkProgressTable({
     setCurrentPage(1);
   };
 
-  const handleCustomerWoSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCustomerWoSearchTerm(e.target.value);
+  const handleCustomerWoSearch = (value: string) => {
+    setCustomerWoSearchTerm(value);
     setShowCustomerWoDropdown(true);
     if (customerWoFilter) {
       setCustomerWoFilter("");
@@ -1072,25 +1072,6 @@ export default function WorkProgressTable({
     });
   };
 
-  const getProgressColor = (progress: number) => {
-    if (progress >= 100) return "bg-green-100 text-green-800 border-green-200";
-    if (progress >= 75) return "bg-blue-100 text-blue-800 border-blue-200";
-    if (progress >= 50)
-      return "bg-yellow-100 text-yellow-800 border-yellow-200";
-    if (progress >= 25)
-      return "bg-orange-100 text-orange-800 border-orange-200";
-    return "bg-red-100 text-red-800 border-red-200";
-  };
-
-  const getProgressIcon = (progress: number) => {
-    if (progress >= 100)
-      return <CheckCircle2 className="w-5 h-5 text-green-600" />;
-    if (progress >= 75) return <Circle className="w-5 h-5 text-blue-600" />;
-    if (progress >= 50) return <Circle className="w-5 h-5 text-yellow-600" />;
-    if (progress >= 25) return <Circle className="w-5 h-5 text-orange-600" />;
-    return <Circle className="w-5 h-5 text-red-600" />;
-  };
-
   const handleEvidenceClick = async (storagePath?: string) => {
     if (!storagePath) {
       alert("No evidence file path available");
@@ -1204,626 +1185,375 @@ export default function WorkProgressTable({
 
   // ==================== RENDER FUNCTIONS ====================
 
-  const renderPagination = () => {
-    if (totalPages <= 1) return null;
-
-    const pages = [];
-    const maxVisiblePages = 5;
-    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-    const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-
-    if (endPage - startPage < maxVisiblePages - 1) {
-      startPage = Math.max(1, endPage - maxVisiblePages + 1);
-    }
-
-    for (let i = startPage; i <= endPage; i++) {
-      pages.push(i);
-    }
-
-    return (
-      <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6">
-        <div className="flex flex-1 justify-between sm:hidden">
-          <button
-            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-            disabled={currentPage === 1}
-            className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Previous
-          </button>
-          <button
-            onClick={() =>
-              setCurrentPage(Math.min(totalPages, currentPage + 1))
-            }
-            disabled={currentPage === totalPages}
-            className="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
-        </div>
-        <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm text-gray-700">
-              Showing <span className="font-medium">{startIndex}</span> to{" "}
-              <span className="font-medium">{endIndex}</span> of{" "}
-              <span className="font-medium">{totalCount}</span> results
-            </p>
-          </div>
-          <div>
-            <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm">
-              <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-              {pages.map((page) => (
-                <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
-                    page === currentPage
-                      ? "z-10 bg-blue-600 text-white"
-                      : "text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
-              <button
-                onClick={() =>
-                  setCurrentPage(Math.min(totalPages, currentPage + 1))
-                }
-                disabled={currentPage === totalPages}
-                className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </nav>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const activeFilterCount = [
+    vesselFilter,
+    projectFilter,
+    shipyardWoFilter,
+    customerWoFilter,
+    kaproFilter,
+    workLocationFilter,
+    workTypeFilter,
+    additionalWoFilter,
+    workDetailsSearchTerm,
+  ].filter(Boolean).length;
+  const anyFilter = hasActiveFilters || hasSearchTerm;
 
   const renderFilterSection = () => {
     if (workDetailsId) return null;
 
+    const countHint = (shown: number, all: number) =>
+      shown < all ? ` (${shown} of ${all})` : "";
+
     return (
-      <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Search className="w-5 h-5" /> Filters
-            </h3>
-            {(hasActiveFilters || hasSearchTerm) && (
-              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-bold">
-                {
-                  [
-                    vesselFilter,
-                    projectFilter,
-                    shipyardWoFilter,
-                    customerWoFilter,
-                    kaproFilter,
-                    workLocationFilter,
-                    workTypeFilter,
-                    additionalWoFilter,
-                    workDetailsSearchTerm,
-                  ].filter(Boolean).length
-                }
+      <section
+        aria-label="Find progress reports"
+        className="space-y-4 rounded-lg border border-slate-200 bg-white p-4"
+      >
+        <form role="search" onSubmit={(e) => e.preventDefault()}>
+          <label htmlFor="wp-search" className={labelClass}>
+            Search progress reports
+          </label>
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600"
+              aria-hidden="true"
+            />
+            <input
+              id="wp-search"
+              type="search"
+              value={workDetailsSearchTerm}
+              onChange={(e) => setWorkDetailsSearchTerm(e.target.value)}
+              placeholder="Work detail description, PIC or notes"
+              className={`${fieldClass} pl-9`}
+            />
+          </div>
+        </form>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowFilters(!showFilters)}
+            aria-expanded={showFilters}
+            aria-controls="wp-filters"
+            className={secondaryButton}
+          >
+            <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+            {showFilters ? "Hide filters" : "More filters"}
+            {activeFilterCount > 0 && (
+              <span className="rounded bg-blue-950 px-1.5 text-xs font-semibold tabular-nums text-white">
+                {activeFilterCount}
               </span>
             )}
-          </div>
-          <div className="flex items-center gap-3">
-            {(hasActiveFilters || hasSearchTerm) && (
-              <button
-                onClick={handleClearFilters}
-                className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
-              >
-                <RefreshCw className="w-4 h-4" /> Clear All Filters
-              </button>
-            )}
+          </button>
+          {anyFilter && (
             <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`px-4 py-2 rounded-lg transition-colors ${
-                showFilters || hasActiveFilters || hasSearchTerm
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
+              type="button"
+              onClick={handleClearFilters}
+              className={secondaryButton}
             >
-              {showFilters ? "Hide Filters" : "Show Filters"}
+              Clear filters
             </button>
-          </div>
+          )}
         </div>
 
         {showFilters && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Vessel Filter with Search Dropdown */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                  <Ship className="w-4 h-4" /> Vessel
-                  {availableVessels.length < allVessels.length && (
-                    <span className="ml-2 text-xs text-blue-600">
-                      ({availableVessels.length} of {allVessels.length})
-                    </span>
-                  )}
-                </label>
-                <div className="relative" ref={vesselDropdownRef}>
-                  <input
-                    type="text"
-                    value={vesselSearchTerm}
-                    onChange={handleVesselSearch}
-                    onFocus={() => setShowVesselDropdown(true)}
-                    placeholder="Search vessel..."
-                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  {vesselSearchTerm && (
-                    <button
-                      onClick={handleClearVesselSearch}
-                      className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
+          <div
+            id="wp-filters"
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          >
+            <FilterCombo
+              label={`Vessel${countHint(availableVessels.length, allVessels.length)}`}
+              placeholder="Search vessel"
+              value={vesselSearchTerm}
+              onInputChange={handleVesselSearch}
+              onClear={handleClearVesselSearch}
+              options={filteredVesselsForSearch.map((vessel) => ({
+                key: vessel.id,
+                label: vessel.name,
+                detail: `${vessel.type} · ${vessel.company}`,
+                selected: vesselFilter === vessel.id.toString(),
+              }))}
+              onSelect={(key) => {
+                const vessel = allVessels.find((v) => v.id === key);
+                if (vessel) handleVesselSelectFromDropdown(vessel);
+              }}
+              open={showVesselDropdown}
+              onOpenChange={setShowVesselDropdown}
+              emptyText="No vessels found"
+              containerRef={vesselDropdownRef}
+            />
 
-                  {showVesselDropdown &&
-                    filteredVesselsForSearch.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {filteredVesselsForSearch.map((vessel) => (
-                          <div
-                            key={vessel.id}
-                            onClick={() =>
-                              handleVesselSelectFromDropdown(vessel)
-                            }
-                            className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                              vesselFilter === vessel.id.toString()
-                                ? "bg-blue-100"
-                                : ""
-                            }`}
-                          >
-                            <div className="font-medium text-gray-900 text-sm">
-                              {vessel.name}
-                            </div>
-                            <div className="text-xs text-gray-600">
-                              {vessel.type} • {vessel.company}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+            <FilterCombo
+              label={`Project${countHint(availableProjects.length, allProjects.length)}`}
+              placeholder="Search project"
+              value={projectSearchTerm}
+              onInputChange={handleProjectSearch}
+              onClear={handleClearProjectSearch}
+              options={filteredProjectsForSearch.map((project) => ({
+                key: project.id,
+                label: project.project_name,
+                selected: projectFilter === project.id.toString(),
+              }))}
+              onSelect={(key) => {
+                const project = allProjects.find((p) => p.id === key);
+                if (project) handleProjectSelectFromDropdown(project);
+              }}
+              open={showProjectDropdown}
+              onOpenChange={setShowProjectDropdown}
+              emptyText="No projects found"
+              containerRef={projectDropdownRef}
+            />
 
-                  {showVesselDropdown &&
-                    filteredVesselsForSearch.length === 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3 text-center text-sm text-gray-500">
-                        No vessels found
-                      </div>
-                    )}
-                </div>
-              </div>
+            <FilterCombo
+              label="Shipyard WO number"
+              placeholder={
+                availableShipyardWoNumbers.length === 0
+                  ? "No work order available"
+                  : "Search shipyard WO"
+              }
+              value={shipyardWoSearchTerm}
+              onInputChange={handleShipyardWoSearch}
+              onClear={handleClearShipyardWoSearch}
+              options={filteredShipyardWoForSearch.map((wo) => ({
+                key: wo,
+                label: wo,
+                selected: shipyardWoFilter === wo,
+              }))}
+              onSelect={(key) => handleShipyardWoSelectFromDropdown(String(key))}
+              open={showShipyardWoDropdown}
+              onOpenChange={setShowShipyardWoDropdown}
+              disabled={availableShipyardWoNumbers.length === 0}
+              emptyText="No shipyard WO found"
+              containerRef={shipyardWoDropdownRef}
+            />
 
-              {/* Project Filter with Search Dropdown */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                  <FolderKanban className="w-4 h-4" /> Project
-                  {availableProjects.length < allProjects.length && (
-                    <span className="ml-2 text-xs text-blue-600">
-                      ({availableProjects.length} of {allProjects.length})
-                    </span>
-                  )}
-                </label>
-                <div className="relative" ref={projectDropdownRef}>
-                  <input
-                    type="text"
-                    value={projectSearchTerm}
-                    onChange={handleProjectSearch}
-                    onFocus={() => setShowProjectDropdown(true)}
-                    placeholder="Search project..."
-                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  {projectSearchTerm && (
-                    <button
-                      onClick={handleClearProjectSearch}
-                      className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
+            <FilterCombo
+              label="Customer WO number"
+              placeholder={
+                availableCustomerWoNumbers.length === 0
+                  ? "No customer WO available"
+                  : "Search customer WO"
+              }
+              value={customerWoSearchTerm}
+              onInputChange={handleCustomerWoSearch}
+              onClear={handleClearCustomerWoSearch}
+              options={filteredCustomerWoForSearch.map((wo) => ({
+                key: wo,
+                label: wo,
+                selected: customerWoFilter === wo,
+              }))}
+              onSelect={(key) => handleCustomerWoSelectFromDropdown(String(key))}
+              open={showCustomerWoDropdown}
+              onOpenChange={setShowCustomerWoDropdown}
+              disabled={availableCustomerWoNumbers.length === 0}
+              emptyText="No customer WO found"
+              containerRef={customerWoDropdownRef}
+            />
 
-                  {showProjectDropdown &&
-                    filteredProjectsForSearch.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {filteredProjectsForSearch.map((project) => (
-                          <div
-                            key={project.id}
-                            onClick={() =>
-                              handleProjectSelectFromDropdown(project)
-                            }
-                            className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                              projectFilter === project.id.toString()
-                                ? "bg-blue-100"
-                                : ""
-                            }`}
-                          >
-                            <div className="font-medium text-gray-900 text-sm">
-                              {project.project_name}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                  {showProjectDropdown &&
-                    filteredProjectsForSearch.length === 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3 text-center text-sm text-gray-500">
-                        No projects found
-                      </div>
-                    )}
-                </div>
-              </div>
-
-              {/* Shipyard WO Number Filter with Search Dropdown */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                  <FileText className="w-4 h-4" /> Shipyard WO Number
-                  {availableShipyardWoNumbers.length > 0 && (
-                    <span className="ml-2 text-xs text-blue-600">
-                      ({availableShipyardWoNumbers.length})
-                    </span>
-                  )}
-                </label>
-                <div className="relative" ref={shipyardWoDropdownRef}>
-                  <input
-                    type="text"
-                    value={shipyardWoSearchTerm}
-                    onChange={handleShipyardWoSearch}
-                    onFocus={() => setShowShipyardWoDropdown(true)}
-                    placeholder={
-                      availableShipyardWoNumbers.length === 0
-                        ? "No WO available"
-                        : "Search shipyard WO..."
-                    }
-                    disabled={availableShipyardWoNumbers.length === 0}
-                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  />
-                  {shipyardWoSearchTerm && (
-                    <button
-                      onClick={handleClearShipyardWoSearch}
-                      className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-
-                  {showShipyardWoDropdown &&
-                    filteredShipyardWoForSearch.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {filteredShipyardWoForSearch.map((wo) => (
-                          <div
-                            key={wo}
-                            onClick={() =>
-                              handleShipyardWoSelectFromDropdown(wo)
-                            }
-                            className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                              shipyardWoFilter === wo ? "bg-blue-100" : ""
-                            }`}
-                          >
-                            <div className="font-medium text-gray-900 text-sm">
-                              {wo}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                  {showShipyardWoDropdown &&
-                    filteredShipyardWoForSearch.length === 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3 text-center text-sm text-gray-500">
-                        No shipyard WO found
-                      </div>
-                    )}
-                </div>
-              </div>
-
-              {/* Customer WO Number Filter with Search Dropdown */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                  <File className="w-4 h-4" /> Customer WO Number
-                  {availableCustomerWoNumbers.length > 0 && (
-                    <span className="ml-2 text-xs text-blue-600">
-                      ({availableCustomerWoNumbers.length})
-                    </span>
-                  )}
-                </label>
-                <div className="relative" ref={customerWoDropdownRef}>
-                  <input
-                    type="text"
-                    value={customerWoSearchTerm}
-                    onChange={handleCustomerWoSearch}
-                    onFocus={() => setShowCustomerWoDropdown(true)}
-                    placeholder={
-                      availableCustomerWoNumbers.length === 0
-                        ? "No customer WO available"
-                        : "Search customer WO..."
-                    }
-                    disabled={availableCustomerWoNumbers.length === 0}
-                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  />
-                  {customerWoSearchTerm && (
-                    <button
-                      onClick={handleClearCustomerWoSearch}
-                      className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-
-                  {showCustomerWoDropdown &&
-                    filteredCustomerWoForSearch.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {filteredCustomerWoForSearch.map((wo) => (
-                          <div
-                            key={wo}
-                            onClick={() =>
-                              handleCustomerWoSelectFromDropdown(wo)
-                            }
-                            className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                              customerWoFilter === wo ? "bg-blue-100" : ""
-                            }`}
-                          >
-                            <div className="font-medium text-gray-900 text-sm">
-                              {wo}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                  {showCustomerWoDropdown &&
-                    filteredCustomerWoForSearch.length === 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3 text-center text-sm text-gray-500">
-                        No customer WO found
-                      </div>
-                    )}
-                </div>
-              </div>
-
-              {/* Work Type Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                  <Wrench className="w-4 h-4" /> Work Type
-                  {availableWorkTypes.length > 0 && (
-                    <span className="ml-2 text-xs text-blue-600">
-                      ({availableWorkTypes.length})
-                    </span>
-                  )}
-                </label>
-                <select
-                  value={workTypeFilter}
-                  onChange={(e) => setWorkTypeFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  disabled={availableWorkTypes.length === 0}
-                >
-                  <option value="">
-                    {availableWorkTypes.length === 0
-                      ? "No types available"
-                      : "All Types"}
-                  </option>
-                  {availableWorkTypes.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Work Location Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                  <MapPin className="w-4 h-4" /> Work Location
-                  {availableWorkLocations.length > 0 && (
-                    <span className="ml-2 text-xs text-blue-600">
-                      ({availableWorkLocations.length})
-                    </span>
-                  )}
-                </label>
-                <select
-                  value={workLocationFilter}
-                  onChange={(e) => setWorkLocationFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  disabled={availableWorkLocations.length === 0}
-                >
-                  <option value="">
-                    {availableWorkLocations.length === 0
-                      ? "No locations available"
-                      : "All Locations"}
-                  </option>
-                  {availableWorkLocations.map((location) => (
-                    <option key={location} value={location}>
-                      {location}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Kapro Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                  <HardHat className="w-4 h-4" /> Kapro
-                  {availableKapros.kapros.length > 0 && (
-                    <span className="ml-2 text-xs text-blue-600">
-                      ({availableKapros.kapros.length}
-                      {availableKapros.hasUnassigned ? " + unassigned" : ""})
-                    </span>
-                  )}
-                </label>
-                <select
-                  value={kaproFilter}
-                  onChange={(e) => setKaproFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  disabled={
-                    availableKapros.kapros.length === 0 &&
-                    !availableKapros.hasUnassigned
-                  }
-                >
-                  <option value="">
-                    {availableKapros.kapros.length === 0 &&
-                    !availableKapros.hasUnassigned
-                      ? "No kapros available"
-                      : "All Kapros"}
-                  </option>
-                  {availableKapros.hasUnassigned && (
-                    <option value="unassigned">Unassigned</option>
-                  )}
-                  {availableKapros.kapros.map((kapro) => (
-                    <option key={kapro.id} value={kapro.id.toString()}>
-                      {kapro.kapro_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Additional WO Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                  <AlertTriangle className="w-4 h-4" /> Additional WO
-                </label>
-                <select
-                  value={additionalWoFilter}
-                  onChange={(e) => setAdditionalWoFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All</option>
-                  <option value="yes">Yes</option>
-                  <option value="no">No</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Free-text Search */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                <Search className="w-4 h-4" /> Search Work Details
+              <label htmlFor="wp-type" className={labelClass}>
+                Work type
               </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={workDetailsSearchTerm}
-                  onChange={(e) => setWorkDetailsSearchTerm(e.target.value)}
-                  placeholder="Search by description, PIC, or notes..."
-                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                {workDetailsSearchTerm && (
-                  <button
-                    onClick={() => setWorkDetailsSearchTerm("")}
-                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
+              <select
+                id="wp-type"
+                value={workTypeFilter}
+                onChange={(e) => setWorkTypeFilter(e.target.value)}
+                disabled={availableWorkTypes.length === 0}
+                className={fieldClass}
+              >
+                <option value="">
+                  {availableWorkTypes.length === 0
+                    ? "No types available"
+                    : "All types"}
+                </option>
+                {availableWorkTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            {/* Active Filters Display */}
-            {(hasActiveFilters || hasSearchTerm) && (
-              <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-200">
-                <span className="text-sm text-gray-600 font-medium">
-                  Active filters:
-                </span>
-                {vesselFilter && (
-                  <FilterPill
-                    label="Vessel"
-                    value={
-                      allVessels.find((v) => v.id.toString() === vesselFilter)
-                        ?.name || vesselFilter
-                    }
-                    onRemove={handleClearVesselSearch}
-                  />
+            <div>
+              <label htmlFor="wp-location" className={labelClass}>
+                Work location
+              </label>
+              <select
+                id="wp-location"
+                value={workLocationFilter}
+                onChange={(e) => setWorkLocationFilter(e.target.value)}
+                disabled={availableWorkLocations.length === 0}
+                className={fieldClass}
+              >
+                <option value="">
+                  {availableWorkLocations.length === 0
+                    ? "No locations available"
+                    : "All locations"}
+                </option>
+                {availableWorkLocations.map((location) => (
+                  <option key={location} value={location}>
+                    {location}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="wp-kapro" className={labelClass}>
+                Kapro
+              </label>
+              <select
+                id="wp-kapro"
+                value={kaproFilter}
+                onChange={(e) => setKaproFilter(e.target.value)}
+                disabled={
+                  availableKapros.kapros.length === 0 &&
+                  !availableKapros.hasUnassigned
+                }
+                className={fieldClass}
+              >
+                <option value="">
+                  {availableKapros.kapros.length === 0 &&
+                  !availableKapros.hasUnassigned
+                    ? "No kapros available"
+                    : "All kapros"}
+                </option>
+                {availableKapros.hasUnassigned && (
+                  <option value="unassigned">Unassigned</option>
                 )}
-                {projectFilter && (
-                  <FilterPill
-                    label="Project"
-                    value={
-                      allProjects.find(
-                        (p) => p.id.toString() === projectFilter,
-                      )?.project_name || projectFilter
-                    }
-                    onRemove={handleClearProjectSearch}
-                  />
-                )}
-                {shipyardWoFilter && (
-                  <FilterPill
-                    label="Shipyard WO"
-                    value={shipyardWoFilter}
-                    onRemove={handleClearShipyardWoSearch}
-                  />
-                )}
-                {customerWoFilter && (
-                  <FilterPill
-                    label="Customer WO"
-                    value={customerWoFilter}
-                    onRemove={handleClearCustomerWoSearch}
-                  />
-                )}
-                {workTypeFilter && (
-                  <FilterPill
-                    label="Type"
-                    value={workTypeFilter}
-                    onRemove={() => setWorkTypeFilter("")}
-                  />
-                )}
-                {workLocationFilter && (
-                  <FilterPill
-                    label="Location"
-                    value={workLocationFilter}
-                    onRemove={() => setWorkLocationFilter("")}
-                  />
-                )}
-                {kaproFilter && (
-                  <FilterPill
-                    label="Kapro"
-                    value={
-                      kaproFilter === "unassigned"
-                        ? "Unassigned"
-                        : allKapros.find((k) => k.id.toString() === kaproFilter)
-                            ?.kapro_name || kaproFilter
-                    }
-                    onRemove={() => setKaproFilter("")}
-                  />
-                )}
-                {additionalWoFilter && (
-                  <FilterPill
-                    label="Additional"
-                    value={additionalWoFilter === "yes" ? "Yes" : "No"}
-                    onRemove={() => setAdditionalWoFilter("")}
-                  />
-                )}
-                {workDetailsSearchTerm && (
-                  <FilterPill
-                    label="Search"
-                    value={workDetailsSearchTerm}
-                    onRemove={() => setWorkDetailsSearchTerm("")}
-                  />
-                )}
-              </div>
-            )}
+                {availableKapros.kapros.map((kapro) => (
+                  <option key={kapro.id} value={kapro.id.toString()}>
+                    {kapro.kapro_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="wp-additional" className={labelClass}>
+                Additional WO
+              </label>
+              <select
+                id="wp-additional"
+                value={additionalWoFilter}
+                onChange={(e) => setAdditionalWoFilter(e.target.value)}
+                className={fieldClass}
+              >
+                <option value="">All</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </div>
           </div>
         )}
-      </div>
+
+        {anyFilter && (
+          <ul aria-label="Active filters" className="flex flex-wrap gap-2">
+            {vesselFilter && (
+              <FilterChip
+                label="Vessel"
+                value={
+                  allVessels.find((v) => v.id.toString() === vesselFilter)
+                    ?.name || vesselFilter
+                }
+                onRemove={handleClearVesselSearch}
+              />
+            )}
+            {projectFilter && (
+              <FilterChip
+                label="Project"
+                value={
+                  allProjects.find((p) => p.id.toString() === projectFilter)
+                    ?.project_name || projectFilter
+                }
+                onRemove={handleClearProjectSearch}
+              />
+            )}
+            {shipyardWoFilter && (
+              <FilterChip
+                label="Shipyard WO"
+                value={shipyardWoFilter}
+                onRemove={handleClearShipyardWoSearch}
+              />
+            )}
+            {customerWoFilter && (
+              <FilterChip
+                label="Customer WO"
+                value={customerWoFilter}
+                onRemove={handleClearCustomerWoSearch}
+              />
+            )}
+            {workTypeFilter && (
+              <FilterChip
+                label="Type"
+                value={workTypeFilter}
+                onRemove={() => setWorkTypeFilter("")}
+              />
+            )}
+            {workLocationFilter && (
+              <FilterChip
+                label="Location"
+                value={workLocationFilter}
+                onRemove={() => setWorkLocationFilter("")}
+              />
+            )}
+            {kaproFilter && (
+              <FilterChip
+                label="Kapro"
+                value={
+                  kaproFilter === "unassigned"
+                    ? "Unassigned"
+                    : allKapros.find((k) => k.id.toString() === kaproFilter)
+                        ?.kapro_name || kaproFilter
+                }
+                onRemove={() => setKaproFilter("")}
+              />
+            )}
+            {additionalWoFilter && (
+              <FilterChip
+                label="Additional"
+                value={additionalWoFilter === "yes" ? "Yes" : "No"}
+                onRemove={() => setAdditionalWoFilter("")}
+              />
+            )}
+            {workDetailsSearchTerm && (
+              <FilterChip
+                label="Search"
+                value={workDetailsSearchTerm}
+                onRemove={() => setWorkDetailsSearchTerm("")}
+              />
+            )}
+          </ul>
+        )}
+
+        <p role="status" className="text-sm text-slate-600">
+          {loading
+            ? "Loading progress reports"
+            : `${totalCount} progress report${totalCount === 1 ? "" : "s"}`}
+        </p>
+      </section>
     );
   };
 
   const renderContent = () => {
     if (error) {
       return (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <h3 className="text-red-800 font-medium">Error</h3>
-          <p className="text-red-600 mt-1">{error}</p>
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-lg border border-red-300 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="text-sm text-red-900">
+            <span className="font-semibold">
+              Progress reports could not load.
+            </span>{" "}
+            {error}
+          </p>
           <button
+            type="button"
             onClick={fetchWorkProgress}
-            className="mt-3 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-red-700 bg-white px-4 text-sm font-medium text-red-800 hover:bg-red-100"
           >
-            Retry
+            Try again
           </button>
         </div>
       );
@@ -1835,32 +1565,37 @@ export default function WorkProgressTable({
 
     if (workProgress.length === 0) {
       return (
-        <div className="text-center py-12">
-          <BarChart3 className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            No Progress Reports Found
-          </h3>
-          <p className="text-gray-500 mb-4">
-            {hasActiveFilters || hasSearchTerm
-              ? "No progress reports match your current filters."
+        <div className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-12 text-center">
+          <BarChart3
+            className="mx-auto h-8 w-8 text-slate-500"
+            aria-hidden="true"
+          />
+          <p className="mt-2 text-sm font-medium text-slate-900">
+            No progress reports found
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            {anyFilter
+              ? "No progress reports match these filters."
               : "No progress reports have been recorded yet."}
           </p>
-
-          <div className="flex gap-3 justify-center">
-            {(hasActiveFilters || hasSearchTerm) && (
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            {anyFilter && (
               <button
+                type="button"
                 onClick={handleClearFilters}
-                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
+                className={secondaryButton}
               >
-                Clear Filters
+                Show all progress reports
               </button>
             )}
             {canWriteProgress && (
               <button
+                type="button"
                 onClick={handleAddProgressFromNoResults}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+                className={primaryButton}
               >
-                <Plus className="w-4 h-4" /> Add Progress Report
+                <Plus className="h-4 w-4" aria-hidden="true" /> Add progress
+                report
               </button>
             )}
           </div>
@@ -1868,166 +1603,175 @@ export default function WorkProgressTable({
       );
     }
 
-    return (
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="table-stack min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Progress
-                  {canWriteProgress && (
-                    <div className="text-xs text-gray-400 font-normal mt-1">
-                      (Click to add new)
-                    </div>
-                  )}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Work Details
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Vessel & Work Order
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Report Date
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Notes
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Reported By
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Evidence
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Created
-                </th>
-                {canWriteProgress && (
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                    Actions
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {workProgress.map((item) => {
-                const workDetailsId = item.work_details.id;
-                const isCompleted = !canAddProgress(workDetailsId);
-                const maxProgress =
-                  maxProgressByWorkDetail[workDetailsId] ||
-                  item.progress_percentage;
+    const heading = (label: string) => (
+      <th
+        scope="col"
+        className="whitespace-nowrap px-4 py-3 text-left text-sm font-semibold text-slate-700"
+      >
+        {label}
+      </th>
+    );
 
-                return (
-                  <tr key={item.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <ProgressCell
-                        item={item}
-                        isCompleted={isCompleted}
-                        maxProgress={maxProgress}
-                        onAddProgress={handleAddProgressFromCurrent}
-                        getProgressColor={getProgressColor}
-                        getProgressIcon={getProgressIcon}
-                        isOperationsReadOnly={!canWriteProgress}
-                      />
-                    </td>
-                    <td className="px-6 py-4">
-                      <WorkDetailsCell
-                        workDetails={item.work_details}
-                        isCompleted={isCompleted}
-                        needsRework={needsReworkByWorkDetail[workDetailsId]}
-                      />
-                    </td>
-                    <td className="px-6 py-4">
-                      <VesselWorkOrderCell
-                        vessel={item.work_details.work_order.vessel}
-                        shipyardWoNumber={
-                          item.work_details.work_order.shipyard_wo_number
-                        }
-                      />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />{" "}
-                        {formatDate(item.report_date)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <NotesCell notes={item.notes} />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <ReportedByCell profiles={item.profiles} />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <EvidenceCell
-                        storagePath={item.storage_path}
-                        onClick={handleEvidenceClick}
-                      />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
-                      {formatDateTime(item.created_at)}
-                    </td>
-                    {canWriteProgress && (
-                      <td className="px-6 py-4 whitespace-nowrap text-center">
-                        <button
-                          onClick={() =>
-                            navigate(`/work-progress/edit/${item.id}`, {
-                              state: {
-                                returnFilters: buildReturnFilters(),
-                                returnTo: location.state?.returnTo,
-                              },
-                            })
-                          }
-                          className="text-blue-600 hover:text-blue-800 text-sm font-medium inline-flex items-center gap-1 hover:underline"
-                          title="Edit this progress report"
-                        >
-                          <Edit className="w-4 h-4" /> Edit
-                        </button>
+    return (
+      <>
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="overflow-x-auto">
+            <table className="table-stack min-w-full divide-y divide-slate-200">
+              <caption className="sr-only">
+                Progress reports, newest first
+              </caption>
+              <thead className="bg-slate-50">
+                <tr>
+                  {heading("Progress")}
+                  {heading("Work detail")}
+                  {heading("Vessel and work order")}
+                  {heading("Report date")}
+                  {heading("Notes")}
+                  {heading("Reported by")}
+                  {heading("Evidence")}
+                  {canWriteProgress && heading("Actions")}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 bg-white">
+                {workProgress.map((item) => {
+                  const itemDetailId = item.work_details.id;
+                  const isCompleted = !canAddProgress(itemDetailId);
+                  const maxProgress =
+                    maxProgressByWorkDetail[itemDetailId] ||
+                    item.progress_percentage;
+
+                  return (
+                    <tr
+                      key={item.id}
+                      className="align-top transition-colors hover:bg-slate-50"
+                    >
+                      <td className="px-4 py-3">
+                        <ProgressCell
+                          item={item}
+                          isCompleted={isCompleted}
+                          maxProgress={maxProgress}
+                          onAddProgress={handleAddProgressFromCurrent}
+                          readOnly={!canWriteProgress}
+                        />
                       </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      <td data-label="Description" className="px-4 py-3">
+                        <WorkDetailsCell
+                          workDetails={item.work_details}
+                          isCompleted={isCompleted}
+                          needsRework={needsReworkByWorkDetail[itemDetailId]}
+                        />
+                      </td>
+                      <td data-label="Vessel and work order" className="px-4 py-3">
+                        <VesselWorkOrderCell
+                          vessel={item.work_details.work_order.vessel}
+                          shipyardWoNumber={
+                            item.work_details.work_order.shipyard_wo_number
+                          }
+                        />
+                      </td>
+                      <td
+                        data-label="Report date"
+                        className="whitespace-nowrap px-4 py-3 text-sm text-slate-900"
+                      >
+                        {formatDate(item.report_date)}
+                      </td>
+                      <td data-label="Notes" className="px-4 py-3 text-sm">
+                        <NotesCell notes={item.notes} />
+                      </td>
+                      <td data-label="Reported by" className="px-4 py-3 text-sm">
+                        <div className="text-slate-900">
+                          {item.profiles?.name || "Unknown user"}
+                        </div>
+                        <div className="whitespace-nowrap text-slate-600">
+                          {formatDateTime(item.created_at)}
+                        </div>
+                      </td>
+                      <td data-label="Evidence" className="px-4 py-3 text-sm">
+                        <EvidenceCell
+                          storagePath={item.storage_path}
+                          onClick={handleEvidenceClick}
+                        />
+                      </td>
+                      {canWriteProgress && (
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end md:justify-start">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                navigate(`/work-progress/edit/${item.id}`, {
+                                  state: {
+                                    returnFilters: buildReturnFilters(),
+                                    returnTo: location.state?.returnTo,
+                                  },
+                                })
+                              }
+                              title="Edit this progress report"
+                              aria-label={`Edit progress report of ${item.work_details.description}`}
+                              className={`${iconButton} text-blue-800`}
+                            >
+                              <Edit className="h-4 w-4" aria-hidden="true" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        {renderPagination()}
-      </div>
+        <Pagination
+          page={currentPage}
+          totalItems={totalCount}
+          pageSize={itemsPerPage}
+          onPageChange={setCurrentPage}
+        />
+      </>
     );
   };
 
   // ==================== MAIN RENDER ====================
 
   return (
-    <div className={`${embedded ? "" : "p-8"}`}>
+    <div className={`${embedded ? "" : pageShell} space-y-6`}>
       {!embedded && (
-        <div className="mb-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-                Work Progress Reports
-              </h1>
-              <p className="text-gray-600">
-                {workDetailsId
-                  ? "Track detailed progress reports for work activities"
-                  : `Progress reports of ${isNewBuilding ? "new building" : "docking and repair"} work`}
-              </p>
-            </div>
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">
+              Work Progress
+            </h1>
+            <p className="mt-1 text-sm text-slate-600 sm:text-base">
+              {workDetailsId
+                ? "Every progress report of one work detail."
+                : `Progress reports of ${isNewBuilding ? "new building" : "docking and repair"} work, newest first.`}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={fetchWorkProgress}
+              className={secondaryButton}
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" /> Refresh
+            </button>
             {canWriteProgress && (
               <button
+                type="button"
                 onClick={() =>
                   navigate("/add-work-progress", {
                     state: { returnTo: location.state?.returnTo },
                   })
                 }
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+                className={primaryButton}
               >
-                <Plus className="w-4 h-4" /> Add Progress Report
+                <Plus className="h-4 w-4" aria-hidden="true" /> Add progress
+                report
               </button>
             )}
           </div>
-        </div>
+        </header>
       )}
 
       {renderFilterSection()}
@@ -2038,7 +1782,7 @@ export default function WorkProgressTable({
 
 // ==================== HELPER COMPONENTS ====================
 
-function FilterPill({
+function FilterChip({
   label,
   value,
   onRemove,
@@ -2048,97 +1792,57 @@ function FilterPill({
   onRemove: () => void;
 }) {
   return (
-    <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-      {label}: {value}
-      <button onClick={onRemove} className="hover:text-blue-900 font-bold">
-        <X className="w-3 h-3" />
+    <li className="inline-flex min-h-10 items-center gap-1 rounded-md border border-slate-300 bg-slate-50 pl-3 text-sm text-slate-900">
+      <span>
+        <span className="text-slate-600">{label}:</span> {value}
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${label} filter`}
+        className="flex h-10 w-10 items-center justify-center rounded-md text-slate-700 hover:bg-slate-200"
+      >
+        <X className="h-4 w-4" aria-hidden="true" />
       </button>
-    </span>
+    </li>
   );
 }
 
+// The percent this report recorded, as a bar. A work detail that is not yet at
+// 100% offers "Add report", which starts the next report from this one.
 function ProgressCell({
   item,
   isCompleted,
   maxProgress,
   onAddProgress,
-  getProgressColor,
-  getProgressIcon,
-  isOperationsReadOnly,
+  readOnly,
 }: {
   item: WorkProgressWithDetails;
   isCompleted: boolean;
   maxProgress: number;
   onAddProgress: (item: WorkProgressWithDetails) => void;
-  getProgressColor: (progress: number) => string;
-  getProgressIcon: (progress: number) => React.ReactElement;
-  isOperationsReadOnly: boolean;
+  readOnly: boolean;
 }) {
-  if (isCompleted || isOperationsReadOnly) {
-    return (
-      <div className="w-full text-left p-2 rounded-lg bg-gray-50 border border-gray-200 cursor-not-allowed opacity-75">
-        <div className="flex items-center">
-          <span className="mr-2">
-            {getProgressIcon(item.progress_percentage)}
-          </span>
-          <span
-            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getProgressColor(
-              item.progress_percentage,
-            )}`}
-          >
-            {item.progress_percentage}%
-          </span>
-          <span className="ml-2 text-xs text-gray-400 flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3" /> Completed
-          </span>
-        </div>
-        <div className="mt-1 w-20">
-          <div className="bg-gray-200 rounded-full h-1.5">
-            <div
-              className="bg-green-600 h-1.5 rounded-full"
-              style={{ width: `${item.progress_percentage}%` }}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <button
-      onClick={() => onAddProgress(item)}
-      className="w-full text-left group cursor-pointer hover:bg-blue-50 rounded-lg p-2 transition-all border border-transparent hover:border-blue-200"
-      title={`Click to add new progress report (Current max: ${maxProgress}%)`}
-    >
-      <div className="flex items-center">
-        <span className="mr-2">
-          {getProgressIcon(item.progress_percentage)}
-        </span>
-        <span
-          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getProgressColor(
-            item.progress_percentage,
-          )} group-hover:scale-105 transition-transform`}
+    <div className="space-y-1">
+      <ProgressMeter
+        value={item.progress_percentage}
+        label={`Progress recorded by this report for ${item.work_details.description}`}
+      />
+      {maxProgress > item.progress_percentage && (
+        <p className="text-xs text-slate-600">Latest report: {maxProgress}%</p>
+      )}
+      {!isCompleted && !readOnly && (
+        <button
+          type="button"
+          onClick={() => onAddProgress(item)}
+          title={`Add a new progress report (latest is ${maxProgress}%)`}
+          className="-ml-2 inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-sm font-medium text-blue-800 hover:bg-blue-50 sm:min-h-10"
         >
-          {item.progress_percentage}%
-        </span>
-        {maxProgress > item.progress_percentage && (
-          <span className="ml-1 text-xs text-orange-600">
-            (Max: {maxProgress}%)
-          </span>
-        )}
-        <span className="ml-2 text-xs text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-          <Plus className="w-3 h-3" /> Add new
-        </span>
-      </div>
-      <div className="mt-1 w-20">
-        <div className="bg-gray-200 rounded-full h-1.5">
-          <div
-            className="bg-blue-600 h-1.5 rounded-full transition-all group-hover:bg-blue-700"
-            style={{ width: `${item.progress_percentage}%` }}
-          />
-        </div>
-      </div>
-    </button>
+          <Plus className="h-4 w-4" aria-hidden="true" /> Add report
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -2159,31 +1863,35 @@ function WorkDetailsCell({
 
   return (
     <div>
-      <div className="flex items-center flex-wrap gap-y-1">
-        <div className="text-sm font-medium text-gray-900">
-          {workDetails.description}
-        </div>
+      <p className="text-sm font-medium text-slate-900">
+        {workDetails.description}
+      </p>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
         {isCompleted && (
-          <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            <CheckCircle2 className="w-3 h-3" /> Complete
+          <span className={`${tagBase} bg-emerald-50 text-emerald-800`}>
+            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Complete
           </span>
         )}
         {needsRework && (
-          <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-            <Undo2 className="w-3 h-3" /> Needs Rework
+          <span className={`${tagBase} bg-red-50 text-red-800`}>
+            <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Needs rework
+          </span>
+        )}
+        {locationText && (
+          <span className={`${tagBase} bg-slate-100 text-slate-800`}>
+            <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+            {locationText}
+          </span>
+        )}
+        {workDetails.work_location && (
+          <span className={`${tagBase} bg-slate-100 text-slate-800`}>
+            <Pin className="h-3.5 w-3.5" aria-hidden="true" />
+            {workDetails.work_location}
           </span>
         )}
       </div>
-      {locationText && (
-        <div className="text-sm text-gray-500 flex items-center gap-1">
-          <MapPin className="w-4 h-4" /> {locationText}
-        </div>
-      )}
-      {workDetails.work_location && (
-        <div className="text-xs text-gray-600 mt-0.5 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 inline-flex items-center gap-1">
-          <Pin className="w-3 h-3" /> {workDetails.work_location}
-        </div>
-      )}
     </div>
   );
 }
@@ -2196,46 +1904,52 @@ function VesselWorkOrderCell({
   shipyardWoNumber: string;
 }) {
   return (
-    <div>
-      <div className="text-sm text-gray-900 flex items-center gap-1">
-        <Ship className="w-4 h-4" /> {vessel.name}
-      </div>
-      <div className="text-sm text-gray-500 flex items-center gap-1">
-        <FileText className="w-4 h-4" /> {shipyardWoNumber}
-      </div>
-      <div className="text-xs text-gray-400">{vessel.type}</div>
+    <div className="text-sm">
+      <div className="font-medium text-slate-900">{vessel.name}</div>
+      <div className="text-slate-900">{shipyardWoNumber}</div>
+      <div className="text-slate-600">{vessel.type}</div>
     </div>
   );
 }
 
 function NotesCell({ notes }: { notes?: string }) {
+  const [open, setOpen] = useState(false);
+
   if (!notes) {
-    return <span className="text-gray-400 italic">No notes</span>;
+    return <span className="whitespace-nowrap text-slate-600">No notes</span>;
   }
 
   return (
     <div className="max-w-xs">
-      <div className="text-gray-900 line-clamp-2" title={notes}>
+      <p className="line-clamp-2 text-slate-900" title={notes}>
         {notes}
-      </div>
+      </p>
       {notes.length > 60 && (
         <button
-          onClick={() => alert(`Notes:\n\n${notes}`)}
-          className="text-blue-600 hover:text-blue-800 text-xs mt-1"
+          type="button"
+          onClick={() => setOpen(true)}
+          className="-ml-2 inline-flex min-h-11 items-center rounded-md px-2 text-sm font-medium text-blue-800 hover:bg-blue-50 sm:min-h-10"
         >
-          Read more
+          Read all
         </button>
       )}
-    </div>
-  );
-}
-
-function ReportedByCell({ profiles }: { profiles?: { name: string } }) {
-  return (
-    <div>
-      <div className="text-sm text-gray-900">
-        {profiles?.name || "Unknown User"}
-      </div>
+      {open && (
+        <Dialog
+          title="Progress note"
+          onClose={() => setOpen(false)}
+          footer={
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className={secondaryButton}
+            >
+              Close
+            </button>
+          }
+        >
+          <p className="whitespace-pre-line text-sm text-slate-900">{notes}</p>
+        </Dialog>
+      )}
     </div>
   );
 }
@@ -2248,15 +1962,16 @@ function EvidenceCell({
   onClick: (storagePath?: string) => void;
 }) {
   if (!storagePath) {
-    return <span className="text-gray-400">No evidence</span>;
+    return <span className="whitespace-nowrap text-slate-600">No evidence</span>;
   }
 
   return (
     <button
+      type="button"
       onClick={() => onClick(storagePath)}
-      className="text-blue-600 hover:text-blue-800 flex items-center gap-1 hover:underline"
+      className="-ml-2 inline-flex min-h-11 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-blue-800 hover:bg-blue-50 sm:min-h-10"
     >
-      <Camera className="w-4 h-4" /> View Evidence
+      <Camera className="h-4 w-4" aria-hidden="true" /> View evidence
     </button>
   );
 }
