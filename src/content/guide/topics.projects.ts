@@ -185,4 +185,65 @@ export const projectTopics: GuideTopic[] = [
     openIn: { label: "Buka Readiness Queue", href: "/readiness-queue" },
     related: ["readiness-fill", "plan-follow"],
   },
+  {
+    id: "new-building-track",
+    title: "Memantau kapal new building",
+    summary: "Lihat kapal yang dibangun di shipyard beserta project, work order, dan perkembangannya di satu tempat.",
+    group: "projects",
+    roles: [
+      "MASTER",
+      "PPIC",
+      "PRODUCTION",
+      "SHIPPING",
+      "ADMIN",
+      "MANAGER",
+      "HSSE",
+      "ADMIN_SHIPPING",
+    ],
+    before:
+      "Halaman ini hanya menampilkan pekerjaan berjenis New Building. Project dan work order dibuat seperti biasa, dengan jenis New Building.",
+    steps: [
+      {
+        title: "Buka New Building di menu",
+        detail: "Menunya ada di grup New Building, di sebelah kiri.",
+      },
+      {
+        title: "Baca ringkasan di bagian atas",
+        detail:
+          "Ada jumlah kapal, jumlah work order, persentase work detail yang selesai, jumlah yang sudah lewat target close date, dan jumlah yang siap di-invoice.",
+      },
+      {
+        title: "Cari kapal atau pilih status",
+        detail:
+          "Kotak pencarian mencari nama kapal, perusahaan, nama project, atau nomor work order. Chip status memisahkan In progress, Not started, dan Completed.",
+      },
+      {
+        title: "Baca kartu setiap kapal",
+        detail:
+          "Kartu menunjukkan progres keseluruhan, work detail yang selesai, yang terlambat, dan tahap serah terima dan penagihannya (belum masuk BASTP, draft, verified, siap di-invoice, sudah di-invoice).",
+      },
+      {
+        title: "Buka project atau work order dari kartu",
+        detail:
+          "Nama project membuka halaman project. Tombol Work orders membuka daftar work order kapal itu. Work order yang tidak terhubung ke project diberi tanda khusus.",
+      },
+      {
+        title: "Mulai project new building baru",
+        detail:
+          "Tekan New building project. Formulir project terbuka dengan jenis New Building yang sudah terpilih. Tombol ini hanya ada untuk role yang boleh membuat project.",
+      },
+    ],
+    tips: [
+      "Jika kapal tidak muncul, periksa jenis (Work Type) pada work order dan jenis pada project. Keduanya harus New Building.",
+      "Angka di halaman ini memakai aturan yang sama dengan Dashboard, jadi tidak akan berbeda.",
+    ],
+    problems: [
+      {
+        problem: "Ada work order di bagian Not linked to a project.",
+        fix: "Work order itu dibuat tanpa project. Minta PPIC atau Admin menghubungkannya ke project yang benar.",
+      },
+    ],
+    openIn: { label: "Buka New Building", href: "/new-building" },
+    related: ["project-create", "wo-create"],
+  },
 ];

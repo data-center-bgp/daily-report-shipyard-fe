@@ -29,6 +29,7 @@ import {
   Database,
   Braces,
   BookOpen,
+  Hammer,
   type LucideIcon,
 } from "lucide-react";
 
@@ -266,6 +267,18 @@ export default function Layout({ children, onLogout }: LayoutProps) {
             location.pathname.startsWith("/add-work-progress") ||
             isWorkDetailProgressPage,
           show: canAccess("progress"),
+        },
+      ],
+    },
+    {
+      title: "New Building",
+      items: [
+        {
+          name: "New Building",
+          href: "/new-building",
+          icon: Hammer,
+          current: location.pathname === "/new-building",
+          show: canAccess("newBuilding"),
         },
       ],
     },

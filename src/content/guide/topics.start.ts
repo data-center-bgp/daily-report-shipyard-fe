@@ -25,7 +25,7 @@ export const startTopics: GuideTopic[] = [
       {
         title: "Pakai menu di sebelah kiri",
         detail:
-          "Menu dikelompokkan: Planning, Operations, Approvals & Review, Finance & Documents, Data Tools, Administration, Bantuan. Anda hanya melihat menu yang boleh dibuka oleh role Anda. Di HP atau jendela sempit, tekan Menu untuk membukanya.",
+          "Menu dikelompokkan: Planning, Operations, New Building, Approvals & Review, Finance & Documents, Data Tools, Administration, Bantuan. Anda hanya melihat menu yang boleh dibuka oleh role Anda. Di HP atau jendela sempit, tekan Menu untuk membukanya.",
         image: {
           src: "/guide/menu-shipping.png",
           alt: "Menu di sebelah kiri untuk role Shipping: Dashboard, Docking Plans, Projects, Work Orders, Work Details, Work Progress, Additional WO Approvals, Work Verification, BASTP, Export Data, dan Import Data.",

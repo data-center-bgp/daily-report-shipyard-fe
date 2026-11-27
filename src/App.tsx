@@ -22,6 +22,7 @@ const Login = lazy(() => import("./components/auth/Login"));
 const Dashboard = lazy(() => import("./components/dashboard/Dashboard"));
 const GuideHome = lazy(() => import("./components/guide/GuideHome"));
 const GuideTopicPage = lazy(() => import("./components/guide/GuideTopicPage"));
+const NewBuildingPage = lazy(() => import("./components/newBuilding/NewBuildingPage"));
 const GuidePresentHome = lazy(() => import("./components/guide/GuidePresentHome"));
 const GuidePresenter = lazy(() => import("./components/guide/GuidePresenter"));
 const Alerts = lazy(() => import("./components/dashboard/Alerts"));
@@ -385,6 +386,9 @@ function AppRoutes() {
           {/* Import/Export Routes */}
           <Route path="/export-data" element={<ExportData />} />
           <Route path="/import-data" element={<ImportData />} />
+
+          {/* Vessels built at the shipyard */}
+          <Route path="/new-building" element={<NewBuildingPage />} />
 
           {/* Shipping's docking plans */}
           <Route path="/plans/*" element={<PlanPages />} />

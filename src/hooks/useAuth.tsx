@@ -104,6 +104,17 @@ const FEATURE_ACCESS = {
     "HSSE",
     "ADMIN_SHIPPING",
   ],
+  // The New Building overview: the same people who see work orders.
+  newBuilding: [
+    "MASTER",
+    "PPIC",
+    "PRODUCTION",
+    "SHIPPING",
+    "ADMIN",
+    "MANAGER",
+    "HSSE",
+    "ADMIN_SHIPPING",
+  ],
   workDetails: [
     "MASTER",
     "PPIC",

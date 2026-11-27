@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase, type Vessel } from "../../lib/supabase";
 import { ActivityLogService } from "../../services/activityLogService";
 import { useAuth } from "../../hooks/useAuth";
@@ -10,6 +10,7 @@ import LoadingState from "../common/LoadingState";
 
 export default function AddProject() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isOperationsReadOnly } = useAuth();
 
   const [vessels, setVessels] = useState<Vessel[]>([]);
@@ -24,7 +25,9 @@ export default function AddProject() {
   const [formData, setFormData] = useState({
     project_name: "",
     vessel_id: "",
-    docking_type: "",
+    // The New Building page opens this form with the type already chosen.
+    docking_type:
+      (location.state as { dockingType?: string } | null)?.dockingType ?? "",
   });
   // Tracks whether the user has typed their own project name, so vessel/
   // docking-type changes stop overwriting it once they have.
